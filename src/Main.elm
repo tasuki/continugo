@@ -11,6 +11,23 @@ import Svg.Attributes as SA
 import Task
 
 
+coordRange =
+    1000
+
+
+boardSize =
+    13
+
+
+stoneR =
+    -- 9x9: 55.6, 13x13: 38.5, 19x19: 26.3
+    38
+
+
+connectedDistance =
+    1.4
+
+
 main =
     Browser.document
         { init = init
@@ -24,25 +41,103 @@ main =
 -- MODEL
 
 
+type alias Model =
+    { stones : Stones
+    , links : Links
+    , onMove : Player
+    }
+
+
+type alias Stones =
+    List Stone
+
+
+type alias Links =
+    List ( Stone, Stone )
+
+
+type alias Stone =
+    ( Player, Coords )
+
+
+type Player
+    = Black
+    | White
+
+
 type alias Coords =
     { x : Int, y : Int }
 
 
-type alias Model =
-    { clicked : Maybe Coords
-    , element : Maybe BD.Element
-    , message : String
-    }
-
-
 init : () -> ( Model, Cmd msg )
 init _ =
-    ( { clicked = Nothing
-      , element = Nothing
-      , message = "hi there"
+    ( { stones = []
+      , links = []
+      , onMove = Black
       }
     , Cmd.none
     )
+
+
+otherPlayer : Player -> Player
+otherPlayer p =
+    case p of
+        White ->
+            Black
+
+        Black ->
+            White
+
+
+canPlay : Stone -> Stones -> Bool
+canPlay stone stones =
+    True
+
+
+withinBoard : Coords -> Bool
+withinBoard coords =
+    let
+        isWithin : Int -> Bool
+        isWithin coord =
+            coord > stoneR && coord < coordRange - stoneR
+    in
+    isWithin coords.x && isWithin coords.y
+
+
+distance : Stone -> Stone -> Float
+distance ( _, c1 ) ( _, c2 ) =
+    sqrt <| toFloat ((c1.x - c2.x) ^ 2 + (c1.y - c2.y) ^ 2)
+
+
+overlaps : Stone -> Stones -> Bool
+overlaps stone =
+    List.any (\s -> distance stone s < 2 * stoneR)
+
+
+newLinks : Stone -> Stones -> Links
+newLinks stone =
+    let
+        maybeLink s1 s2 =
+            if distance s1 s2 < 2 * stoneR * connectedDistance then
+                Just ( s1, s2 )
+
+            else
+                Nothing
+    in
+    List.filterMap (maybeLink stone)
+
+
+playIfLegal : Stone -> Stones -> Maybe Stones
+playIfLegal ( player, coords ) stones =
+    if withinBoard coords then
+        if not <| overlaps ( player, coords ) stones then
+            Just <| ( player, coords ) :: stones
+
+        else
+            Nothing
+
+    else
+        Nothing
 
 
 
@@ -51,22 +146,52 @@ init _ =
 
 type Msg
     = Clicked Coords
-    | CheckAgainstBoard (Result BD.Error BD.Element)
+    | CheckAgainstBoard Coords (Result BD.Error BD.Element)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Clicked coords ->
-            ( { model | clicked = Just coords }
-            , BD.getElement "board" |> Task.attempt CheckAgainstBoard
-            )
+        Clicked clickedCoords ->
+            ( model, BD.getElement "board" |> Task.attempt (CheckAgainstBoard clickedCoords) )
 
-        CheckAgainstBoard (Ok element) ->
-            ( { model | element = Just element }, Cmd.none )
+        CheckAgainstBoard clickedCoords (Ok element) ->
+            let
+                coords =
+                    toBoardCoords clickedCoords element
+            in
+            case playIfLegal ( model.onMove, coords ) model.stones of
+                Just s ->
+                    ( { stones = s
+                      , links = model.links ++ newLinks ( model.onMove, coords ) model.stones
+                      , onMove = otherPlayer model.onMove
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         _ ->
             ( model, Cmd.none )
+
+
+coordsWithinBoard : Coords -> Bool
+coordsWithinBoard coords =
+    coords.x >= 0 && coords.x <= coordRange && coords.y >= 0 && coords.y <= coordRange
+
+
+toBoardCoords : Coords -> BD.Element -> Coords
+toBoardCoords clickedCoords element =
+    { x =
+        round <|
+            (toFloat clickedCoords.x - element.element.x)
+                * (toFloat coordRange / element.element.width)
+    , y =
+        round <|
+            (toFloat clickedCoords.y - element.element.y)
+                * (toFloat coordRange / element.element.height)
+    }
 
 
 
@@ -88,16 +213,56 @@ subscriptions model =
 -- VIEW
 
 
+viewStone : Stone -> Svg Msg
+viewStone ( player, coords ) =
+    let
+        color =
+            case player of
+                Black ->
+                    "#000"
+
+                White ->
+                    "#FFF"
+    in
+    Svg.circle
+        [ SA.cx <| String.fromInt coords.x
+        , SA.cy <| String.fromInt coords.y
+        , SA.r <| String.fromInt stoneR
+        , SA.stroke "black"
+        , SA.strokeWidth "5"
+        , SA.fill color
+        ]
+        []
+
+
+viewLink : ( Stone, Stone ) -> Svg Msg
+viewLink ( ( _, c1 ), ( _, c2 ) ) =
+    Svg.line
+        [ SA.x1 <| String.fromInt c1.x
+        , SA.y1 <| String.fromInt c1.y
+        , SA.x2 <| String.fromInt c2.x
+        , SA.y2 <| String.fromInt c2.y
+        , SA.stroke "black"
+        , SA.strokeWidth "5"
+        ]
+        []
+
+
 view : Model -> Browser.Document Msg
 view model =
     { title = ""
     , body =
         [ H.div [ HA.id "board" ]
             [ Svg.svg
-                [ SA.viewBox "0 0 1000 1000" ]
-                [ Svg.text_ [ SA.x "100", SA.y "100" ] [ Svg.text <| Debug.toString model.clicked ]
-                , Svg.text_ [ SA.x "100", SA.y "200" ] [ Svg.text <| Debug.toString (Maybe.map .element model.element) ]
-                ]
+                [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
+                (List.map viewLink model.links
+                    ++ List.map viewStone model.stones
+                )
             ]
         ]
     }
+
+
+intsToStr : List Int -> String
+intsToStr ints =
+    List.map String.fromInt ints |> String.join " "
