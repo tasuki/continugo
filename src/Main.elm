@@ -25,7 +25,7 @@ stoneR =
 
 
 connectedDistance =
-    1.4
+    1.4142
 
 
 main =
@@ -44,6 +44,8 @@ main =
 type alias Model =
     { stones : Stones
     , links : Links
+    , ghostStone : Maybe Stone
+    , ghostLinks : Links
     , onMove : Player
     }
 
@@ -73,6 +75,8 @@ init : () -> ( Model, Cmd msg )
 init _ =
     ( { stones = []
       , links = []
+      , ghostStone = Nothing
+      , ghostLinks = []
       , onMove = Black
       }
     , Cmd.none
@@ -146,7 +150,9 @@ playIfLegal ( player, coords ) stones =
 
 type Msg
     = Clicked Coords
+    | MouseMoved Coords
     | CheckAgainstBoard Coords (Result BD.Error BD.Element)
+    | ShowGhost Coords (Result BD.Error BD.Element)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -157,20 +163,46 @@ update msg model =
 
         CheckAgainstBoard clickedCoords (Ok element) ->
             let
-                coords =
-                    toBoardCoords clickedCoords element
+                stone =
+                    ( model.onMove, toBoardCoords clickedCoords element )
             in
-            case playIfLegal ( model.onMove, coords ) model.stones of
+            case playIfLegal stone model.stones of
                 Just s ->
-                    ( { stones = s
-                      , links = model.links ++ newLinks ( model.onMove, coords ) model.stones
-                      , onMove = otherPlayer model.onMove
+                    ( { model
+                        | stones = s
+                        , links = model.links ++ newLinks stone model.stones
+                        , onMove = otherPlayer model.onMove
                       }
                     , Cmd.none
                     )
 
                 Nothing ->
                     ( model, Cmd.none )
+
+        MouseMoved hoverCoords ->
+            ( model, BD.getElement "board" |> Task.attempt (ShowGhost hoverCoords) )
+
+        ShowGhost hoverCoords (Ok element) ->
+            let
+                stone =
+                    ( model.onMove, toBoardCoords hoverCoords element )
+            in
+            case playIfLegal stone model.stones of
+                Just s ->
+                    ( { model
+                        | ghostStone = Just stone
+                        , ghostLinks = newLinks stone model.stones
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( { model
+                        | ghostStone = Nothing
+                        , ghostLinks = []
+                      }
+                    , Cmd.none
+                    )
 
         _ ->
             ( model, Cmd.none )
@@ -200,13 +232,22 @@ toBoardCoords clickedCoords element =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Browser.Events.onClick
-        (D.map Clicked
-            (D.map2 Coords
-                (D.field "pageX" D.int)
-                (D.field "pageY" D.int)
+    Sub.batch
+        [ Browser.Events.onClick
+            (D.map Clicked
+                (D.map2 Coords
+                    (D.field "pageX" D.int)
+                    (D.field "pageY" D.int)
+                )
             )
-        )
+        , Browser.Events.onMouseMove
+            (D.map MouseMoved
+                (D.map2 Coords
+                    (D.field "pageX" D.int)
+                    (D.field "pageY" D.int)
+                )
+            )
+        ]
 
 
 
@@ -248,6 +289,16 @@ viewLink ( ( _, c1 ), ( _, c2 ) ) =
         []
 
 
+viewGhostMove : Stone -> Svg Msg
+viewGhostMove stone =
+    Svg.g [ SA.opacity "0.5" ] [ viewStone stone ]
+
+
+viewGhostLink : ( Stone, Stone ) -> Svg Msg
+viewGhostLink link =
+    Svg.g [ SA.opacity "0.5" ] [ viewLink link ]
+
+
 view : Model -> Browser.Document Msg
 view model =
     { title = ""
@@ -255,7 +306,10 @@ view model =
         [ H.div [ HA.id "board" ]
             [ Svg.svg
                 [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
-                (List.map viewLink model.links
+                ([]
+                    ++ List.map viewGhostLink model.ghostLinks
+                    ++ List.filterMap identity [ Maybe.map viewGhostMove model.ghostStone ]
+                    ++ List.map viewLink model.links
                     ++ List.map viewStone model.stones
                 )
             ]
