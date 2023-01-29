@@ -93,13 +93,8 @@ otherPlayer p =
             White
 
 
-canPlay : Stone -> Stones -> Bool
-canPlay stone stones =
-    True
-
-
-withinBoard : Coords -> Bool
-withinBoard coords =
+withinBoard : Stone -> Bool
+withinBoard ( _, coords ) =
     let
         isWithin : Int -> Bool
         isWithin coord =
@@ -132,13 +127,9 @@ newLinks stone =
 
 
 playIfLegal : Stone -> Stones -> Maybe Stones
-playIfLegal ( player, coords ) stones =
-    if withinBoard coords then
-        if not <| overlaps ( player, coords ) stones then
-            Just <| ( player, coords ) :: stones
-
-        else
-            Nothing
+playIfLegal stone stones =
+    if withinBoard stone && (not <| overlaps stone stones) then
+        Just <| stone :: stones
 
     else
         Nothing
@@ -206,11 +197,6 @@ update msg model =
 
         _ ->
             ( model, Cmd.none )
-
-
-coordsWithinBoard : Coords -> Bool
-coordsWithinBoard coords =
-    coords.x >= 0 && coords.x <= coordRange && coords.y >= 0 && coords.y <= coordRange
 
 
 toBoardCoords : Coords -> BD.Element -> Coords
