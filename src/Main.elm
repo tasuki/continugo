@@ -116,6 +116,9 @@ overlaps stone =
 newLinks : Stone -> Stones -> Links
 newLinks stone =
     let
+        ( player, _ ) =
+            stone
+
         maybeLink s1 s2 =
             if distance s1 s2 < 2 * stoneR * connectedDistance then
                 Just ( s1, s2 )
@@ -123,7 +126,7 @@ newLinks stone =
             else
                 Nothing
     in
-    List.filterMap (maybeLink stone)
+    List.filter (\( p, _ ) -> p == player) >> List.filterMap (maybeLink stone)
 
 
 playIfLegal : Stone -> Stones -> Maybe Stones
