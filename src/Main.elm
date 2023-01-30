@@ -9,6 +9,8 @@ import Html.Attributes as HA
 import Json.Decode as D
 import Svg exposing (Svg)
 import Svg.Attributes as SA
+import Svg.Keyed
+import Svg.Lazy exposing (..)
 import Task
 
 
@@ -190,6 +192,29 @@ viewLink ( ( _, c1 ), ( _, c2 ) ) =
         []
 
 
+coordsKeyStr : Coords -> String
+coordsKeyStr c =
+    "-" ++ String.fromInt c.x ++ "-" ++ String.fromInt c.y
+
+
+viewKeyedStone : Stone -> ( String, Svg Msg )
+viewKeyedStone ( player, coords ) =
+    ( "stone" ++ coordsKeyStr coords
+    , lazy viewStone ( player, coords )
+    )
+
+
+viewKeyedLink : ( Stone, Stone ) -> ( String, Svg Msg )
+viewKeyedLink link =
+    let
+        ( ( _, c1 ), ( _, c2 ) ) =
+            link
+    in
+    ( "link" ++ coordsKeyStr c1 ++ coordsKeyStr c2
+    , lazy viewLink link
+    )
+
+
 viewGhostMove : Stone -> Svg Msg
 viewGhostMove stone =
     Svg.g [ SA.opacity "0.5" ] [ viewStone stone ]
@@ -207,12 +232,11 @@ view model =
         [ H.div [ HA.id "board" ]
             [ Svg.svg
                 [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
-                ([]
-                    ++ List.map viewGhostLink model.ghostLinks
-                    ++ List.filterMap identity [ Maybe.map viewGhostMove model.ghostStone ]
-                    ++ List.map viewLink model.links
-                    ++ List.map viewStone model.stones
-                )
+                [ lazy3 Svg.node "g" [ SA.id "ghostLinks" ] <| List.map viewGhostLink model.ghostLinks
+                , lazy3 Svg.node "g" [ SA.id "ghostStone" ] <| List.filterMap identity [ Maybe.map viewGhostMove model.ghostStone ]
+                , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <| List.map viewKeyedLink model.links
+                , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <| List.map viewKeyedStone model.stones
+                ]
             ]
         ]
     }
