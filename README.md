@@ -15,7 +15,10 @@ The idea might be bad, but it is not even original.
 
 ## Rules
 
-1. You know [how to play go](https://online-go.com/learn-to-play-go/).
-2. These two stones are not adjacent (TODO: show a kosumi).
-3. Stones which are closer than that are adjacent.
-4. Most of the rest of the standard go rules apply (TODO: ko???).
+1. You know [how to play go](https://online-go.com/learn-to-play-go/). Exceptions below.
+2. Go is played on an empty square, called a board. It may have lines drawn on it who cares about those.
+3. **Stones may not overlap.**
+4. A point on the board where a stone would fit is called a spot.
+5. Spots whose centres are closer than **the stone diameter times the square root of two** are *considered adjacent* and, when occupied by friendly stones, are shown connected by a line.
+6. A **liberty is an adjacent spot where a stone would fit**.
+7. Ko: one may not capture just one stone if that stone was played on the previous move and captured just one stone. No positional superko fuck off.
