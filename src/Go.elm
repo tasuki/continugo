@@ -10,6 +10,10 @@ stoneR =
     38
 
 
+diameter =
+    2 * stoneR
+
+
 connectedDistance =
     1.4142
 
@@ -66,7 +70,7 @@ distance ( _, c1 ) ( _, c2 ) =
 
 overlaps : Stone -> Stones -> Bool
 overlaps stone =
-    List.any (\s -> distance stone s < 2 * stoneR)
+    List.any (\s -> distance stone s < diameter)
 
 
 newLinks : Stone -> Stones -> Links
@@ -76,7 +80,7 @@ newLinks stone =
             stone
 
         maybeLink s1 s2 =
-            if distance s1 s2 < 2 * stoneR * connectedDistance then
+            if distance s1 s2 < diameter * connectedDistance then
                 Just ( s1, s2 )
 
             else
