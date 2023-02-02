@@ -170,11 +170,11 @@ takeNonOverlapping acc queue =
 findLiberty : List Spot -> Spot -> Int -> Spot -> Maybe Spot
 findLiberty nearbySpots orig step suspect =
     let
-        isAdjacent : Bool
-        isAdjacent =
-            distance suspect orig < diameter * adjacentDistance
+        isAdjacent : Float -> Bool
+        isAdjacent dst =
+            diameter < dst && dst < diameter * adjacentDistance
     in
-    if isWithinBoard suspect && isAdjacent && (not <| overlaps suspect nearbySpots) then
+    if isWithinBoard suspect && isAdjacent (distance suspect orig) && (not <| overlaps suspect nearbySpots) then
         Just suspect
 
     else if step > 0 then
@@ -184,13 +184,8 @@ findLiberty nearbySpots orig step suspect =
         Nothing
 
 
-findLiberties : Stone -> List Stone -> List Spot
-findLiberties { spot } nearbyStones =
-    let
-        nearbySpots : List Spot
-        nearbySpots =
-            List.map .spot nearbyStones
-    in
+findLiberties : Stone -> List Spot -> List Spot
+findLiberties { spot } nearbySpots =
     List.filterMap (findLiberty nearbySpots spot steps) (neighborSpots spot)
         |> sortByMostOverlaps
         |> takeNonOverlapping []

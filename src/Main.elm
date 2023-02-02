@@ -8,6 +8,7 @@ import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
+import Play exposing (playIfLegal)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 import Svg.Keyed

@@ -125,9 +125,19 @@ addNearby toAdd orig =
     { orig | nearby = toAdd.spot :: orig.nearby }
 
 
+removeNearby : Stone -> Stone -> Stone
+removeNearby toRemove orig =
+    { orig | nearby = List.filter (\s -> s /= toRemove.spot) orig.nearby }
+
+
 addAdjacent : Stone -> Stone -> Stone
 addAdjacent toAdd orig =
     { orig | adjacent = toAdd.spot :: orig.adjacent }
+
+
+removeAdjacent : Stone -> Stone -> Stone
+removeAdjacent toRemove orig =
+    { orig | adjacent = List.filter (\s -> s /= toRemove.spot) orig.adjacent }
 
 
 enhanceInfo : Stones -> Stone -> Stone
@@ -171,24 +181,3 @@ stoneList stones =
 addStones : (Stone -> Stone) -> List Spot -> Stones -> Stones
 addStones addFun spots sts =
     List.foldl (\s -> Dict.update ( s.x, s.y ) (Maybe.map addFun)) sts spots
-
-
-
--- Play logic
-
-
-playIfLegal : Stone -> Stones -> Maybe Stones
-playIfLegal bareStone stones =
-    let
-        stone : Stone
-        stone =
-            enhanceInfo stones bareStone
-    in
-    if isWithinBoard stone.spot && (not <| overlaps stone.spot stone.nearby) then
-        Dict.insert (stoneKey stone) stone stones
-            |> addStones (addNearby stone) stone.nearby
-            |> addStones (addAdjacent stone) stone.adjacent
-            |> Just
-
-    else
-        Nothing

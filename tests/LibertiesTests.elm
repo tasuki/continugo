@@ -36,11 +36,11 @@ libertiesTest =
                 let
                     liberties =
                         findLiberties (createStone Black { x = 560, y = 314 })
-                            [ createStone White { x = 561, y = 234 } -- up
-                            , createStone White { x = 635, y = 331 } -- lower right
-                            , createStone White { x = 653, y = 415 } -- lower right further
-                            , createStone White { x = 505, y = 368 } -- lower left
-                            , createStone White { x = 543, y = 455 } -- lower left further
+                            [ { x = 561, y = 234 } -- up
+                            , { x = 635, y = 331 } -- lower right
+                            , { x = 653, y = 415 } -- lower right further
+                            , { x = 505, y = 368 } -- lower left
+                            , { x = 543, y = 455 } -- lower left further
                             ]
                 in
                 case liberties of
@@ -62,10 +62,10 @@ libertiesTest =
                 let
                     liberties =
                         findLiberties (createStone Black { x = 879, y = 881 })
-                            [ createStone White { x = 881, y = 793 } -- up
-                            , createStone White { x = 961, y = 877 } -- right
-                            , createStone White { x = 879, y = 962 } -- down
-                            , createStone White { x = 796, y = 876 } -- left
+                            [ { x = 881, y = 793 } -- up
+                            , { x = 961, y = 877 } -- right
+                            , { x = 879, y = 962 } -- down
+                            , { x = 796, y = 876 } -- left
                             ]
                 in
                 case liberties of
@@ -87,10 +87,10 @@ libertiesTest =
                 let
                     liberties =
                         findLiberties (createStone Black { x = 895, y = 266 })
-                            [ createStone White { x = 961, y = 227 } -- right
-                            , createStone White { x = 866, y = 189 } -- up
-                            , createStone White { x = 820, y = 281 } -- left
-                            , createStone White { x = 895, y = 344 } -- down
+                            [ { x = 961, y = 227 } -- right
+                            , { x = 866, y = 189 } -- up
+                            , { x = 820, y = 281 } -- left
+                            , { x = 895, y = 344 } -- down
                             ]
                 in
                 case liberties of
@@ -100,6 +100,25 @@ libertiesTest =
                     _ ->
                         Expect.fail <|
                             "Expected to find 1 liberty, found: "
+                                ++ String.fromInt (List.length liberties)
+                                ++ " "
+                                ++ Debug.toString liberties
+        , test "Find no liberties in upper right" <|
+            \_ ->
+                let
+                    liberties =
+                        findLiberties (createStone Black { x = 949, y = 51 })
+                            [ { x = 859, y = 70 } -- left
+                            , { x = 930, y = 141 } -- down
+                            ]
+                in
+                case liberties of
+                    [] ->
+                        Expect.pass
+
+                    _ ->
+                        Expect.fail <|
+                            "Expected to find 0 liberties, found: "
                                 ++ String.fromInt (List.length liberties)
                                 ++ " "
                                 ++ Debug.toString liberties
