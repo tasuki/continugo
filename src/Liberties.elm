@@ -60,12 +60,12 @@ scaleShift factor spot =
 
 
 stoneForce : Int -> Spot -> Spot -> Spot
-stoneForce step suspect stoneSpot =
+stoneForce step suspect nearbySpot =
     -- the 1.2 and 1.1 are just arbitrary:
     -- we want the `1-x` shifted ever slightly up/right
     let
         relativeDistance =
-            distance suspect stoneSpot / diameter
+            distance suspect nearbySpot / diameter
 
         factor =
             if relativeDistance < 1 then
@@ -74,7 +74,7 @@ stoneForce step suspect stoneSpot =
             else
                 0
     in
-    findShift stoneSpot suspect
+    findShift nearbySpot suspect
         |> scaleShift (factor * toFloat step / steps)
 
 
@@ -94,12 +94,28 @@ connectionForce original suspect =
 
 
 
+-- TODO border patrol?
+
+
+applyForces : Int -> Spot -> List Spot -> Spot -> Spot
+applyForces step original nearbySpots suspect =
+    let
+        shiftByStones : Spot
+        shiftByStones =
+            List.map (stoneForce step suspect) nearbySpots
+                |> List.foldl shift suspect
+    in
+    connectionForce original shiftByStones
+        |> shift shiftByStones
+
+
+
 -- filtering and sorting the results
 
 
 overlapCount : List Spot -> Spot -> Int
-overlapCount others lib =
-    List.map (\o -> distance lib o < diameter) others
+overlapCount otherLibs liberty =
+    List.map (\otherLib -> distance liberty otherLib < diameter) otherLibs
         |> List.filter identity
         |> List.length
 
@@ -111,9 +127,9 @@ sortByMostOverlaps liberties =
 
 
 takeNonOverlapping : List Spot -> List Spot -> List Spot
-takeNonOverlapping acc liberties =
+takeNonOverlapping acc queue =
     -- take unique liverty spots
-    case liberties of
+    case queue of
         [] ->
             acc
 
@@ -129,39 +145,30 @@ takeNonOverlapping acc liberties =
 -- gluing it all together
 
 
-findLiberties : Stone -> List Stone -> List Spot
-findLiberties { player, spot } surroundingStones =
+findLiberty : List Spot -> Spot -> Int -> Spot -> Maybe Spot
+findLiberty nearbySpots orig step suspect =
     let
-        surroundingSpots : List Spot
-        surroundingSpots =
-            List.map (\s -> s.spot) surroundingStones
-
-        applyForces : Int -> Spot -> Spot
-        applyForces step suspect =
-            let
-                shiftByStones : Spot
-                shiftByStones =
-                    List.map (stoneForce step suspect) surroundingSpots
-                        |> List.foldl shift suspect
-            in
-            connectionForce spot shiftByStones
-                |> shift shiftByStones
-
-        isLiberty : Spot -> Bool
-        isLiberty suspect =
-            distance suspect spot < diameter * adjacentDistance
-
-        findLiberty : Int -> Spot -> Maybe Spot
-        findLiberty step suspect =
-            if isLiberty suspect && (not <| overlaps suspect surroundingSpots) then
-                Just suspect
-
-            else if step > 0 then
-                findLiberty (step - 1) (applyForces step suspect)
-
-            else
-                Nothing
+        isAdjacent : Bool
+        isAdjacent =
+            distance suspect orig < diameter * adjacentDistance
     in
-    List.filterMap (findLiberty steps) (neighborSpots spot)
+    if isAdjacent && (not <| overlaps suspect nearbySpots) then
+        Just suspect
+
+    else if step > 0 then
+        findLiberty nearbySpots orig (step - 1) (applyForces step orig nearbySpots suspect)
+
+    else
+        Nothing
+
+
+findLiberties : Stone -> List Stone -> List Spot
+findLiberties { spot } nearbyStones =
+    let
+        nearbySpots : List Spot
+        nearbySpots =
+            List.map .spot nearbyStones
+    in
+    List.filterMap (findLiberty nearbySpots spot steps) (neighborSpots spot)
         |> sortByMostOverlaps
         |> takeNonOverlapping []
