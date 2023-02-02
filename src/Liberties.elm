@@ -38,8 +38,8 @@ shift shiftBy coords =
     { x = coords.x + shiftBy.x, y = coords.y + shiftBy.y }
 
 
-neighborCoords : Stone -> List Coords
-neighborCoords ( _, coords ) =
+neighborCoords : Coords -> List Coords
+neighborCoords coords =
     List.map (shift coords) neighborShifts
 
 
@@ -53,16 +53,6 @@ scaleShift factor coords =
     { x = round <| toFloat coords.x * factor
     , y = round <| toFloat coords.y * factor
     }
-
-
-distance : Coords -> Coords -> Float
-distance c1 c2 =
-    sqrt <| toFloat ((c1.x - c2.x) ^ 2 + (c1.y - c2.y) ^ 2)
-
-
-overlaps : Coords -> List Coords -> Bool
-overlaps coords =
-    List.any (\c -> distance coords c < diameter)
 
 
 
@@ -95,9 +85,9 @@ connectionForce original suspect =
         actualDistance =
             distance original suspect
     in
-    if actualDistance / diameter > connectedDistance then
+    if actualDistance / diameter > adjacentDistance then
         findShift suspect original
-            |> scaleShift (actualDistance / diameter - connectedDistance)
+            |> scaleShift (actualDistance / diameter - adjacentDistance)
 
     else
         { x = 0, y = 0 }
@@ -139,12 +129,12 @@ takeNonOverlapping acc liberties =
 -- gluing it all together
 
 
-findLiberties : Stone -> Stones -> List Coords
-findLiberties ( player, original ) surroundingStones =
+findLiberties : Stone -> List Stone -> List Coords
+findLiberties { player, coords } surroundingStones =
     let
         surroundingCoords : List Coords
         surroundingCoords =
-            List.map (\( _, c ) -> c) surroundingStones
+            List.map (\s -> s.coords) surroundingStones
 
         applyForces : Int -> Coords -> Coords
         applyForces step suspect =
@@ -154,12 +144,12 @@ findLiberties ( player, original ) surroundingStones =
                     List.map (stoneForce step suspect) surroundingCoords
                         |> List.foldl shift suspect
             in
-            connectionForce original shiftByStones
+            connectionForce coords shiftByStones
                 |> shift shiftByStones
 
         isLiberty : Coords -> Bool
         isLiberty suspect =
-            distance suspect original < diameter * connectedDistance
+            distance suspect coords < diameter * adjacentDistance
 
         findLiberty : Int -> Coords -> Maybe Coords
         findLiberty step suspect =
@@ -172,6 +162,6 @@ findLiberties ( player, original ) surroundingStones =
             else
                 Nothing
     in
-    List.filterMap (findLiberty steps) (neighborCoords ( player, original ))
+    List.filterMap (findLiberty steps) (neighborCoords coords)
         |> sortByMostOverlaps
         |> takeNonOverlapping []

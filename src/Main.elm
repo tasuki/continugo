@@ -3,6 +3,7 @@ module Main exposing (..)
 import Browser
 import Browser.Dom as BD
 import Browser.Events
+import Dict
 import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
@@ -33,19 +34,15 @@ main =
 
 type alias Model =
     { stones : Stones
-    , links : Links
     , ghostStone : Maybe Stone
-    , ghostLinks : Links
     , onMove : Player
     }
 
 
 init : () -> ( Model, Cmd msg )
 init _ =
-    ( { stones = []
-      , links = []
+    ( { stones = Dict.empty
       , ghostStone = Nothing
-      , ghostLinks = []
       , onMove = Black
       }
     , Cmd.none
@@ -72,13 +69,12 @@ update msg model =
         CheckAgainstBoard clickedCoords (Ok element) ->
             let
                 stone =
-                    ( model.onMove, toBoardCoords clickedCoords element )
+                    createStone model.onMove (toBoardCoords clickedCoords element)
             in
             case playIfLegal stone model.stones of
                 Just s ->
                     ( { model
                         | stones = s
-                        , links = model.links ++ newLinks stone model.stones
                         , onMove = otherPlayer model.onMove
                       }
                     , Cmd.none
@@ -93,24 +89,15 @@ update msg model =
         ShowGhost hoverCoords (Ok element) ->
             let
                 stone =
-                    ( model.onMove, toBoardCoords hoverCoords element )
+                    createStone model.onMove (toBoardCoords hoverCoords element)
             in
-            case playIfLegal stone model.stones of
-                Just s ->
-                    ( { model
-                        | ghostStone = Just stone
-                        , ghostLinks = newLinks stone model.stones
-                      }
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    ( { model
-                        | ghostStone = Nothing
-                        , ghostLinks = []
-                      }
-                    , Cmd.none
-                    )
+            ( { model
+                | ghostStone =
+                    playIfLegal stone model.stones
+                        |> Maybe.andThen (Dict.get (stoneKey stone))
+              }
+            , Cmd.none
+            )
 
         _ ->
             ( model, Cmd.none )
@@ -158,7 +145,7 @@ subscriptions model =
 
 
 viewStone : Stone -> Svg Msg
-viewStone ( player, coords ) =
+viewStone { player, coords } =
     let
         color =
             case player of
@@ -179,8 +166,13 @@ viewStone ( player, coords ) =
         []
 
 
-viewLink : ( Stone, Stone ) -> Svg Msg
-viewLink ( ( _, c1 ), ( _, c2 ) ) =
+viewGhostStone : Stone -> Svg Msg
+viewGhostStone stone =
+    Svg.g [ SA.opacity "0.5" ] [ viewStone stone ]
+
+
+viewLink : ( Coords, Coords ) -> Svg Msg
+viewLink ( c1, c2 ) =
     Svg.line
         [ SA.x1 <| String.fromInt c1.x
         , SA.y1 <| String.fromInt c1.y
@@ -192,56 +184,87 @@ viewLink ( ( _, c1 ), ( _, c2 ) ) =
         []
 
 
+viewGhostLink : ( Coords, Coords ) -> Svg Msg
+viewGhostLink link =
+    Svg.g [ SA.opacity "0.5" ] [ viewLink link ]
+
+
+
+-- Keyed
+
+
 coordsKeyStr : Coords -> String
 coordsKeyStr c =
     "-" ++ String.fromInt c.x ++ "-" ++ String.fromInt c.y
 
 
 viewKeyedStone : Stone -> ( String, Svg Msg )
-viewKeyedStone ( player, coords ) =
-    ( "stone" ++ coordsKeyStr coords
-    , lazy viewStone ( player, coords )
+viewKeyedStone stone =
+    ( "stone" ++ coordsKeyStr stone.coords
+    , lazy viewStone stone
     )
 
 
-viewKeyedLink : ( Stone, Stone ) -> ( String, Svg Msg )
-viewKeyedLink link =
-    let
-        ( ( _, c1 ), ( _, c2 ) ) =
-            link
-    in
+viewKeyedLink : ( Coords, Coords ) -> ( String, Svg Msg )
+viewKeyedLink ( c1, c2 ) =
     ( "link" ++ coordsKeyStr c1 ++ coordsKeyStr c2
-    , lazy viewLink link
+    , lazy viewLink ( c1, c2 )
     )
 
 
-viewGhostMove : Stone -> Svg Msg
-viewGhostMove stone =
-    Svg.g [ SA.opacity "0.5" ] [ viewStone stone ]
 
-
-viewGhostLink : ( Stone, Stone ) -> Svg Msg
-viewGhostLink link =
-    Svg.g [ SA.opacity "0.5" ] [ viewLink link ]
+-- Main view
 
 
 view : Model -> Browser.Document Msg
 view model =
+    let
+        intsToStr ints =
+            List.map String.fromInt ints |> String.join " "
+    in
     { title = ""
     , body =
         [ H.div [ HA.id "board" ]
             [ Svg.svg
                 [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
-                [ lazy3 Svg.node "g" [ SA.id "ghostLinks" ] <| List.map viewGhostLink model.ghostLinks
-                , lazy3 Svg.node "g" [ SA.id "ghostStone" ] <| List.filterMap identity [ Maybe.map viewGhostMove model.ghostStone ]
-                , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <| List.map viewKeyedLink model.links
-                , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <| List.map viewKeyedStone model.stones
+                [ lazy3 Svg.node "g" [ SA.id "ghostLinks" ] <|
+                    List.map viewGhostLink (Maybe.map getStoneLinks model.ghostStone |> Maybe.withDefault [])
+                , lazy3 Svg.node "g" [ SA.id "ghostStone" ] <|
+                    List.filterMap identity [ Maybe.map viewGhostStone model.ghostStone ]
+                , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
+                    List.map viewKeyedLink (getUniqueLinks model.stones)
+                , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
+                    (stoneList model.stones |> List.map viewKeyedStone)
                 ]
             ]
         ]
     }
 
 
-intsToStr : List Int -> String
-intsToStr ints =
-    List.map String.fromInt ints |> String.join " "
+
+-- Links helpers
+
+
+getStoneLinks : Stone -> List ( Coords, Coords )
+getStoneLinks stone =
+    List.map (\coords -> ( stone.coords, coords )) stone.adjacent
+
+
+getUniqueLinks : Stones -> List ( Coords, Coords )
+getUniqueLinks stones =
+    let
+        allLinks : List ( Coords, Coords )
+        allLinks =
+            stoneList stones
+                |> List.concatMap (\s -> List.map (\a -> ( s.coords, a )) s.adjacent)
+
+        -- filter out half of the duplicate links, so as to show each only once
+        isChosen : ( Coords, Coords ) -> Bool
+        isChosen ( c1, c2 ) =
+            if c1.y < c2.y then
+                True
+
+            else
+                c1.y == c2.y && c1.x < c2.x
+    in
+    List.filter isChosen allLinks
