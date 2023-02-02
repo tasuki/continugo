@@ -11,17 +11,18 @@ steps =
     20
 
 
-type alias Shift =
-    Spot
+type Shift
+    = Shift Spot
 
 
 neighborShifts : List Shift
 neighborShifts =
     let
         toSpot ( x, y ) =
-            { x = round <| 1.2 * x * stoneR
-            , y = round <| 1.2 * y * stoneR
-            }
+            Shift
+                { x = round <| 1.2 * x * stoneR
+                , y = round <| 1.2 * y * stoneR
+                }
     in
     List.map toSpot
         [ ( 0, -2 )
@@ -37,8 +38,8 @@ neighborShifts =
 -- general spot manipulation
 
 
-shift : Shift -> Spot -> Spot
-shift shiftBy spot =
+shift : Spot -> Shift -> Spot
+shift spot (Shift shiftBy) =
     Spot (spot.x + shiftBy.x) (spot.y + shiftBy.y)
 
 
@@ -49,14 +50,15 @@ neighborSpots spot =
 
 findShift : Spot -> Spot -> Shift
 findShift from to =
-    Spot (to.x - from.x) (to.y - from.y)
+    Shift { x = to.x - from.x, y = to.y - from.y }
 
 
 scaleShift : Float -> Shift -> Shift
-scaleShift factor spot =
-    { x = round <| toFloat spot.x * factor
-    , y = round <| toFloat spot.y * factor
-    }
+scaleShift factor (Shift s) =
+    Shift
+        { x = round <| toFloat s.x * factor
+        , y = round <| toFloat s.y * factor
+        }
 
 
 
@@ -95,7 +97,7 @@ boardForce spot =
             else
                 0
     in
-    Spot (outBy spot.x) (outBy spot.y)
+    Shift { x = outBy spot.x, y = outBy spot.y }
 
 
 connectionForce : Spot -> Spot -> Shift
@@ -110,7 +112,7 @@ connectionForce original suspect =
             |> scaleShift (actualDistance / diameter - adjacentDistance)
 
     else
-        Spot 0 0
+        Shift { x = 0, y = 0 }
 
 
 applyForces : Int -> Spot -> List Spot -> Spot -> Spot
@@ -118,7 +120,7 @@ applyForces step original nearbySpots =
     let
         shiftFromOverlap s =
             List.map (stoneForce step s) nearbySpots
-                |> List.foldl shift s
+                |> List.foldl (\spot shiftBy -> shift shiftBy spot) s
 
         shiftToBoard s =
             boardForce s |> shift s

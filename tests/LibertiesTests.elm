@@ -25,7 +25,7 @@ helpersTest =
         [ test "Determines the shift of coords" <|
             \_ ->
                 findShift { x = 1, y = 2 } { x = 3, y = -2 }
-                    |> Expect.equal { x = 2, y = -4 }
+                    |> Expect.equal (Shift { x = 2, y = -4 })
         ]
 
 
