@@ -11,7 +11,11 @@ steps =
     20
 
 
-neighborShifts : List Spot
+type alias Shift =
+    Spot
+
+
+neighborShifts : List Shift
 neighborShifts =
     let
         toSpot ( x, y ) =
@@ -33,9 +37,9 @@ neighborShifts =
 -- general spot manipulation
 
 
-shift : Spot -> Spot -> Spot
+shift : Shift -> Spot -> Spot
 shift shiftBy spot =
-    { x = spot.x + shiftBy.x, y = spot.y + shiftBy.y }
+    Spot (spot.x + shiftBy.x) (spot.y + shiftBy.y)
 
 
 neighborSpots : Spot -> List Spot
@@ -43,12 +47,12 @@ neighborSpots spot =
     List.map (shift spot) neighborShifts
 
 
-findShift : Spot -> Spot -> Spot
+findShift : Spot -> Spot -> Shift
 findShift from to =
-    { x = to.x - from.x, y = to.y - from.y }
+    Spot (to.x - from.x) (to.y - from.y)
 
 
-scaleShift : Float -> Spot -> Spot
+scaleShift : Float -> Shift -> Shift
 scaleShift factor spot =
     { x = round <| toFloat spot.x * factor
     , y = round <| toFloat spot.y * factor
@@ -59,7 +63,7 @@ scaleShift factor spot =
 -- the forces
 
 
-stoneForce : Int -> Spot -> Spot -> Spot
+stoneForce : Int -> Spot -> Spot -> Shift
 stoneForce step suspect nearbySpot =
     -- the 1.2 and 1.1 are just arbitrary:
     -- we want the `1-x` shifted ever slightly up/right
@@ -78,7 +82,7 @@ stoneForce step suspect nearbySpot =
         |> scaleShift (factor * toFloat (step + steps) / (steps + steps))
 
 
-boardForce : Spot -> Spot
+boardForce : Spot -> Shift
 boardForce spot =
     let
         outBy coord =
@@ -91,10 +95,10 @@ boardForce spot =
             else
                 0
     in
-    { x = outBy spot.x, y = outBy spot.y }
+    Spot (outBy spot.x) (outBy spot.y)
 
 
-connectionForce : Spot -> Spot -> Spot
+connectionForce : Spot -> Spot -> Shift
 connectionForce original suspect =
     -- jump back to the vicinity of the original from wherever we got pushed to
     let
@@ -106,7 +110,7 @@ connectionForce original suspect =
             |> scaleShift (actualDistance / diameter - adjacentDistance)
 
     else
-        { x = 0, y = 0 }
+        Spot 0 0
 
 
 applyForces : Int -> Spot -> List Spot -> Spot -> Spot
