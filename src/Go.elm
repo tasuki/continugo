@@ -53,6 +53,26 @@ overlaps spots =
     List.any (\s -> distance spots s < diameter)
 
 
+boardMin : Int
+boardMin =
+    stoneR
+
+
+boardMax : Int
+boardMax =
+    coordRange - stoneR
+
+
+isWithinBoard : Spot -> Bool
+isWithinBoard spot =
+    let
+        isWithin : Int -> Bool
+        isWithin coord =
+            coord >= boardMin && coord <= boardMax
+    in
+    isWithin spot.x && isWithin spot.y
+
+
 
 -- Players
 
@@ -93,16 +113,6 @@ createStone player spot =
     , adjacent = []
     , liberties = []
     }
-
-
-isWithinBoard : Stone -> Bool
-isWithinBoard { spot } =
-    let
-        isWithin : Int -> Bool
-        isWithin coord =
-            coord > stoneR && coord < coordRange - stoneR
-    in
-    isWithin spot.x && isWithin spot.y
 
 
 stoneDistance : Stone -> Stone -> Float
@@ -174,7 +184,7 @@ playIfLegal bareStone stones =
         stone =
             enhanceInfo stones bareStone
     in
-    if isWithinBoard stone && (not <| overlaps stone.spot stone.nearby) then
+    if isWithinBoard stone.spot && (not <| overlaps stone.spot stone.nearby) then
         Dict.insert (stoneKey stone) stone stones
             |> addStones (addNearby stone) stone.nearby
             |> addStones (addAdjacent stone) stone.adjacent

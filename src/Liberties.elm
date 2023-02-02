@@ -75,7 +75,23 @@ stoneForce step suspect nearbySpot =
                 0
     in
     findShift nearbySpot suspect
-        |> scaleShift (factor * toFloat step / steps)
+        |> scaleShift (factor * toFloat (step + steps) / (steps + steps))
+
+
+boardForce : Spot -> Spot
+boardForce spot =
+    let
+        outBy coord =
+            if coord <= boardMin then
+                boardMin - coord
+
+            else if coord >= boardMax then
+                boardMax - coord
+
+            else
+                0
+    in
+    { x = outBy spot.x, y = outBy spot.y }
 
 
 connectionForce : Spot -> Spot -> Spot
@@ -93,20 +109,20 @@ connectionForce original suspect =
         { x = 0, y = 0 }
 
 
-
--- TODO border patrol?
-
-
 applyForces : Int -> Spot -> List Spot -> Spot -> Spot
-applyForces step original nearbySpots suspect =
+applyForces step original nearbySpots =
     let
-        shiftByStones : Spot
-        shiftByStones =
-            List.map (stoneForce step suspect) nearbySpots
-                |> List.foldl shift suspect
+        shiftFromOverlap s =
+            List.map (stoneForce step s) nearbySpots
+                |> List.foldl shift s
+
+        shiftToBoard s =
+            boardForce s |> shift s
+
+        shiftToConnection s =
+            connectionForce original s |> shift s
     in
-    connectionForce original shiftByStones
-        |> shift shiftByStones
+    shiftFromOverlap >> shiftToBoard >> shiftToConnection
 
 
 
@@ -152,7 +168,7 @@ findLiberty nearbySpots orig step suspect =
         isAdjacent =
             distance suspect orig < diameter * adjacentDistance
     in
-    if isAdjacent && (not <| overlaps suspect nearbySpots) then
+    if isWithinBoard suspect && isAdjacent && (not <| overlaps suspect nearbySpots) then
         Just suspect
 
     else if step > 0 then
