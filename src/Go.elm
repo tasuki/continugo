@@ -110,6 +110,36 @@ stoneDistance s1 s2 =
     distance s1.spot s2.spot
 
 
+addNearby : Stone -> Stone -> Stone
+addNearby toAdd orig =
+    { orig | nearby = toAdd.spot :: orig.nearby }
+
+
+addAdjacent : Stone -> Stone -> Stone
+addAdjacent toAdd orig =
+    { orig | adjacent = toAdd.spot :: orig.adjacent }
+
+
+enhanceInfo : Stones -> Stone -> Stone
+enhanceInfo stones stone =
+    let
+        nearbyStones : List Stone
+        nearbyStones =
+            stoneList stones
+                |> List.filter (\s -> stoneDistance stone s < diameter * nearbyDistance)
+
+        adjacentStones : List Stone
+        adjacentStones =
+            nearbyStones
+                |> List.filter (\s -> s.player == stone.player)
+                |> List.filter (\s -> stoneDistance stone s < diameter * adjacentDistance)
+    in
+    { stone
+        | nearby = List.map .spot nearbyStones
+        , adjacent = List.map .spot adjacentStones
+    }
+
+
 
 -- Stones dictionary
 
@@ -128,50 +158,26 @@ stoneList stones =
     Dict.toList stones |> List.map (\( _, s ) -> s)
 
 
+addStones : (Stone -> Stone) -> List Spot -> Stones -> Stones
+addStones addFun spots sts =
+    List.foldl (\s -> Dict.update ( s.x, s.y ) (Maybe.map addFun)) sts spots
+
+
 
 -- Play logic
 
 
 playIfLegal : Stone -> Stones -> Maybe Stones
-playIfLegal stone stones =
+playIfLegal bareStone stones =
     let
-        nearbyStones : List Stone
-        nearbyStones =
-            stoneList stones
-                |> List.filter (\s -> stoneDistance stone s < diameter * nearbyDistance)
-
-        adjacentStones : List Stone
-        adjacentStones =
-            nearbyStones
-                |> List.filter (\s -> s.player == stone.player)
-                |> List.filter (\s -> stoneDistance stone s < diameter * adjacentDistance)
-
-        stoneWithExtras =
-            { stone
-                | nearby = List.map .spot nearbyStones
-                , adjacent = List.map .spot adjacentStones
-            }
-
-        addNearby : Stone -> Stone
-        addNearby orig =
-            { orig | nearby = stone.spot :: orig.nearby }
-
-        addAdjacent : Stone -> Stone
-        addAdjacent orig =
-            { orig | adjacent = stone.spot :: orig.adjacent }
-
-        addStones : (Stone -> Stone) -> List Stone -> Stones -> Stones
-        addStones addFun stonesList sts =
-            List.foldl (\s -> Dict.update (stoneKey s) (Maybe.map addFun)) sts stonesList
-
-        overlapsNearby : Bool
-        overlapsNearby =
-            overlaps stone.spot (List.map .spot nearbyStones)
+        stone : Stone
+        stone =
+            enhanceInfo stones bareStone
     in
-    if isWithinBoard stone && (not <| overlapsNearby) then
-        Dict.insert (stoneKey stone) stoneWithExtras stones
-            |> addStones addNearby nearbyStones
-            |> addStones addAdjacent adjacentStones
+    if isWithinBoard stone && (not <| overlaps stone.spot stone.nearby) then
+        Dict.insert (stoneKey stone) stone stones
+            |> addStones (addNearby stone) stone.nearby
+            |> addStones (addAdjacent stone) stone.adjacent
             |> Just
 
     else
