@@ -152,23 +152,17 @@ playIfLegal stone stones =
                 , adjacent = List.map .spot adjacentStones
             }
 
-        addNearbyStone : Stone -> Stones -> Stones
-        addNearbyStone s =
-            Dict.update (stoneKey s)
-                (Maybe.map (\orig -> { orig | nearby = stone.spot :: orig.nearby }))
+        addNearby : Stone -> Stone
+        addNearby orig =
+            { orig | nearby = stone.spot :: orig.nearby }
 
-        addNearby : Stones -> Stones
-        addNearby sts =
-            List.foldl addNearbyStone sts nearbyStones
+        addAdjacent : Stone -> Stone
+        addAdjacent orig =
+            { orig | adjacent = stone.spot :: orig.adjacent }
 
-        addAdjacentStone : Stone -> Stones -> Stones
-        addAdjacentStone s =
-            Dict.update (stoneKey s)
-                (Maybe.map (\orig -> { orig | adjacent = stone.spot :: orig.adjacent }))
-
-        addAdjacent : Stones -> Stones
-        addAdjacent sts =
-            List.foldl addAdjacentStone sts adjacentStones
+        addStones : (Stone -> Stone) -> List Stone -> Stones -> Stones
+        addStones addFun stonesList sts =
+            List.foldl (\s -> Dict.update (stoneKey s) (Maybe.map addFun)) sts stonesList
 
         overlapsNearby : Bool
         overlapsNearby =
@@ -176,8 +170,8 @@ playIfLegal stone stones =
     in
     if isWithinBoard stone && (not <| overlapsNearby) then
         Dict.insert (stoneKey stone) stoneWithExtras stones
-            |> addNearby
-            |> addAdjacent
+            |> addStones addNearby nearbyStones
+            |> addStones addAdjacent adjacentStones
             |> Just
 
     else
