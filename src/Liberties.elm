@@ -11,15 +11,15 @@ steps =
     20
 
 
-neighborShifts : List Coords
+neighborShifts : List Spot
 neighborShifts =
     let
-        toCoords ( x, y ) =
+        toSpot ( x, y ) =
             { x = round <| 1.2 * x * stoneR
             , y = round <| 1.2 * y * stoneR
             }
     in
-    List.map toCoords
+    List.map toSpot
         [ ( 0, -2 )
         , ( sqrt 3, -1 )
         , ( sqrt 3, 1 )
@@ -30,28 +30,28 @@ neighborShifts =
 
 
 
--- general coord manipulation
+-- general spot manipulation
 
 
-shift : Coords -> Coords -> Coords
-shift shiftBy coords =
-    { x = coords.x + shiftBy.x, y = coords.y + shiftBy.y }
+shift : Spot -> Spot -> Spot
+shift shiftBy spot =
+    { x = spot.x + shiftBy.x, y = spot.y + shiftBy.y }
 
 
-neighborCoords : Coords -> List Coords
-neighborCoords coords =
-    List.map (shift coords) neighborShifts
+neighborSpots : Spot -> List Spot
+neighborSpots spot =
+    List.map (shift spot) neighborShifts
 
 
-findShift : Coords -> Coords -> Coords
+findShift : Spot -> Spot -> Spot
 findShift from to =
     { x = to.x - from.x, y = to.y - from.y }
 
 
-scaleShift : Float -> Coords -> Coords
-scaleShift factor coords =
-    { x = round <| toFloat coords.x * factor
-    , y = round <| toFloat coords.y * factor
+scaleShift : Float -> Spot -> Spot
+scaleShift factor spot =
+    { x = round <| toFloat spot.x * factor
+    , y = round <| toFloat spot.y * factor
     }
 
 
@@ -59,13 +59,13 @@ scaleShift factor coords =
 -- the forces
 
 
-stoneForce : Int -> Coords -> Coords -> Coords
-stoneForce step suspect coord =
+stoneForce : Int -> Spot -> Spot -> Spot
+stoneForce step suspect stoneSpot =
     -- the 1.2 and 1.1 are just arbitrary:
     -- we want the `1-x` shifted ever slightly up/right
     let
         relativeDistance =
-            distance suspect coord / diameter
+            distance suspect stoneSpot / diameter
 
         factor =
             if relativeDistance < 1 then
@@ -74,11 +74,11 @@ stoneForce step suspect coord =
             else
                 0
     in
-    findShift coord suspect
+    findShift stoneSpot suspect
         |> scaleShift (factor * toFloat step / steps)
 
 
-connectionForce : Coords -> Coords -> Coords
+connectionForce : Spot -> Spot -> Spot
 connectionForce original suspect =
     -- jump back to the vicinity of the original from wherever we got pushed to
     let
@@ -97,20 +97,20 @@ connectionForce original suspect =
 -- filtering and sorting the results
 
 
-overlapCount : List Coords -> Coords -> Int
+overlapCount : List Spot -> Spot -> Int
 overlapCount others lib =
     List.map (\o -> distance lib o < diameter) others
         |> List.filter identity
         |> List.length
 
 
-sortByMostOverlaps : List Coords -> List Coords
+sortByMostOverlaps : List Spot -> List Spot
 sortByMostOverlaps liberties =
     -- we want to find the spots that take away as much liberty as possible
     List.sortBy (overlapCount liberties) liberties |> List.reverse
 
 
-takeNonOverlapping : List Coords -> List Coords -> List Coords
+takeNonOverlapping : List Spot -> List Spot -> List Spot
 takeNonOverlapping acc liberties =
     -- take unique liverty spots
     case liberties of
@@ -129,31 +129,31 @@ takeNonOverlapping acc liberties =
 -- gluing it all together
 
 
-findLiberties : Stone -> List Stone -> List Coords
-findLiberties { player, coords } surroundingStones =
+findLiberties : Stone -> List Stone -> List Spot
+findLiberties { player, spot } surroundingStones =
     let
-        surroundingCoords : List Coords
-        surroundingCoords =
-            List.map (\s -> s.coords) surroundingStones
+        surroundingSpots : List Spot
+        surroundingSpots =
+            List.map (\s -> s.spot) surroundingStones
 
-        applyForces : Int -> Coords -> Coords
+        applyForces : Int -> Spot -> Spot
         applyForces step suspect =
             let
-                shiftByStones : Coords
+                shiftByStones : Spot
                 shiftByStones =
-                    List.map (stoneForce step suspect) surroundingCoords
+                    List.map (stoneForce step suspect) surroundingSpots
                         |> List.foldl shift suspect
             in
-            connectionForce coords shiftByStones
+            connectionForce spot shiftByStones
                 |> shift shiftByStones
 
-        isLiberty : Coords -> Bool
+        isLiberty : Spot -> Bool
         isLiberty suspect =
-            distance suspect coords < diameter * adjacentDistance
+            distance suspect spot < diameter * adjacentDistance
 
-        findLiberty : Int -> Coords -> Maybe Coords
+        findLiberty : Int -> Spot -> Maybe Spot
         findLiberty step suspect =
-            if isLiberty suspect && (not <| overlaps suspect surroundingCoords) then
+            if isLiberty suspect && (not <| overlaps suspect surroundingSpots) then
                 Just suspect
 
             else if step > 0 then
@@ -162,6 +162,6 @@ findLiberties { player, coords } surroundingStones =
             else
                 Nothing
     in
-    List.filterMap (findLiberty steps) (neighborCoords coords)
+    List.filterMap (findLiberty steps) (neighborSpots spot)
         |> sortByMostOverlaps
         |> takeNonOverlapping []

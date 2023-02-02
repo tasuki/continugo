@@ -11,11 +11,11 @@ expectAll expectations =
     Expect.all (List.map always expectations) ()
 
 
-expectLiberty : Int -> Int -> Int -> Coords -> Expect.Expectation
-expectLiberty allowedError x y coords =
+expectLiberty : Int -> Int -> Int -> Spot -> Expect.Expectation
+expectLiberty allowedError x y spot =
     Expect.all
-        [ \_ -> Expect.lessThan allowedError <| abs (x - coords.x)
-        , \_ -> Expect.lessThan allowedError <| abs (y - coords.y)
+        [ \_ -> Expect.lessThan allowedError <| abs (x - spot.x)
+        , \_ -> Expect.lessThan allowedError <| abs (y - spot.y)
         ]
         ()
 

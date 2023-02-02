@@ -35,21 +35,22 @@ nearbyDistance =
 
 
 
--- Coords
+-- Spot
 
 
-type alias Coords =
+type alias Spot =
+    -- a spot has two coords
     { x : Int, y : Int }
 
 
-distance : Coords -> Coords -> Float
-distance c1 c2 =
-    sqrt <| toFloat ((c1.x - c2.x) ^ 2 + (c1.y - c2.y) ^ 2)
+distance : Spot -> Spot -> Float
+distance s1 s2 =
+    sqrt <| toFloat ((s1.x - s2.x) ^ 2 + (s1.y - s2.y) ^ 2)
 
 
-overlaps : Coords -> List Coords -> Bool
-overlaps coords =
-    List.any (\c -> distance coords c < diameter)
+overlaps : Spot -> List Spot -> Bool
+overlaps spots =
+    List.any (\s -> distance spots s < diameter)
 
 
 
@@ -77,17 +78,17 @@ otherPlayer p =
 
 type alias Stone =
     { player : Player
-    , coords : Coords
-    , nearby : List Coords
-    , adjacent : List Coords
-    , liberties : List Coords
+    , spot : Spot
+    , nearby : List Spot
+    , adjacent : List Spot
+    , liberties : List Spot
     }
 
 
-createStone : Player -> Coords -> Stone
-createStone player coords =
+createStone : Player -> Spot -> Stone
+createStone player spot =
     { player = player
-    , coords = coords
+    , spot = spot
     , nearby = []
     , adjacent = []
     , liberties = []
@@ -95,18 +96,18 @@ createStone player coords =
 
 
 isWithinBoard : Stone -> Bool
-isWithinBoard { coords } =
+isWithinBoard { spot } =
     let
         isWithin : Int -> Bool
         isWithin coord =
             coord > stoneR && coord < coordRange - stoneR
     in
-    isWithin coords.x && isWithin coords.y
+    isWithin spot.x && isWithin spot.y
 
 
 stoneDistance : Stone -> Stone -> Float
 stoneDistance s1 s2 =
-    distance s1.coords s2.coords
+    distance s1.spot s2.spot
 
 
 
@@ -118,8 +119,8 @@ type alias Stones =
 
 
 stoneKey : Stone -> ( Int, Int )
-stoneKey { coords } =
-    ( coords.x, coords.y )
+stoneKey { spot } =
+    ( spot.x, spot.y )
 
 
 stoneList : Stones -> List Stone
@@ -147,14 +148,14 @@ playIfLegal stone stones =
 
         stoneWithExtras =
             { stone
-                | nearby = List.map .coords nearbyStones
-                , adjacent = List.map .coords adjacentStones
+                | nearby = List.map .spot nearbyStones
+                , adjacent = List.map .spot adjacentStones
             }
 
         addNearbyStone : Stone -> Stones -> Stones
         addNearbyStone s =
             Dict.update (stoneKey s)
-                (Maybe.map (\orig -> { orig | nearby = stone.coords :: orig.nearby }))
+                (Maybe.map (\orig -> { orig | nearby = stone.spot :: orig.nearby }))
 
         addNearby : Stones -> Stones
         addNearby sts =
@@ -163,7 +164,7 @@ playIfLegal stone stones =
         addAdjacentStone : Stone -> Stones -> Stones
         addAdjacentStone s =
             Dict.update (stoneKey s)
-                (Maybe.map (\orig -> { orig | adjacent = stone.coords :: orig.adjacent }))
+                (Maybe.map (\orig -> { orig | adjacent = stone.spot :: orig.adjacent }))
 
         addAdjacent : Stones -> Stones
         addAdjacent sts =
@@ -171,7 +172,7 @@ playIfLegal stone stones =
 
         overlapsNearby : Bool
         overlapsNearby =
-            overlaps stone.coords (List.map .coords nearbyStones)
+            overlaps stone.spot (List.map .spot nearbyStones)
     in
     if isWithinBoard stone && (not <| overlapsNearby) then
         Dict.insert (stoneKey stone) stoneWithExtras stones

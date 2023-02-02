@@ -54,10 +54,10 @@ init _ =
 
 
 type Msg
-    = Clicked Coords
-    | MouseMoved Coords
-    | CheckAgainstBoard Coords (Result BD.Error BD.Element)
-    | ShowGhost Coords (Result BD.Error BD.Element)
+    = Clicked Spot
+    | MouseMoved Spot
+    | CheckAgainstBoard Spot (Result BD.Error BD.Element)
+    | ShowGhost Spot (Result BD.Error BD.Element)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -103,7 +103,7 @@ update msg model =
             ( model, Cmd.none )
 
 
-toBoardCoords : Coords -> BD.Element -> Coords
+toBoardCoords : Spot -> BD.Element -> Spot
 toBoardCoords clickedCoords element =
     { x =
         round <|
@@ -125,14 +125,14 @@ subscriptions model =
     Sub.batch
         [ Browser.Events.onClick
             (D.map Clicked
-                (D.map2 Coords
+                (D.map2 Spot
                     (D.field "pageX" D.int)
                     (D.field "pageY" D.int)
                 )
             )
         , Browser.Events.onMouseMove
             (D.map MouseMoved
-                (D.map2 Coords
+                (D.map2 Spot
                     (D.field "pageX" D.int)
                     (D.field "pageY" D.int)
                 )
@@ -145,7 +145,7 @@ subscriptions model =
 
 
 viewStone : Stone -> Svg Msg
-viewStone { player, coords } =
+viewStone { player, spot } =
     let
         color =
             case player of
@@ -156,8 +156,8 @@ viewStone { player, coords } =
                     "#FFF"
     in
     Svg.circle
-        [ SA.cx <| String.fromInt coords.x
-        , SA.cy <| String.fromInt coords.y
+        [ SA.cx <| String.fromInt spot.x
+        , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
         , SA.stroke "black"
         , SA.strokeWidth "5"
@@ -171,20 +171,20 @@ viewGhostStone stone =
     Svg.g [ SA.opacity "0.5" ] [ viewStone stone ]
 
 
-viewLink : ( Coords, Coords ) -> Svg Msg
-viewLink ( c1, c2 ) =
+viewLink : ( Spot, Spot ) -> Svg Msg
+viewLink ( s1, s2 ) =
     Svg.line
-        [ SA.x1 <| String.fromInt c1.x
-        , SA.y1 <| String.fromInt c1.y
-        , SA.x2 <| String.fromInt c2.x
-        , SA.y2 <| String.fromInt c2.y
+        [ SA.x1 <| String.fromInt s1.x
+        , SA.y1 <| String.fromInt s1.y
+        , SA.x2 <| String.fromInt s2.x
+        , SA.y2 <| String.fromInt s2.y
         , SA.stroke "black"
         , SA.strokeWidth "5"
         ]
         []
 
 
-viewGhostLink : ( Coords, Coords ) -> Svg Msg
+viewGhostLink : ( Spot, Spot ) -> Svg Msg
 viewGhostLink link =
     Svg.g [ SA.opacity "0.5" ] [ viewLink link ]
 
@@ -193,22 +193,22 @@ viewGhostLink link =
 -- Keyed
 
 
-coordsKeyStr : Coords -> String
-coordsKeyStr c =
-    "-" ++ String.fromInt c.x ++ "-" ++ String.fromInt c.y
+spotKeyStr : Spot -> String
+spotKeyStr s =
+    "-" ++ String.fromInt s.x ++ "-" ++ String.fromInt s.y
 
 
 viewKeyedStone : Stone -> ( String, Svg Msg )
 viewKeyedStone stone =
-    ( "stone" ++ coordsKeyStr stone.coords
+    ( "stone" ++ spotKeyStr stone.spot
     , lazy viewStone stone
     )
 
 
-viewKeyedLink : ( Coords, Coords ) -> ( String, Svg Msg )
-viewKeyedLink ( c1, c2 ) =
-    ( "link" ++ coordsKeyStr c1 ++ coordsKeyStr c2
-    , lazy viewLink ( c1, c2 )
+viewKeyedLink : ( Spot, Spot ) -> ( String, Svg Msg )
+viewKeyedLink ( s1, s2 ) =
+    ( "link" ++ spotKeyStr s1 ++ spotKeyStr s2
+    , lazy viewLink ( s1, s2 )
     )
 
 
@@ -245,26 +245,26 @@ view model =
 -- Links helpers
 
 
-getStoneLinks : Stone -> List ( Coords, Coords )
+getStoneLinks : Stone -> List ( Spot, Spot )
 getStoneLinks stone =
-    List.map (\coords -> ( stone.coords, coords )) stone.adjacent
+    List.map (\spots -> ( stone.spot, spots )) stone.adjacent
 
 
-getUniqueLinks : Stones -> List ( Coords, Coords )
+getUniqueLinks : Stones -> List ( Spot, Spot )
 getUniqueLinks stones =
     let
-        allLinks : List ( Coords, Coords )
+        allLinks : List ( Spot, Spot )
         allLinks =
             stoneList stones
-                |> List.concatMap (\s -> List.map (\a -> ( s.coords, a )) s.adjacent)
+                |> List.concatMap (\s -> List.map (\a -> ( s.spot, a )) s.adjacent)
 
         -- filter out half of the duplicate links, so as to show each only once
-        isChosen : ( Coords, Coords ) -> Bool
-        isChosen ( c1, c2 ) =
-            if c1.y < c2.y then
+        isChosen : ( Spot, Spot ) -> Bool
+        isChosen ( s1, s2 ) =
+            if s1.y < s2.y then
                 True
 
             else
-                c1.y == c2.y && c1.x < c2.x
+                s1.y == s2.y && s1.x < s2.x
     in
     List.filter isChosen allLinks
