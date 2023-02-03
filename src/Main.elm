@@ -9,6 +9,7 @@ import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
 import Play exposing (playIfLegal)
+import SamplePositions
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 import Svg.Keyed
@@ -40,14 +41,13 @@ type alias Model =
     }
 
 
-init : () -> ( Model, Cmd msg )
+init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { stones = Dict.empty
-      , ghostStone = Nothing
-      , onMove = Black
-      }
-    , Cmd.none
-    )
+    update (PlayStones SamplePositions.empty)
+        { stones = Dict.empty
+        , ghostStone = Nothing
+        , onMove = Black
+        }
 
 
 
@@ -57,18 +57,18 @@ init _ =
 type Msg
     = Clicked Spot
     | MouseMoved Spot
-    | CheckAgainstBoard Spot (Result BD.Error BD.Element)
-    | ShowGhost Spot (Result BD.Error BD.Element)
-    | SetUpPosition (List Stone)
+    | PlayIfLegal Spot (Result BD.Error BD.Element)
+    | Hover Spot (Result BD.Error BD.Element)
+    | PlayStones (List Stone)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Clicked clickedCoords ->
-            ( model, BD.getElement "board" |> Task.attempt (CheckAgainstBoard clickedCoords) )
+            ( model, BD.getElement "board" |> Task.attempt (PlayIfLegal clickedCoords) )
 
-        CheckAgainstBoard clickedCoords (Ok element) ->
+        PlayIfLegal clickedCoords (Ok element) ->
             let
                 stone =
                     createStone model.onMove (toBoardCoords clickedCoords element)
@@ -86,12 +86,12 @@ update msg model =
                     ( model, Cmd.none )
 
         MouseMoved hoverCoords ->
-            ( model, BD.getElement "board" |> Task.attempt (ShowGhost hoverCoords) )
+            ( model, BD.getElement "board" |> Task.attempt (Hover hoverCoords) )
 
-        ShowGhost hoverCoords (Ok element) ->
+        Hover hoverCoords (Ok element) ->
             let
                 stone =
-                    createStone model.onMove (toBoardCoords hoverCoords element)
+                    createStone model.onMove <| toBoardCoords hoverCoords element
             in
             ( { model
                 | ghostStone =
@@ -101,10 +101,13 @@ update msg model =
             , Cmd.none
             )
 
-        SetUpPosition stonesList ->
+        PlayStones stonesList ->
             let
+                playStone stone acc =
+                    playIfLegal stone acc |> Maybe.withDefault acc
+
                 newStones =
-                    List.foldl (\stone acc -> playIfLegal stone acc |> Maybe.withDefault acc) model.stones stonesList
+                    List.foldl playStone model.stones stonesList
             in
             ( { model | stones = newStones }, Cmd.none )
 
@@ -113,14 +116,14 @@ update msg model =
 
 
 toBoardCoords : Spot -> BD.Element -> Spot
-toBoardCoords clickedCoords element =
+toBoardCoords windowCoords element =
     { x =
         round <|
-            (toFloat clickedCoords.x - element.element.x)
+            (toFloat windowCoords.x - element.element.x)
                 * (toFloat coordRange / element.element.width)
     , y =
         round <|
-            (toFloat clickedCoords.y - element.element.y)
+            (toFloat windowCoords.y - element.element.y)
                 * (toFloat coordRange / element.element.height)
     }
 
