@@ -59,6 +59,7 @@ type Msg
     | MouseMoved Spot
     | CheckAgainstBoard Spot (Result BD.Error BD.Element)
     | ShowGhost Spot (Result BD.Error BD.Element)
+    | SetUpPosition (List Stone)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -99,6 +100,13 @@ update msg model =
               }
             , Cmd.none
             )
+
+        SetUpPosition stonesList ->
+            let
+                newStones =
+                    List.foldl (\stone acc -> playIfLegal stone acc |> Maybe.withDefault acc) model.stones stonesList
+            in
+            ( { model | stones = newStones }, Cmd.none )
 
         _ ->
             ( model, Cmd.none )

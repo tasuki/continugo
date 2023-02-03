@@ -7,40 +7,85 @@ import Go exposing (..)
 -- settings and hardcoded things
 
 
-steps =
-    20
+settings =
+    { steps = 20
+    , shifts = shifts12
+    , stoneForce = \x -> 1.2 - x * 1.1
+    , scaleFactor = \step -> toFloat step / toFloat settings.steps
+    }
 
 
-type Shift
-    = Shift Spot
+
+-- shifts
+
+
+type alias Shift =
+    { x : Float, y : Float }
+
+
+shifts6 =
+    [ ( 0, -2 )
+    , ( sqrt 3, -1 )
+    , ( sqrt 3, 1 )
+    , ( 0, 2 )
+    , ( -(sqrt 3), 1 )
+    , ( -(sqrt 3), -1 )
+    ]
+
+
+shifts12 =
+    [ ( 0, -2 )
+    , ( 1, -(sqrt 3) )
+    , ( sqrt 3, -1 )
+    , ( 2, 0 )
+    , ( sqrt 3, 1 )
+    , ( 1, sqrt 3 )
+    , ( 0, 2 )
+    , ( -1, sqrt 3 )
+    , ( -(sqrt 3), 1 )
+    , ( -2, 0 )
+    , ( -(sqrt 3), -1 )
+    , ( -1, -(sqrt 3) )
+    ]
 
 
 neighborShifts : List Shift
 neighborShifts =
     let
-        toSpot ( x, y ) =
-            Shift
-                { x = round <| 1.2 * x * stoneR
-                , y = round <| 1.2 * y * stoneR
-                }
+        toShift ( x, y ) =
+            { x = 1.2 * x * stoneR
+            , y = 1.2 * y * stoneR
+            }
     in
-    List.map toSpot
-        [ ( 0, -2 )
-        , ( sqrt 3, -1 )
-        , ( sqrt 3, 1 )
-        , ( 0, 2 )
-        , ( -(sqrt 3), 1 )
-        , ( -(sqrt 3), -1 )
-        ]
+    List.map toShift settings.shifts
 
 
 
 -- general spot manipulation
 
 
+roundAwayFromZero : Float -> Int
+roundAwayFromZero x =
+    if x < 0 then
+        floor x
+
+    else
+        ceiling x
+
+
 shift : Spot -> Shift -> Spot
-shift spot (Shift shiftBy) =
-    Spot (spot.x + shiftBy.x) (spot.y + shiftBy.y)
+shift spot shiftBy =
+    { x = spot.x + roundAwayFromZero shiftBy.x
+    , y = spot.y + roundAwayFromZero shiftBy.y
+    }
+
+
+sumShifts : List Shift -> Shift
+sumShifts shifts =
+    List.foldl
+        (\s acc -> Shift (s.x + acc.x) (s.y + acc.y))
+        (Shift 0 0)
+        shifts
 
 
 neighborSpots : Spot -> List Spot
@@ -50,38 +95,33 @@ neighborSpots spot =
 
 findShift : Spot -> Spot -> Shift
 findShift from to =
-    Shift { x = to.x - from.x, y = to.y - from.y }
+    Shift (toFloat <| to.x - from.x) (toFloat <| to.y - from.y)
 
 
 scaleShift : Float -> Shift -> Shift
-scaleShift factor (Shift s) =
-    Shift
-        { x = round <| toFloat s.x * factor
-        , y = round <| toFloat s.y * factor
-        }
+scaleShift factor s =
+    Shift (s.x * factor) (s.y * factor)
 
 
 
 -- the forces
 
 
-stoneForce : Int -> Spot -> Spot -> Shift
-stoneForce step suspect nearbySpot =
-    -- the 1.2 and 1.1 are just arbitrary:
-    -- we want the `1-x` shifted ever slightly up/right
+stoneForce : Spot -> Spot -> Shift
+stoneForce suspect nearbySpot =
     let
         relativeDistance =
             distance suspect nearbySpot / diameter
 
         factor =
             if relativeDistance < 1 then
-                1.2 - relativeDistance * 1.1
+                settings.stoneForce relativeDistance
 
             else
                 0
     in
     findShift nearbySpot suspect
-        |> scaleShift (factor * toFloat (step + steps) / (steps + steps))
+        |> scaleShift factor
 
 
 boardForce : Spot -> Shift
@@ -97,12 +137,11 @@ boardForce spot =
             else
                 0
     in
-    Shift { x = outBy spot.x, y = outBy spot.y }
+    Shift (toFloat <| outBy spot.x) (toFloat <| outBy spot.y)
 
 
 connectionForce : Spot -> Spot -> Shift
 connectionForce original suspect =
-    -- jump back to the vicinity of the original from wherever we got pushed to
     let
         actualDistance =
             distance original suspect
@@ -112,23 +151,24 @@ connectionForce original suspect =
             |> scaleShift (actualDistance / diameter - adjacentDistance)
 
     else
-        Shift { x = 0, y = 0 }
+        Shift 0 0
 
 
 applyForces : Int -> Spot -> List Spot -> Spot -> Spot
-applyForces step original nearbySpots =
+applyForces step original nearbySpots suspect =
     let
-        shiftFromOverlap s =
-            List.map (stoneForce step s) nearbySpots
-                |> List.foldl (\spot shiftBy -> shift shiftBy spot) s
+        shiftFromOverlap =
+            List.map (stoneForce suspect) nearbySpots
 
-        shiftToBoard s =
-            boardForce s |> shift s
+        shiftToBoard =
+            boardForce suspect
 
-        shiftToConnection s =
-            connectionForce original s |> shift s
+        shiftToConnection =
+            connectionForce original suspect
     in
-    shiftFromOverlap >> shiftToBoard >> shiftToConnection
+    sumShifts (shiftToBoard :: shiftToConnection :: shiftFromOverlap)
+        |> scaleShift (settings.scaleFactor step)
+        |> shift suspect
 
 
 
@@ -170,15 +210,27 @@ takeNonOverlapping acc queue =
 findLiberty : List Spot -> Spot -> Int -> Spot -> Maybe Spot
 findLiberty nearbySpots orig step suspect =
     let
-        isAdjacent : Float -> Bool
-        isAdjacent dst =
+        isAdjacent : Bool
+        isAdjacent =
+            let
+                dst =
+                    distance orig suspect
+            in
             diameter < dst && dst < diameter * adjacentDistance
+
+        overlapsNearby : Bool
+        overlapsNearby =
+            overlaps suspect nearbySpots
     in
-    if isWithinBoard suspect && isAdjacent (distance suspect orig) && (not <| overlaps suspect nearbySpots) then
+    if isWithinBoard suspect && isAdjacent && not overlapsNearby then
         Just suspect
 
     else if step > 0 then
-        findLiberty nearbySpots orig (step - 1) (applyForces step orig nearbySpots suspect)
+        findLiberty
+            nearbySpots
+            orig
+            (step - 1)
+            (applyForces step orig nearbySpots suspect)
 
     else
         Nothing
@@ -186,6 +238,6 @@ findLiberty nearbySpots orig step suspect =
 
 findLiberties : Stone -> List Spot -> List Spot
 findLiberties { spot } nearbySpots =
-    List.filterMap (findLiberty nearbySpots spot steps) (neighborSpots spot)
+    List.filterMap (findLiberty nearbySpots spot settings.steps) (neighborSpots spot)
         |> sortByMostOverlaps
         |> takeNonOverlapping []
