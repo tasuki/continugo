@@ -203,6 +203,11 @@ takeNonOverlapping acc queue =
                 takeNonOverlapping (head :: acc) tail
 
 
+uniqueLiberties : List Spot -> List Spot
+uniqueLiberties liberties =
+    sortByMostOverlaps liberties |> takeNonOverlapping []
+
+
 
 -- gluing it all together
 
@@ -239,5 +244,4 @@ findLiberty nearbySpots orig step suspect =
 findLiberties : Stone -> List Spot -> List Spot
 findLiberties { spot } nearbySpots =
     List.filterMap (findLiberty nearbySpots spot settings.steps) (neighborSpots spot)
-        |> sortByMostOverlaps
-        |> takeNonOverlapping []
+        |> uniqueLiberties

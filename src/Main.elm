@@ -8,7 +8,7 @@ import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
-import Play exposing (playIfLegal)
+import Play exposing (groupAndItsLiberties, playIfLegal)
 import SamplePositions
 import Svg exposing (Svg)
 import Svg.Attributes as SA
@@ -37,6 +37,8 @@ main =
 type alias Model =
     { stones : Stones
     , ghostStone : Maybe Stone
+    , highlightedGroup : List Spot
+    , highlightedLiberties : List Spot
     , onMove : Player
     }
 
@@ -46,6 +48,8 @@ init _ =
     update (PlayStones SamplePositions.empty)
         { stones = Dict.empty
         , ghostStone = Nothing
+        , highlightedGroup = []
+        , highlightedLiberties = []
         , onMove = Black
         }
 
@@ -92,14 +96,35 @@ update msg model =
             let
                 stone =
                     createStone model.onMove <| toBoardCoords hoverCoords element
+
+                maybeOver =
+                    stoneList model.stones
+                        |> List.filter (\s -> stoneDistance stone s < stoneR)
+                        |> List.head
             in
-            ( { model
-                | ghostStone =
-                    playIfLegal stone model.stones
-                        |> Maybe.andThen (Dict.get (stoneKey stone))
-              }
-            , Cmd.none
-            )
+            case maybeOver of
+                Just over ->
+                    let
+                        ( group, liberties ) =
+                            groupAndItsLiberties model.stones over
+                    in
+                    ( { model
+                        | highlightedGroup = group
+                        , highlightedLiberties = liberties
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( { model
+                        | ghostStone =
+                            playIfLegal stone model.stones
+                                |> Maybe.andThen (Dict.get (stoneKey stone))
+                        , highlightedGroup = []
+                        , highlightedLiberties = []
+                      }
+                    , Cmd.none
+                    )
 
         PlayStones stonesList ->
             let
@@ -183,6 +208,32 @@ viewGhostStone stone =
     Svg.g [ SA.opacity "0.5" ] [ viewStone stone ]
 
 
+viewHighlight : Spot -> Svg Msg
+viewHighlight spot =
+    Svg.circle
+        [ SA.cx <| String.fromInt spot.x
+        , SA.cy <| String.fromInt spot.y
+        , SA.r <| String.fromInt stoneR
+        , SA.stroke "#900"
+        , SA.strokeWidth "5"
+        , SA.fill "transparent"
+        ]
+        []
+
+
+viewLiberty : Spot -> Svg Msg
+viewLiberty spot =
+    Svg.circle
+        [ SA.cx <| String.fromInt spot.x
+        , SA.cy <| String.fromInt spot.y
+        , SA.r <| String.fromInt stoneR
+        , SA.stroke "#BB9"
+        , SA.strokeWidth "5"
+        , SA.fill "transparent"
+        ]
+        []
+
+
 viewLink : ( Spot, Spot ) -> Svg Msg
 viewLink ( s1, s2 ) =
     Svg.line
@@ -247,6 +298,10 @@ view model =
                     List.map viewKeyedLink (getUniqueLinks model.stones)
                 , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
                     (stoneList model.stones |> List.map viewKeyedStone)
+                , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
+                    (model.highlightedGroup |> List.map viewHighlight)
+                , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
+                    (model.highlightedLiberties |> List.map viewLiberty)
                 ]
             ]
         ]

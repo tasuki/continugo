@@ -1,8 +1,8 @@
-module Play exposing (..)
+module Play exposing (groupAndItsLiberties, playIfLegal)
 
 import Dict
 import Go exposing (..)
-import Liberties exposing (findLiberties)
+import Liberties exposing (findLiberties, uniqueLiberties)
 import List.Extra
 import Set exposing (Set)
 
@@ -20,46 +20,73 @@ spotsToStones stones =
     List.filterMap (\spot -> Dict.get ( spot.x, spot.y ) stones)
 
 
+newOpenClosed : Stones -> Stone -> Open -> Closed -> ( Open, Closed )
+newOpenClosed stones toExplore open closed =
+    let
+        notClosed neighbor =
+            Set.member (stoneKey neighbor) closed
+
+        toOpen : List Stone
+        toOpen =
+            toExplore.adjacent
+                |> spotsToStones stones
+                |> List.Extra.filterNot notClosed
+
+        newOpen : List Stone
+        newOpen =
+            toOpen ++ open
+
+        newClosed =
+            List.foldl (stoneKey >> Set.insert) closed toOpen
+    in
+    ( newOpen, newClosed )
+
+
+findLibertyless : Stones -> ( Open, Closed ) -> List Spot
+findLibertyless stones ( open, closed ) =
+    case open of
+        [] ->
+            -- libertyless, return group
+            Set.toList closed |> List.map (\( x, y ) -> Spot x y)
+
+        toExplore :: exploreLater ->
+            if findLiberties toExplore toExplore.nearby /= [] then
+                -- has at least one liberty, stop and return nothing
+                []
+
+            else
+                -- has no liberties but has neighbors
+                findLibertyless stones <|
+                    newOpenClosed stones toExplore exploreLater closed
+
+
+findGroupAndItsLiberties : Stones -> List Spot -> ( Open, Closed ) -> ( List Spot, List Spot )
+findGroupAndItsLiberties stones liberties ( open, closed ) =
+    case open of
+        [] ->
+            -- that's it, we found the whole group
+            ( Set.toList closed |> List.map (\( x, y ) -> Spot x y)
+            , uniqueLiberties liberties
+            )
+
+        toExplore :: exploreLater ->
+            -- wait there's more
+            let
+                newLiberties =
+                    findLiberties toExplore toExplore.nearby
+            in
+            findGroupAndItsLiberties stones (newLiberties ++ liberties) <|
+                newOpenClosed stones toExplore exploreLater closed
+
+
 findGroupWithoutLiberties : Stones -> Stone -> List Spot
 findGroupWithoutLiberties stones stone =
-    let
-        newOpenClosed : Stone -> Open -> Closed -> ( Open, Closed )
-        newOpenClosed toExplore open closed =
-            let
-                notClosed neighbor =
-                    Set.member (stoneKey neighbor) closed
+    findLibertyless stones ( [ stone ], Set.singleton <| stoneKey stone )
 
-                toOpen : List Stone
-                toOpen =
-                    toExplore.adjacent
-                        |> spotsToStones stones
-                        |> List.Extra.filterNot notClosed
 
-                newOpen : List Stone
-                newOpen =
-                    toOpen ++ open
-
-                newClosed =
-                    List.foldl (stoneKey >> Set.insert) closed toOpen
-            in
-            ( newOpen, newClosed )
-
-        findLibertyless : ( Open, Closed ) -> List Spot
-        findLibertyless ( open, closed ) =
-            case open of
-                [] ->
-                    -- libertyless
-                    Set.toList closed |> List.map (\( x, y ) -> Spot x y)
-
-                toExplore :: exploreLater ->
-                    if findLiberties toExplore toExplore.nearby /= [] then
-                        -- has at least one liberty
-                        []
-
-                    else
-                        findLibertyless <| newOpenClosed toExplore exploreLater closed
-    in
-    findLibertyless ( [ stone ], Set.singleton <| stoneKey stone )
+groupAndItsLiberties : Stones -> Stone -> ( List Spot, List Spot )
+groupAndItsLiberties stones stone =
+    findGroupAndItsLiberties stones [] ( [ stone ], Set.singleton <| stoneKey stone )
 
 
 takeAll : List Spot -> Stones -> Stones
