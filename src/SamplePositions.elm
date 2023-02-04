@@ -30,3 +30,13 @@ nearestPlayableTest =
     [ createStone White <| Spot 200 200
     , createStone White <| Spot 280 200
     ]
+
+
+suicideOkWhenCapture =
+    [ createStone White <| Spot 842 74
+    , createStone White <| Spot 909 151
+    , createStone Black <| Spot 730 73
+    , createStone Black <| Spot 800 161
+    , createStone Black <| Spot 876 234
+    , createStone Black <| Spot 961 240
+    ]

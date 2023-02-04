@@ -9,7 +9,7 @@ import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
 import Liberties exposing (findNearestPlayable)
-import Play exposing (groupAndItsLiberties, playIfLegal)
+import Play exposing (groupAndItsLiberties, playIfLegal, playStones)
 import SamplePositions
 import Svg exposing (Svg)
 import Svg.Attributes as SA
@@ -131,7 +131,9 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Clicked clickedCoords ->
-            ( model, BD.getElement "board" |> Task.attempt (PlayIfLegal clickedCoords) )
+            ( model
+            , BD.getElement "board" |> Task.attempt (PlayIfLegal clickedCoords)
+            )
 
         PlayIfLegal clickedCoords (Ok element) ->
             ( handlePlay model (toBoardCoords clickedCoords element)
@@ -139,7 +141,9 @@ update msg model =
             )
 
         MouseMoved hoverCoords ->
-            ( model, BD.getElement "board" |> Task.attempt (Hover hoverCoords) )
+            ( model
+            , BD.getElement "board" |> Task.attempt (Hover hoverCoords)
+            )
 
         Hover hoverCoords (Ok element) ->
             ( handleHover model (toBoardCoords hoverCoords element)
@@ -147,14 +151,9 @@ update msg model =
             )
 
         PlayStones stonesList ->
-            let
-                playStone stone acc =
-                    playIfLegal stone acc |> Maybe.withDefault acc
-
-                newStones =
-                    List.foldl playStone model.stones stonesList
-            in
-            ( { model | stones = newStones }, Cmd.none )
+            ( { model | stones = playStones stonesList model.stones }
+            , Cmd.none
+            )
 
         _ ->
             ( model, Cmd.none )

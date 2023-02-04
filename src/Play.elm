@@ -1,4 +1,4 @@
-module Play exposing (groupAndItsLiberties, playIfLegal)
+module Play exposing (groupAndItsLiberties, playIfLegal, playStones)
 
 import Dict
 import Go exposing (..)
@@ -106,12 +106,17 @@ maybePlay stone stones =
     let
         stonesAfterTake =
             takeAll stone.nearby stones
-    in
-    if findGroupWithoutLiberties stonesAfterTake stone == [] then
-        Just stonesAfterTake
 
-    else
-        Nothing
+        stonesIfHasLibertiesAfterTake : Stone -> Maybe Stones
+        stonesIfHasLibertiesAfterTake newStone =
+            if findGroupWithoutLiberties stonesAfterTake newStone == [] then
+                Just stonesAfterTake
+
+            else
+                Nothing
+    in
+    Dict.get (stoneKey stone) stonesAfterTake
+        |> Maybe.andThen stonesIfHasLibertiesAfterTake
 
 
 playIfLegal : Stone -> Stones -> Maybe Stones
@@ -129,6 +134,15 @@ playIfLegal bareStone stones =
 
     else
         Nothing
+
+
+playStones : List Stone -> Stones -> Stones
+playStones toPlay stones =
+    let
+        playStone stone acc =
+            playIfLegal stone acc |> Maybe.withDefault acc
+    in
+    List.foldl playStone stones toPlay
 
 
 
