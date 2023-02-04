@@ -24,3 +24,9 @@ twoLibertiesLowerRight =
     , createStone White <| Spot 879 962 -- down
     , createStone White <| Spot 796 876 -- left
     ]
+
+
+nearestPlayableTest =
+    [ createStone White <| Spot 200 200
+    , createStone White <| Spot 280 200
+    ]

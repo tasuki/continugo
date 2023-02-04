@@ -8,6 +8,7 @@ import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
+import Liberties exposing (findNearestPlayable)
 import Play exposing (groupAndItsLiberties, playIfLegal)
 import SamplePositions
 import Svg exposing (Svg)
@@ -66,6 +67,66 @@ type Msg
     | PlayStones (List Stone)
 
 
+handleHover : Model -> Spot -> Model
+handleHover model hoverSpot =
+    let
+        nearby =
+            nearbyStones model.stones hoverSpot
+
+        maybeOver =
+            nearby
+                |> List.filter (\s -> distance hoverSpot s.spot < stoneR)
+                |> List.head
+    in
+    case maybeOver of
+        Just over ->
+            let
+                ( group, liberties ) =
+                    groupAndItsLiberties model.stones over
+            in
+            { model
+                | highlightedGroup = group
+                , highlightedLiberties = liberties
+                , ghostStone = Nothing
+            }
+
+        Nothing ->
+            let
+                maybePlay : Spot -> Maybe Stone
+                maybePlay spot =
+                    playIfLegal (createStone model.onMove spot) model.stones
+                        |> Maybe.andThen (Dict.get ( spot.x, spot.y ))
+            in
+            { model
+                | ghostStone =
+                    findNearestPlayable hoverSpot (List.map .spot nearby)
+                        |> Maybe.andThen maybePlay
+                , highlightedGroup = []
+                , highlightedLiberties = []
+            }
+
+
+handlePlay : Model -> Spot -> Model
+handlePlay model playSpot =
+    let
+        nearby =
+            nearbyStones model.stones playSpot
+
+        maybeStones =
+            findNearestPlayable playSpot (List.map .spot nearby)
+                |> Maybe.andThen (\np -> playIfLegal (createStone model.onMove np) model.stones)
+    in
+    case maybeStones of
+        Just s ->
+            { model
+                | stones = s
+                , onMove = otherPlayer model.onMove
+            }
+
+        Nothing ->
+            model
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -73,58 +134,17 @@ update msg model =
             ( model, BD.getElement "board" |> Task.attempt (PlayIfLegal clickedCoords) )
 
         PlayIfLegal clickedCoords (Ok element) ->
-            let
-                stone =
-                    createStone model.onMove (toBoardCoords clickedCoords element)
-            in
-            case playIfLegal stone model.stones of
-                Just s ->
-                    ( { model
-                        | stones = s
-                        , onMove = otherPlayer model.onMove
-                      }
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    ( model, Cmd.none )
+            ( handlePlay model (toBoardCoords clickedCoords element)
+            , Cmd.none
+            )
 
         MouseMoved hoverCoords ->
             ( model, BD.getElement "board" |> Task.attempt (Hover hoverCoords) )
 
         Hover hoverCoords (Ok element) ->
-            let
-                stone =
-                    createStone model.onMove <| toBoardCoords hoverCoords element
-
-                maybeOver =
-                    stoneList model.stones
-                        |> List.filter (\s -> stoneDistance stone s < stoneR)
-                        |> List.head
-            in
-            case maybeOver of
-                Just over ->
-                    let
-                        ( group, liberties ) =
-                            groupAndItsLiberties model.stones over
-                    in
-                    ( { model
-                        | highlightedGroup = group
-                        , highlightedLiberties = liberties
-                      }
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    ( { model
-                        | ghostStone =
-                            playIfLegal stone model.stones
-                                |> Maybe.andThen (Dict.get (stoneKey stone))
-                        , highlightedGroup = []
-                        , highlightedLiberties = []
-                      }
-                    , Cmd.none
-                    )
+            ( handleHover model (toBoardCoords hoverCoords element)
+            , Cmd.none
+            )
 
         PlayStones stonesList ->
             let

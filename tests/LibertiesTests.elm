@@ -138,3 +138,29 @@ findLibertiesTest =
                 \_ -> Expect.equal 0 (List.length <| libs ())
             ]
         ]
+
+
+findNearestPlayableTest =
+    describe "findNearestPlayable"
+        [ test "Basic: 200, hover 250 => 276" <|
+            \_ ->
+                Expect.equal (Just <| Spot 276 200)
+                    (findNearestPlayable (Spot 250 200) [ Spot 200 200 ])
+        , test "Basic: 200, hover 270 => 276" <|
+            \_ ->
+                Expect.equal (Just <| Spot 276 200)
+                    (findNearestPlayable (Spot 270 200) [ Spot 200 200 ])
+        , test "Basic: 200, hover 230 => Nothing (cause 46 > stoneR)" <|
+            \_ ->
+                Expect.equal Nothing
+                    (findNearestPlayable (Spot 230 200) [ Spot 200 200 ])
+        , test "Between two stones" <|
+            \_ ->
+                Expect.equal (Just <| Spot 240 266)
+                    (findNearestPlayable
+                        (Spot 237 240)
+                        [ Spot 200 200
+                        , Spot 280 200
+                        ]
+                    )
+        ]

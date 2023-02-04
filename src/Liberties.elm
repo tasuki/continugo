@@ -7,11 +7,19 @@ import Go exposing (..)
 -- settings and hardcoded things
 
 
-settings =
+libertiesSettings =
     { steps = 20
     , shifts = shifts12
     , stoneForce = \x -> 1.2 - x * 1.1
-    , scaleFactor = \step -> toFloat step / toFloat settings.steps
+    , scaleFactor = \step -> toFloat step / toFloat libertiesSettings.steps
+    }
+
+
+nearestPlayableSettings =
+    { steps = 50
+    , originForce = 0.2
+    , scaleFactor = \step -> toFloat step / toFloat nearestPlayableSettings.steps
+    , maxDistance = stoneR
     }
 
 
@@ -57,7 +65,7 @@ neighborShifts =
             , y = 1.2 * y * stoneR
             }
     in
-    List.map toShift settings.shifts
+    List.map toShift libertiesSettings.shifts
 
 
 
@@ -115,7 +123,7 @@ stoneForce suspect nearbySpot =
 
         factor =
             if relativeDistance < 1 then
-                settings.stoneForce relativeDistance
+                libertiesSettings.stoneForce relativeDistance
 
             else
                 0
@@ -154,8 +162,8 @@ connectionForce original suspect =
         Shift 0 0
 
 
-applyForces : Int -> Spot -> List Spot -> Spot -> Spot
-applyForces step original nearbySpots suspect =
+libertyForces : Int -> Spot -> List Spot -> Spot -> Spot
+libertyForces step original nearbySpots suspect =
     let
         shiftFromOverlap =
             List.map (stoneForce suspect) nearbySpots
@@ -167,12 +175,29 @@ applyForces step original nearbySpots suspect =
             connectionForce original suspect
     in
     sumShifts (shiftToBoard :: shiftToConnection :: shiftFromOverlap)
-        |> scaleShift (settings.scaleFactor step)
+        |> scaleShift (libertiesSettings.scaleFactor step)
+        |> shift suspect
+
+
+playableForces : Int -> Spot -> List Spot -> Spot -> Spot
+playableForces step origin nearbySpots suspect =
+    let
+        shiftFromOverlap =
+            List.map (stoneForce suspect) nearbySpots
+
+        shiftToBoard =
+            boardForce suspect
+
+        shiftToOrigin =
+            findShift suspect origin |> scaleShift nearestPlayableSettings.originForce
+    in
+    sumShifts (shiftToBoard :: shiftToOrigin :: shiftFromOverlap)
+        |> scaleShift (nearestPlayableSettings.scaleFactor step)
         |> shift suspect
 
 
 
--- filtering and sorting the results
+-- filtering and sorting liberties
 
 
 overlapCount : List Spot -> Spot -> Int
@@ -209,7 +234,7 @@ uniqueLiberties liberties =
 
 
 
--- gluing it all together
+-- finding liberties
 
 
 findLiberty : List Spot -> Spot -> Int -> Spot -> Maybe Spot
@@ -235,7 +260,7 @@ findLiberty nearbySpots orig step suspect =
             nearbySpots
             orig
             (step - 1)
-            (applyForces step orig nearbySpots suspect)
+            (libertyForces step orig nearbySpots suspect)
 
     else
         Nothing
@@ -243,5 +268,43 @@ findLiberty nearbySpots orig step suspect =
 
 findLiberties : Stone -> List Spot -> List Spot
 findLiberties { spot } nearbySpots =
-    List.filterMap (findLiberty nearbySpots spot settings.steps) (neighborSpots spot)
+    List.filterMap (findLiberty nearbySpots spot libertiesSettings.steps) (neighborSpots spot)
         |> uniqueLiberties
+
+
+
+-- nearest playable
+
+
+nearestPlayable : List Spot -> Spot -> Int -> Spot -> List Spot -> List Spot
+nearestPlayable nearbySpots orig step suspect prevCandidates =
+    let
+        overlapsNearby =
+            overlaps suspect nearbySpots
+
+        closeEnough =
+            distance orig suspect < nearestPlayableSettings.maxDistance
+
+        candidates =
+            if isWithinBoard suspect && not overlapsNearby && closeEnough then
+                suspect :: prevCandidates
+
+            else
+                prevCandidates
+    in
+    if step > 0 then
+        nearestPlayable
+            nearbySpots
+            orig
+            (step - 1)
+            (playableForces step orig nearbySpots suspect)
+            candidates
+
+    else
+        candidates
+
+
+findNearestPlayable : Spot -> List Spot -> Maybe Spot
+findNearestPlayable spot nearbySpots =
+    nearestPlayable nearbySpots spot nearestPlayableSettings.steps spot []
+        |> List.head

@@ -140,22 +140,26 @@ removeAdjacent toRemove orig =
     { orig | adjacent = List.filter (\s -> s /= toRemove.spot) orig.adjacent }
 
 
+nearbyStones : Stones -> Spot -> List Stone
+nearbyStones stones spot =
+    stoneList stones
+        |> List.filter (\s -> distance spot s.spot < diameter * nearbyDistance)
+
+
 enhanceInfo : Stones -> Stone -> Stone
 enhanceInfo stones stone =
     let
-        nearbyStones : List Stone
-        nearbyStones =
-            stoneList stones
-                |> List.filter (\s -> stoneDistance stone s < diameter * nearbyDistance)
+        nearby =
+            nearbyStones stones stone.spot
 
         adjacentStones : List Stone
         adjacentStones =
-            nearbyStones
+            nearby
                 |> List.filter (\s -> s.player == stone.player)
                 |> List.filter (\s -> stoneDistance stone s < diameter * adjacentDistance)
     in
     { stone
-        | nearby = List.map .spot nearbyStones
+        | nearby = List.map .spot nearby
         , adjacent = List.map .spot adjacentStones
     }
 
