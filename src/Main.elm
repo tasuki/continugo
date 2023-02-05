@@ -293,11 +293,6 @@ viewStone { player, spot } =
         []
 
 
-viewGhostStone : Stone -> Svg Msg
-viewGhostStone stone =
-    Svg.g [ SA.opacity "0.5" ] [ viewStone stone ]
-
-
 viewHighlight : Spot -> Svg Msg
 viewHighlight spot =
     Svg.circle
@@ -337,9 +332,25 @@ viewLink ( s1, s2 ) =
         []
 
 
+viewGhostStone : Stone -> Svg Msg
+viewGhostStone stone =
+    Svg.g [ SA.opacity "0.4" ] [ viewStone stone ]
+
+
 viewGhostLink : ( Spot, Spot ) -> Svg Msg
-viewGhostLink link =
-    Svg.g [ SA.opacity "0.5" ] [ viewLink link ]
+viewGhostLink ( ghost, existing ) =
+    let
+        shiftBy : Float
+        shiftBy =
+            stoneR / distance ghost existing
+
+        ghostBorder : Spot
+        ghostBorder =
+            Liberties.findShift ghost existing
+                |> Liberties.scaleShift shiftBy
+                |> Liberties.shift ghost
+    in
+    Svg.g [ SA.opacity "0.4" ] [ viewLink ( ghostBorder, existing ) ]
 
 
 
