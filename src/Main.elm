@@ -11,6 +11,7 @@ import Json.Decode as D
 import Liberties exposing (findNearestPlayable)
 import Maybe.Extra
 import Play exposing (groupAndItsLiberties, playIfLegal, playStones)
+import Process
 import SamplePositions
 import Svg exposing (Svg)
 import Svg.Attributes as SA
@@ -46,6 +47,7 @@ type alias Model =
     , highlightedGroup : List Spot
     , highlightedLiberties : List Spot
     , justPlayed : Maybe Spot
+    , justRemoved : List Stone
     , onMove : Player
     }
 
@@ -58,6 +60,7 @@ init _ =
         , highlightedGroup = []
         , highlightedLiberties = []
         , justPlayed = Nothing
+        , justRemoved = []
         , onMove = Black
         }
 
@@ -72,6 +75,7 @@ type Msg
     | PlayIfLegal Spot (Result BD.Error BD.Element)
     | Hover Spot (Result BD.Error BD.Element)
     | PlayStones (List Stone)
+    | RemoveStones
 
 
 handleHover : Model -> Spot -> Model
@@ -128,7 +132,7 @@ handleHover model hoverSpot =
             }
 
 
-handlePlay : Model -> Spot -> Model
+handlePlay : Model -> Spot -> ( Model, Cmd Msg )
 handlePlay model playSpot =
     let
         nearby =
@@ -139,17 +143,35 @@ handlePlay model playSpot =
                 |> Maybe.andThen (\np -> playIfLegal (createStone model.onMove np) model.stones)
     in
     case maybeStones of
-        Just s ->
+        Just stones ->
             -- play!
-            { model
-                | stones = s
+            ( { model
+                | stones = stones
                 , onMove = otherPlayer model.onMove
                 , justPlayed = Just playSpot
-            }
+                , justRemoved = removedStones model.stones stones
+              }
+            , Process.sleep 500 |> Task.perform (\_ -> RemoveStones)
+            )
 
         Nothing ->
             -- illegal move
-            model
+            ( model, Cmd.none )
+
+
+removedStones : Stones -> Stones -> List Stone
+removedStones old new =
+    let
+        maybeMissingStone : Stone -> Maybe Stone
+        maybeMissingStone oldStone =
+            case Dict.get (stoneKey oldStone) new of
+                Just _ ->
+                    Nothing
+
+                Nothing ->
+                    Just oldStone
+    in
+    List.filterMap maybeMissingStone (stoneList old)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -161,9 +183,7 @@ update msg model =
             )
 
         PlayIfLegal clickedCoords (Ok element) ->
-            ( handlePlay model (toBoardCoords clickedCoords element)
-            , Cmd.none
-            )
+            handlePlay model (toBoardCoords clickedCoords element)
 
         MouseMoved hoverCoords ->
             ( model
@@ -177,6 +197,11 @@ update msg model =
 
         PlayStones stonesList ->
             ( { model | stones = playStones stonesList model.stones }
+            , Cmd.none
+            )
+
+        RemoveStones ->
+            ( { model | justRemoved = [] }
             , Cmd.none
             )
 
@@ -292,8 +317,8 @@ hideLines { spot } =
         []
 
 
-viewStone : Maybe Spot -> Stone -> Svg Msg
-viewStone justPlayed { player, spot } =
+viewStone : String -> Stone -> Svg Msg
+viewStone extraClass { player, spot } =
     let
         class =
             case player of
@@ -302,13 +327,6 @@ viewStone justPlayed { player, spot } =
 
                 White ->
                     "white"
-
-        extraClass =
-            if justPlayed == Just spot then
-                "just-played"
-
-            else
-                ""
     in
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
@@ -363,7 +381,7 @@ viewLink ( s1, s2 ) =
 
 viewGhostStone : Stone -> Svg Msg
 viewGhostStone stone =
-    Svg.g [ SA.opacity "0.4" ] [ viewStone Nothing stone ]
+    Svg.g [ SA.opacity "0.4" ] [ viewStone "" stone ]
 
 
 viewGhostLink : ( Spot, Spot ) -> Svg Msg
@@ -398,10 +416,10 @@ hideLinesKeyed stone =
     )
 
 
-viewKeyedStone : Maybe Spot -> Stone -> ( String, Svg Msg )
-viewKeyedStone justPlayed stone =
+viewKeyedStone : String -> Stone -> ( String, Svg Msg )
+viewKeyedStone extraClass stone =
     ( "stone" ++ spotKeyStr stone.spot
-    , lazy2 viewStone justPlayed stone
+    , lazy2 viewStone extraClass stone
     )
 
 
@@ -410,6 +428,15 @@ viewKeyedLink ( s1, s2 ) =
     ( "link" ++ spotKeyStr s1 ++ spotKeyStr s2
     , lazy viewLink ( s1, s2 )
     )
+
+
+classJustPlayed : Maybe Spot -> Stone -> String
+classJustPlayed justPlayed stone =
+    if justPlayed == Just stone.spot then
+        "just-played"
+
+    else
+        ""
 
 
 
@@ -442,7 +469,9 @@ view model =
                 , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
                     List.map viewKeyedLink (getUniqueLinks model.stones)
                 , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
-                    (stoneList model.stones |> List.map (viewKeyedStone model.justPlayed))
+                    (stoneList model.stones |> List.map (\s -> viewKeyedStone (classJustPlayed model.justPlayed s) s))
+                , lazy3 Svg.node "g" [ SA.id "removedStones" ] <|
+                    (model.justRemoved |> List.map (viewStone "removed"))
                 , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
                     (model.highlightedGroup |> List.map viewHighlight)
                 , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
