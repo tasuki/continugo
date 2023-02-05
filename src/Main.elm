@@ -9,6 +9,7 @@ import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
 import Liberties exposing (findNearestPlayable)
+import Maybe.Extra
 import Play exposing (groupAndItsLiberties, playIfLegal, playStones)
 import SamplePositions
 import Svg exposing (Svg)
@@ -44,6 +45,7 @@ type alias Model =
     , ghostStone : Maybe Stone
     , highlightedGroup : List Spot
     , highlightedLiberties : List Spot
+    , justPlayed : Maybe Spot
     , onMove : Player
     }
 
@@ -55,6 +57,7 @@ init _ =
         , ghostStone = Nothing
         , highlightedGroup = []
         , highlightedLiberties = []
+        , justPlayed = Nothing
         , onMove = Black
         }
 
@@ -84,17 +87,31 @@ handleHover model hoverSpot =
     in
     case maybeOver of
         Just over ->
+            -- hovering over a stone
             let
-                ( group, liberties ) =
-                    groupAndItsLiberties model.stones over
+                overJustPlayed =
+                    Maybe.Extra.filter ((==) over.spot) model.justPlayed
             in
-            { model
-                | highlightedGroup = group
-                , highlightedLiberties = liberties
-                , ghostStone = Nothing
-            }
+            case overJustPlayed of
+                Just _ ->
+                    -- hovering over a stone which was just played: show nothing
+                    model
+
+                Nothing ->
+                    -- hovering over a stone: show liberties
+                    let
+                        ( group, liberties ) =
+                            groupAndItsLiberties model.stones over
+                    in
+                    { model
+                        | highlightedGroup = group
+                        , highlightedLiberties = liberties
+                        , ghostStone = Nothing
+                        , justPlayed = overJustPlayed
+                    }
 
         Nothing ->
+            -- hovering over an empty spot: show ghost move if possible
             let
                 maybePlay : Spot -> Maybe Stone
                 maybePlay spot =
@@ -107,6 +124,7 @@ handleHover model hoverSpot =
                         |> Maybe.andThen maybePlay
                 , highlightedGroup = []
                 , highlightedLiberties = []
+                , justPlayed = Nothing
             }
 
 
@@ -122,12 +140,15 @@ handlePlay model playSpot =
     in
     case maybeStones of
         Just s ->
+            -- play!
             { model
                 | stones = s
                 , onMove = otherPlayer model.onMove
+                , justPlayed = Just playSpot
             }
 
         Nothing ->
+            -- illegal move
             model
 
 
@@ -265,22 +286,29 @@ hideLines { spot } =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt <| stoneR * 6
+        , SA.r <| String.fromInt <| stoneR * 7
         , SA.fill "#EEA"
         ]
         []
 
 
-viewStone : Stone -> Svg Msg
-viewStone { player, spot } =
+viewStone : Maybe Spot -> Stone -> Svg Msg
+viewStone justPlayed { player, spot } =
     let
-        color =
+        class =
             case player of
                 Black ->
-                    "#000"
+                    "black"
 
                 White ->
-                    "#FFF"
+                    "white"
+
+        extraClass =
+            if justPlayed == Just spot then
+                "just-played"
+
+            else
+                ""
     in
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
@@ -288,7 +316,8 @@ viewStone { player, spot } =
         , SA.r <| String.fromInt stoneR
         , SA.stroke "black"
         , SA.strokeWidth "5"
-        , SA.fill color
+        , SA.class class
+        , SA.class extraClass
         ]
         []
 
@@ -334,7 +363,7 @@ viewLink ( s1, s2 ) =
 
 viewGhostStone : Stone -> Svg Msg
 viewGhostStone stone =
-    Svg.g [ SA.opacity "0.4" ] [ viewStone stone ]
+    Svg.g [ SA.opacity "0.4" ] [ viewStone Nothing stone ]
 
 
 viewGhostLink : ( Spot, Spot ) -> Svg Msg
@@ -369,10 +398,10 @@ hideLinesKeyed stone =
     )
 
 
-viewKeyedStone : Stone -> ( String, Svg Msg )
-viewKeyedStone stone =
+viewKeyedStone : Maybe Spot -> Stone -> ( String, Svg Msg )
+viewKeyedStone justPlayed stone =
     ( "stone" ++ spotKeyStr stone.spot
-    , lazy viewStone stone
+    , lazy2 viewStone justPlayed stone
     )
 
 
@@ -400,7 +429,7 @@ view model =
                 [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
                 [ Svg.defs []
                     [ Svg.filter [ SA.id "blur-filter" ]
-                        [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "50" ] [] ]
+                        [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
                     ]
                 , lazy3 Svg.node "g" [ SA.id "lines" ] <| viewLines
                 , lazy3 Svg.node "g" [ SA.id "viewStars" ] <| viewStars
@@ -413,7 +442,7 @@ view model =
                 , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
                     List.map viewKeyedLink (getUniqueLinks model.stones)
                 , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
-                    (stoneList model.stones |> List.map viewKeyedStone)
+                    (stoneList model.stones |> List.map (viewKeyedStone model.justPlayed))
                 , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
                     (model.highlightedGroup |> List.map viewHighlight)
                 , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
