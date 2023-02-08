@@ -332,7 +332,7 @@ viewStone extraClass { player, spot } =
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
-        , SA.stroke "black"
+        , SA.stroke "#222"
         , SA.strokeWidth "5"
         , SA.class class
         , SA.class extraClass
@@ -373,7 +373,7 @@ viewLink ( s1, s2 ) =
         , SA.y1 <| String.fromInt s1.y
         , SA.x2 <| String.fromInt s2.x
         , SA.y2 <| String.fromInt s2.y
-        , SA.stroke "black"
+        , SA.stroke "#222"
         , SA.strokeWidth "5"
         ]
         []
