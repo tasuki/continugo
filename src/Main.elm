@@ -3,6 +3,7 @@ module Main exposing (..)
 import Browser
 import Browser.Dom as BD
 import Browser.Events
+import Browser.Navigation as Nav
 import Dict
 import Go exposing (..)
 import Html as H
@@ -12,12 +13,14 @@ import Liberties exposing (findNearestPlayable)
 import Maybe.Extra
 import Play exposing (groupAndItsLiberties, playIfLegal, playStones)
 import Process
-import SamplePositions
+import Regex
+import Sgf
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 import Svg.Keyed
 import Svg.Lazy exposing (..)
 import Task
+import Url exposing (Url)
 
 
 boardSize =
@@ -29,11 +32,13 @@ preciseR =
 
 
 main =
-    Browser.document
+    Browser.application
         { init = init
         , update = update
         , subscriptions = subscriptions
         , view = view
+        , onUrlRequest = LinkClicked
+        , onUrlChange = UrlChanged
         }
 
 
@@ -42,26 +47,30 @@ main =
 
 
 type alias Model =
-    { stones : Stones
+    { record : List Stone
+    , stones : Stones
     , ghostStone : Maybe Stone
     , highlightedGroup : List Spot
     , highlightedLiberties : List Spot
     , justPlayed : Maybe Spot
     , justRemoved : List Stone
     , onMove : Player
+    , navKey : Nav.Key
     }
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    update (PlayStones SamplePositions.empty)
-        { stones = Dict.empty
+init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
+init _ url navKey =
+    changeRouteTo url
+        { record = []
+        , stones = Dict.empty
         , ghostStone = Nothing
         , highlightedGroup = []
         , highlightedLiberties = []
         , justPlayed = Nothing
         , justRemoved = []
         , onMove = Black
+        , navKey = navKey
         }
 
 
@@ -76,6 +85,8 @@ type Msg
     | Hover Spot (Result BD.Error BD.Element)
     | PlayStones (List Stone)
     | RemoveStones
+    | LinkClicked Browser.UrlRequest
+    | UrlChanged Url
 
 
 handleHover : Model -> Spot -> Model
@@ -135,43 +146,42 @@ handleHover model hoverSpot =
 handlePlay : Model -> Spot -> ( Model, Cmd Msg )
 handlePlay model playSpot =
     let
+        nearby : List Stone
         nearby =
             nearbyStones model.stones playSpot
 
-        maybeStones =
+        maybeStone : Maybe Stone
+        maybeStone =
             findNearestPlayable playSpot (List.map .spot nearby)
-                |> Maybe.andThen (\np -> playIfLegal (createStone model.onMove np) model.stones)
+                |> Maybe.map (createStone model.onMove)
+
+        maybeStones : Maybe Stones
+        maybeStones =
+            Maybe.andThen (\s -> playIfLegal s model.stones) maybeStone
     in
-    case maybeStones of
-        Just stones ->
+    case ( maybeStones, maybeStone ) of
+        ( Just stones, Just played ) ->
             -- play!
-            ( { model
-                | stones = stones
-                , onMove = otherPlayer model.onMove
-                , justPlayed = Just playSpot
-                , justRemoved = removedStones model.stones stones
-              }
-            , Process.sleep 500 |> Task.perform (\_ -> RemoveStones)
+            let
+                newModel =
+                    { model
+                        | record = model.record ++ [ played ]
+                        , stones = stones
+                        , onMove = otherPlayer model.onMove
+                        , justPlayed = Just played.spot
+                        , justRemoved = removedStones model.stones stones
+                    }
+            in
+            ( newModel
+            , Cmd.batch
+                [ pushUrl newModel.navKey <| newModel.record
+                , Process.sleep 500 |> Task.perform (\_ -> RemoveStones)
+                ]
             )
 
-        Nothing ->
+        _ ->
             -- illegal move
             ( model, Cmd.none )
-
-
-removedStones : Stones -> Stones -> List Stone
-removedStones old new =
-    let
-        maybeMissingStone : Stone -> Maybe Stone
-        maybeMissingStone oldStone =
-            case Dict.get (stoneKey oldStone) new of
-                Just _ ->
-                    Nothing
-
-                Nothing ->
-                    Just oldStone
-    in
-    List.filterMap maybeMissingStone (stoneList old)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -196,14 +206,23 @@ update msg model =
             )
 
         PlayStones stonesList ->
-            ( { model | stones = playStones stonesList model.stones }
-            , Cmd.none
+            ( { model
+                | record = stonesList
+                , stones = playStones stonesList model.stones
+              }
+            , pushUrl model.navKey stonesList
             )
 
         RemoveStones ->
             ( { model | justRemoved = [] }
             , Cmd.none
             )
+
+        LinkClicked urlRequest ->
+            ( model, Cmd.none )
+
+        UrlChanged url ->
+            changeRouteTo url model
 
         _ ->
             ( model, Cmd.none )
@@ -220,6 +239,49 @@ toBoardCoords windowCoords element =
             (toFloat windowCoords.y - element.element.y)
                 * (toFloat coordRange / element.element.height)
     }
+
+
+
+-- ROUTING / URL
+
+
+recordRegex : Regex.Regex
+recordRegex =
+    Maybe.withDefault Regex.never <|
+        Regex.fromString "^record=(.*)$"
+
+
+changeRouteTo : Url.Url -> Model -> ( Model, Cmd Msg )
+changeRouteTo url model =
+    let
+        maybeMatch : Maybe String
+        maybeMatch =
+            Maybe.map (Regex.find recordRegex) url.query
+                |> Maybe.andThen List.head
+                |> Maybe.map .submatches
+                |> Maybe.andThen List.head
+                |> Maybe.andThen identity
+
+        newModel : Model
+        newModel =
+            case Maybe.map Sgf.decode maybeMatch of
+                Just stonesList ->
+                    { model
+                        | record = stonesList
+                        , stones = playStones stonesList Dict.empty
+                    }
+
+                _ ->
+                    model
+    in
+    ( newModel, Cmd.none )
+
+
+pushUrl : Nav.Key -> List Stone -> Cmd msg
+pushUrl navKey record =
+    -- Bravely go where no legal URL has gone before.
+    -- I prefer URLs to look nice rather than be valid.
+    Nav.pushUrl navKey ("/game?record=" ++ Sgf.encode record)
 
 
 
@@ -449,7 +511,7 @@ view model =
         intsToStr ints =
             List.map String.fromInt ints |> String.join " "
     in
-    { title = ""
+    { title = "#" ++ (String.fromInt <| List.length model.record) ++ " – ContinuGo"
     , body =
         [ H.div [ HA.id "board" ]
             [ Svg.svg
@@ -480,32 +542,3 @@ view model =
             ]
         ]
     }
-
-
-
--- Links helpers
-
-
-getStoneLinks : Stone -> List ( Spot, Spot )
-getStoneLinks stone =
-    List.map (\spots -> ( stone.spot, spots )) stone.adjacent
-
-
-getUniqueLinks : Stones -> List ( Spot, Spot )
-getUniqueLinks stones =
-    let
-        allLinks : List ( Spot, Spot )
-        allLinks =
-            stoneList stones
-                |> List.concatMap (\s -> List.map (\a -> ( s.spot, a )) s.adjacent)
-
-        -- filter out half of the duplicate links, so as to show each only once
-        isChosen : ( Spot, Spot ) -> Bool
-        isChosen ( s1, s2 ) =
-            if s1.y < s2.y then
-                True
-
-            else
-                s1.y == s2.y && s1.x < s2.x
-    in
-    List.filter isChosen allLinks

@@ -185,3 +185,47 @@ stoneList stones =
 addStones : (Stone -> Stone) -> List Spot -> Stones -> Stones
 addStones addFun spots sts =
     List.foldl (\s -> Dict.update ( s.x, s.y ) (Maybe.map addFun)) sts spots
+
+
+removedStones : Stones -> Stones -> List Stone
+removedStones old new =
+    let
+        maybeMissingStone : Stone -> Maybe Stone
+        maybeMissingStone oldStone =
+            case Dict.get (stoneKey oldStone) new of
+                Just _ ->
+                    Nothing
+
+                Nothing ->
+                    Just oldStone
+    in
+    List.filterMap maybeMissingStone (stoneList old)
+
+
+
+-- Links helpers
+
+
+getStoneLinks : Stone -> List ( Spot, Spot )
+getStoneLinks stone =
+    List.map (\spots -> ( stone.spot, spots )) stone.adjacent
+
+
+getUniqueLinks : Stones -> List ( Spot, Spot )
+getUniqueLinks stones =
+    let
+        allLinks : List ( Spot, Spot )
+        allLinks =
+            stoneList stones
+                |> List.concatMap (\s -> List.map (\a -> ( s.spot, a )) s.adjacent)
+
+        -- filter out half of the duplicate links, so as to show each only once
+        isChosen : ( Spot, Spot ) -> Bool
+        isChosen ( s1, s2 ) =
+            if s1.y < s2.y then
+                True
+
+            else
+                s1.y == s2.y && s1.x < s2.x
+    in
+    List.filter isChosen allLinks
