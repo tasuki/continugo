@@ -15,6 +15,6 @@ playIfLegalTest =
                 Expect.equal (Just 5) <|
                     Maybe.map (stoneList >> List.length) <|
                         playIfLegal
-                            (createStone Black <| Spot 943 58)
                             (playStones SamplePositions.suicideOkWhenCapture Dict.empty)
+                            (createStone Black <| Spot 943 58)
         ]

@@ -9,9 +9,8 @@ import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
-import Liberties exposing (findNearestPlayable)
-import Maybe.Extra
-import Play exposing (groupAndItsLiberties, playIfLegal, playStones)
+import Liberties
+import Play exposing (groupAndItsLiberties, play, playStones)
 import Process
 import Regex
 import Sgf
@@ -92,51 +91,36 @@ type Msg
 handleHover : Model -> Spot -> Model
 handleHover model hoverSpot =
     let
-        nearby =
-            nearbyStones model.stones hoverSpot
-
+        maybeOver : Maybe Stone
         maybeOver =
-            nearby
+            stoneList model.stones
                 |> List.filter (\s -> distance hoverSpot s.spot < stoneR)
                 |> List.head
     in
-    case maybeOver of
-        Just over ->
-            -- hovering over a stone
-            let
-                overJustPlayed =
-                    Maybe.Extra.filter ((==) over.spot) model.justPlayed
-            in
-            case overJustPlayed of
-                Just _ ->
-                    -- hovering over a stone which was just played: show nothing
-                    model
+    case ( maybeOver, Maybe.map .spot maybeOver == model.justPlayed ) of
+        ( Just _, True ) ->
+            -- hovering over the stone which was just played: show nothing
+            model
 
-                Nothing ->
-                    -- hovering over a stone: show liberties
-                    let
-                        ( group, liberties ) =
-                            groupAndItsLiberties model.stones over
-                    in
-                    { model
-                        | highlightedGroup = group
-                        , highlightedLiberties = liberties
-                        , ghostStone = Nothing
-                        , justPlayed = overJustPlayed
-                    }
-
-        Nothing ->
-            -- hovering over an empty spot: show ghost move if possible
+        ( Just over, False ) ->
+            -- hovering over a stone: show liberties
             let
-                maybePlay : Spot -> Maybe Stone
-                maybePlay spot =
-                    playIfLegal (createStone model.onMove spot) model.stones
-                        |> Maybe.andThen (Dict.get ( spot.x, spot.y ))
+                ( group, liberties ) =
+                    groupAndItsLiberties model.stones over
             in
             { model
+                | highlightedGroup = group
+                , highlightedLiberties = liberties
+                , ghostStone = Nothing
+                , justPlayed = Nothing
+            }
+
+        ( Nothing, _ ) ->
+            -- hovering over an empty spot: show ghost move if possible
+            { model
                 | ghostStone =
-                    findNearestPlayable hoverSpot (List.map .spot nearby)
-                        |> Maybe.andThen maybePlay
+                    play model.onMove model.stones hoverSpot
+                        |> Maybe.map Tuple.second
                 , highlightedGroup = []
                 , highlightedLiberties = []
                 , justPlayed = Nothing
@@ -145,22 +129,8 @@ handleHover model hoverSpot =
 
 handlePlay : Model -> Spot -> ( Model, Cmd Msg )
 handlePlay model playSpot =
-    let
-        nearby : List Stone
-        nearby =
-            nearbyStones model.stones playSpot
-
-        maybeStone : Maybe Stone
-        maybeStone =
-            findNearestPlayable playSpot (List.map .spot nearby)
-                |> Maybe.map (createStone model.onMove)
-
-        maybeStones : Maybe Stones
-        maybeStones =
-            Maybe.andThen (\s -> playIfLegal s model.stones) maybeStone
-    in
-    case ( maybeStones, maybeStone ) of
-        ( Just stones, Just played ) ->
+    case play model.onMove model.stones playSpot of
+        Just ( stones, played ) ->
             -- play!
             let
                 newModel =
@@ -449,14 +419,10 @@ viewGhostStone stone =
 viewGhostLink : ( Spot, Spot ) -> Svg Msg
 viewGhostLink ( ghost, existing ) =
     let
-        shiftBy : Float
-        shiftBy =
-            stoneR / distance ghost existing
-
         ghostBorder : Spot
         ghostBorder =
             Liberties.findShift ghost existing
-                |> Liberties.scaleShift shiftBy
+                |> Liberties.scaleShift (stoneR / distance ghost existing)
                 |> Liberties.shift ghost
     in
     Svg.g [ SA.opacity "0.4" ] [ viewLink ( ghostBorder, existing ) ]
@@ -505,6 +471,33 @@ classJustPlayed justPlayed stone =
 -- Main view
 
 
+viewSvg : Model -> List (Svg Msg)
+viewSvg model =
+    [ Svg.defs []
+        [ Svg.filter [ SA.id "blur-filter" ]
+            [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
+        ]
+    , lazy3 Svg.node "g" [ SA.id "lines" ] <| viewLines
+    , lazy3 Svg.node "g" [ SA.id "viewStars" ] <| viewStars
+    , lazy3 Svg.Keyed.node "g" [ SA.id "hideLines", SA.filter "url(#blur-filter)" ] <|
+        List.map hideLinesKeyed (stoneList model.stones)
+    , lazy3 Svg.node "g" [ SA.id "ghostLinks" ] <|
+        List.map viewGhostLink (Maybe.map getStoneLinks model.ghostStone |> Maybe.withDefault [])
+    , lazy3 Svg.node "g" [ SA.id "ghostStone" ] <|
+        List.filterMap identity [ Maybe.map viewGhostStone model.ghostStone ]
+    , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
+        List.map viewKeyedLink (getUniqueLinks model.stones)
+    , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
+        (stoneList model.stones |> List.map (\s -> viewKeyedStone (classJustPlayed model.justPlayed s) s))
+    , lazy3 Svg.node "g" [ SA.id "removedStones" ] <|
+        (model.justRemoved |> List.map (viewStone "removed"))
+    , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
+        (model.highlightedGroup |> List.map viewHighlight)
+    , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
+        (model.highlightedLiberties |> List.map viewLiberty)
+    ]
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -516,29 +509,7 @@ view model =
         [ H.div [ HA.id "board" ]
             [ Svg.svg
                 [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
-                [ Svg.defs []
-                    [ Svg.filter [ SA.id "blur-filter" ]
-                        [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
-                    ]
-                , lazy3 Svg.node "g" [ SA.id "lines" ] <| viewLines
-                , lazy3 Svg.node "g" [ SA.id "viewStars" ] <| viewStars
-                , lazy3 Svg.Keyed.node "g" [ SA.id "hideLines", SA.filter "url(#blur-filter)" ] <|
-                    List.map hideLinesKeyed (stoneList model.stones)
-                , lazy3 Svg.node "g" [ SA.id "ghostLinks" ] <|
-                    List.map viewGhostLink (Maybe.map getStoneLinks model.ghostStone |> Maybe.withDefault [])
-                , lazy3 Svg.node "g" [ SA.id "ghostStone" ] <|
-                    List.filterMap identity [ Maybe.map viewGhostStone model.ghostStone ]
-                , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
-                    List.map viewKeyedLink (getUniqueLinks model.stones)
-                , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
-                    (stoneList model.stones |> List.map (\s -> viewKeyedStone (classJustPlayed model.justPlayed s) s))
-                , lazy3 Svg.node "g" [ SA.id "removedStones" ] <|
-                    (model.justRemoved |> List.map (viewStone "removed"))
-                , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
-                    (model.highlightedGroup |> List.map viewHighlight)
-                , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
-                    (model.highlightedLiberties |> List.map viewLiberty)
-                ]
+                (viewSvg model)
             ]
         ]
     }
