@@ -160,8 +160,14 @@ play onMove stones spot =
         maybeStones : Maybe Stones
         maybeStones =
             Maybe.andThen (playIfLegal stones) maybeStone
+
+        freshenStone : ( Stones, Stone ) -> Maybe ( Stones, Stone )
+        freshenStone ( freshStones, stone ) =
+            Dict.get ( stone.spot.x, stone.spot.y ) freshStones
+                |> Maybe.map (Tuple.pair freshStones)
     in
     Maybe.map2 Tuple.pair maybeStones maybeStone
+        |> Maybe.andThen freshenStone
 
 
 
