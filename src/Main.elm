@@ -75,7 +75,6 @@ type Msg
     | MouseMoved Spot
     | PlayIfLegal Spot (Result BD.Error BD.Element)
     | Hover Spot (Result BD.Error BD.Element)
-    | PlayStones (List Stone)
     | RemoveStones
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
@@ -128,7 +127,7 @@ handlePlay model playSpot =
             let
                 newModel =
                     { model
-                        | record = model.record ++ [ played ]
+                        | record = played :: model.record
                         , stones = stones
                         , onMove = otherPlayer model.onMove
                         , justPlayed = Just played.spot
@@ -166,14 +165,6 @@ update msg model =
         Hover hoverCoords (Ok element) ->
             ( handleHover model (toBoardCoords hoverCoords element)
             , Cmd.none
-            )
-
-        PlayStones stonesList ->
-            ( { model
-                | record = stonesList
-                , stones = playStones stonesList model.stones
-              }
-            , pushUrl model.navKey stonesList
             )
 
         RemoveStones ->
@@ -225,26 +216,31 @@ changeRouteTo url model =
                 |> Maybe.andThen List.head
                 |> Maybe.andThen identity
 
-        newModel : Model
-        newModel =
-            case Maybe.map Sgf.decode maybeMatch of
-                Just stonesList ->
-                    { model
-                        | record = stonesList
-                        , stones = playStones stonesList Dict.empty
-                    }
-
-                _ ->
-                    model
+        newModel : List Stone -> Model
+        newModel stonesList =
+            { model
+                | record = List.reverse stonesList
+                , stones = playStones stonesList Dict.empty
+                , onMove =
+                    List.reverse stonesList
+                        |> List.head
+                        |> Maybe.map .player
+                        |> Maybe.map otherPlayer
+                        |> Maybe.withDefault Black
+            }
     in
-    ( newModel, Cmd.none )
+    ( Maybe.map Sgf.decode maybeMatch
+        |> Maybe.map newModel
+        |> Maybe.withDefault model
+    , Cmd.none
+    )
 
 
 pushUrl : Nav.Key -> List Stone -> Cmd msg
 pushUrl navKey record =
     -- Bravely go where no legal URL has gone before.
     -- I prefer URLs to look nice rather than be valid.
-    Nav.pushUrl navKey ("/game?record=" ++ Sgf.encode record)
+    Nav.pushUrl navKey <| "/game?record=" ++ (Sgf.encode <| List.reverse record)
 
 
 
