@@ -298,7 +298,7 @@ viewStone extraClass { player, spot } =
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
         , SA.stroke "#222"
-        , SA.strokeWidth "5"
+        , SA.strokeWidth "4"
         , SA.class class
         , SA.class extraClass
         ]
@@ -312,7 +312,7 @@ viewHighlight spot =
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
         , SA.stroke "#900"
-        , SA.strokeWidth "5"
+        , SA.strokeWidth "4"
         , SA.fill "transparent"
         ]
         []
@@ -325,7 +325,7 @@ viewLiberty spot =
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
         , SA.stroke "#BB6"
-        , SA.strokeWidth "5"
+        , SA.strokeWidth "4"
         , SA.fill "transparent"
         ]
         []
@@ -339,7 +339,7 @@ viewLink ( s1, s2 ) =
         , SA.x2 <| String.fromInt s2.x
         , SA.y2 <| String.fromInt s2.y
         , SA.stroke "#222"
-        , SA.strokeWidth "5"
+        , SA.strokeWidth "4"
         ]
         []
 
@@ -414,6 +414,8 @@ viewSvg model =
     , lazy3 Svg.node "g" [ SA.id "viewStars" ] <| Board.viewStars
     , lazy3 Svg.Keyed.node "g" [ SA.id "hideLines", SA.filter "url(#blur-filter)" ] <|
         List.map hideLinesKeyed (stoneList model.stones)
+    , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
+        (model.highlightedLiberties |> List.map viewLiberty)
     , lazy3 Svg.node "g" [ SA.id "ghostLinks" ] <|
         List.map viewGhostLink (Maybe.map getStoneLinks model.ghostStone |> Maybe.withDefault [])
     , lazy3 Svg.node "g" [ SA.id "ghostStone" ] <|
@@ -426,8 +428,6 @@ viewSvg model =
         (model.justRemoved |> List.map (viewStone "removed"))
     , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
         (model.highlightedGroup |> List.map viewHighlight)
-    , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
-        (model.highlightedLiberties |> List.map viewLiberty)
     ]
 
 
