@@ -13,6 +13,11 @@ import Go exposing (..)
 -- settings and hardcoded things
 
 
+zero : Spot
+zero =
+    Spot 0 0
+
+
 libertiesSettings =
     { steps = 20
     , shifts = shifts12
@@ -185,23 +190,6 @@ libertyForces step original nearbySpots suspect =
         |> shift suspect
 
 
-playableForces : Int -> Spot -> List Spot -> Spot -> Spot
-playableForces step origin nearbySpots suspect =
-    let
-        shiftFromOverlap =
-            List.map (stoneForce suspect) nearbySpots
-
-        shiftToBoard =
-            boardForce suspect
-
-        shiftToOrigin =
-            findShift suspect origin |> scaleShift nearestPlayableSettings.originForce
-    in
-    sumShifts (shiftToBoard :: shiftToOrigin :: shiftFromOverlap)
-        |> scaleShift (nearestPlayableSettings.scaleFactor step)
-        |> shift suspect
-
-
 
 -- filtering and sorting liberties
 
@@ -282,38 +270,40 @@ findLiberties { spot } nearbySpots =
 -- nearest playable
 
 
-nearestPlayable : List Spot -> Spot -> Int -> Spot -> List Spot -> List Spot
-nearestPlayable nearbySpots orig step suspect prevCandidates =
+zeroNpCandidates : List Spot
+zeroNpCandidates =
+    -- precompute candidates around zero
     let
-        overlapsNearby =
-            overlaps suspect nearbySpots
+        range =
+            List.range -stoneR stoneR
+    in
+    List.concatMap (\x -> List.map (Spot x) range) range
+        |> List.filter (\s -> distance s zero < stoneR)
+        |> List.sortBy (distance zero)
 
-        closeEnough =
-            distance orig suspect < nearestPlayableSettings.maxDistance
 
-        candidates =
-            if isWithinBoard suspect && not overlapsNearby && closeEnough then
-                suspect :: prevCandidates
+nearestPlayable : List Spot -> List Spot -> Maybe Spot
+nearestPlayable nearbySpots suspects =
+    case suspects of
+        [] ->
+            Nothing
+
+        suspect :: tail ->
+            if isWithinBoard suspect && not (overlaps suspect nearbySpots) then
+                Just suspect
 
             else
-                prevCandidates
-    in
-    if step > 0 then
-        nearestPlayable
-            nearbySpots
-            orig
-            (step - 1)
-            (playableForces step orig nearbySpots suspect)
-            candidates
-
-    else
-        candidates
+                nearestPlayable nearbySpots tail
 
 
 findNearestPlayable : Spot -> List Spot -> Maybe Spot
 findNearestPlayable spot nearbySpots =
-    nearestPlayable nearbySpots spot nearestPlayableSettings.steps spot []
-        |> List.head
+    nearestPlayable nearbySpots <|
+        List.map (\zc -> Spot (zc.x + spot.x) (zc.y + spot.y)) zeroNpCandidates
+
+
+
+-- Helper
 
 
 spotBorderNearestTo : Spot -> Spot -> Spot

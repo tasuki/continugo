@@ -139,7 +139,7 @@ findNearestPlayableTest =
                     (findNearestPlayable (Spot 230 200) [ Spot 200 200 ])
         , test "Between two stones" <|
             \_ ->
-                Expect.equal (Just <| Spot 240 266)
+                Expect.equal (Just <| Spot 240 265)
                     (findNearestPlayable
                         (Spot 237 240)
                         [ Spot 200 200
