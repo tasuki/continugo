@@ -26,12 +26,12 @@ diameter =
 
 adjacentDistance =
     -- stones which are considered connected
-    1.4142
+    1.4142 * diameter
 
 
 nearbyDistance =
     -- stones that could affect this stone's liberty status
-    2 + adjacentDistance
+    2 * diameter + adjacentDistance
 
 
 
@@ -48,9 +48,19 @@ distance s1 s2 =
     sqrt <| toFloat ((s1.x - s2.x) ^ 2 + (s1.y - s2.y) ^ 2)
 
 
-overlaps : Spot -> List Spot -> Bool
-overlaps spots =
-    List.any (\s -> distance spots s < diameter)
+overlaps : Spot -> Spot -> Bool
+overlaps s1 s2 =
+    distance s1 s2 < diameter
+
+
+overlapsAny : Spot -> List Spot -> Bool
+overlapsAny spot =
+    List.any (overlaps spot)
+
+
+adjacent : Spot -> Spot -> Bool
+adjacent s1 s2 =
+    distance s1 s2 < adjacentDistance
 
 
 boardMin : Int
@@ -143,7 +153,7 @@ removeAdjacent toRemove orig =
 nearbyStones : Stones -> Spot -> List Stone
 nearbyStones stones spot =
     stoneList stones
-        |> List.filter (\s -> distance spot s.spot < diameter * nearbyDistance)
+        |> List.filter (\s -> distance spot s.spot < nearbyDistance)
 
 
 enhanceInfo : Stones -> Stone -> Stone
@@ -156,7 +166,7 @@ enhanceInfo stones stone =
         adjacentStones =
             nearby
                 |> List.filter (\s -> s.player == stone.player)
-                |> List.filter (\s -> stoneDistance stone s < diameter * adjacentDistance)
+                |> List.filter (\s -> stoneDistance stone s < adjacentDistance)
     in
     { stone
         | nearby = List.map .spot nearby
@@ -229,3 +239,22 @@ getUniqueLinks stones =
                 s1.y == s2.y && s1.x < s2.x
     in
     List.filter isChosen allLinks
+
+
+spotBorderNearestTo : Spot -> Spot -> Spot
+spotBorderNearestTo otherSpot spot =
+    let
+        factor =
+            stoneR / distance spot otherSpot
+
+        roundAwayFromZero x =
+            if x < 0 then
+                floor x
+
+            else
+                ceiling x
+
+        coord s os =
+            s + (roundAwayFromZero <| factor * (toFloat <| os - s))
+    in
+    Spot (coord spot.x otherSpot.x) (coord spot.y otherSpot.y)

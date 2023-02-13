@@ -10,7 +10,6 @@ import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
-import Liberties
 import Play
 import Process
 import Regex
@@ -352,7 +351,7 @@ viewGhostStone stone =
 viewGhostLink : ( Spot, Spot ) -> Svg Msg
 viewGhostLink ( ghost, existing ) =
     Svg.g [ SA.opacity "0.4" ]
-        [ viewLink ( Liberties.spotBorderNearestTo existing ghost, existing ) ]
+        [ viewLink ( Go.spotBorderNearestTo existing ghost, existing ) ]
 
 
 

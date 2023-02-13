@@ -126,7 +126,7 @@ playIfLegal stones bareStone =
         stone =
             enhanceInfo stones bareStone
     in
-    if isWithinBoard stone.spot && (not <| overlaps stone.spot stone.nearby) then
+    if isWithinBoard stone.spot && (not <| overlapsAny stone.spot stone.nearby) then
         Dict.insert (stoneKey stone) stone stones
             |> addStones (addNearby stone) stone.nearby
             |> addStones (addAdjacent stone) stone.adjacent
