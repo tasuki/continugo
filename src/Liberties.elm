@@ -6,6 +6,7 @@ module Liberties exposing
 
 import Dict exposing (Dict)
 import Go exposing (..)
+import Set exposing (Set)
 
 
 
@@ -25,24 +26,43 @@ normalize spot zeroSuspect =
 -- filtering and sorting liberties
 
 
-type alias Heatmap =
-    Dict ( Int, Int ) Int
+peel : List Spot -> List Spot -> Set ( Int, Int ) -> List Spot
+peel acc liberties set =
+    let
+        allNeighbors : Spot -> Bool
+        allNeighbors l =
+            List.all (\i -> Set.member i set)
+                [ ( l.x, l.y - 1 )
+                , ( l.x, l.y + 1 )
+                , ( l.x - 1, l.y )
+                , ( l.x + 1, l.y )
+                ]
 
+        ( inside, outside ) =
+            List.partition allNeighbors liberties
 
-heatmap : List Spot -> Heatmap
-heatmap liberties =
-    -- TODO!
-    Dict.empty
+        newSet =
+            Set.diff set (Set.fromList <| List.map (\l -> ( l.x, l.y )) outside)
+
+        newAcc =
+            outside ++ acc
+    in
+    if List.length inside == 0 then
+        newAcc
+
+    else
+        peel newAcc inside newSet
 
 
 sortByMostOverlap : List Spot -> List Spot
 sortByMostOverlap liberties =
     -- we want to find the spots that take away as much liberty as possible
     let
-        heat =
-            heatmap liberties
+        libertiesSet : Set ( Int, Int )
+        libertiesSet =
+            Set.fromList <| List.map (\l -> ( l.x, l.y )) liberties
     in
-    List.sortBy (\l -> Dict.get ( l.x, l.y ) heat |> Maybe.withDefault 0) liberties |> List.reverse
+    peel [] liberties libertiesSet
 
 
 takeNonOverlapping : List Spot -> List Spot -> List Spot
