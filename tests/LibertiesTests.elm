@@ -13,23 +13,6 @@ closest toSpot spots =
         |> Maybe.withDefault 10000
 
 
-helpersTest =
-    describe "Helpers"
-        [ describe "findShift"
-            [ test "find the shift of coords" <|
-                \_ ->
-                    Expect.equal (Shift 2 -4) <|
-                        findShift (Spot 1 2) (Spot 3 -2)
-            ]
-        , describe "boardForce"
-            [ test "works for small numbers" <|
-                \_ -> Expect.equal (Shift stoneR 0) (boardForce <| Spot 0 100)
-            , test "works for large numbers" <|
-                \_ -> Expect.equal (Shift -stoneR 0) (boardForce <| Spot 1000 100)
-            ]
-        ]
-
-
 findLibertyTest =
     describe "findLiberty"
         [ test "One liberty on the right side" <|

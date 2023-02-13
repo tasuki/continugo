@@ -1,4 +1,10 @@
-module Liberties exposing (..)
+module Liberties exposing
+    ( findLiberties
+    , findLiberty
+    , findNearestPlayable
+    , spotBorderNearestTo
+    , uniqueLiberties
+    )
 
 import Go exposing (..)
 
@@ -308,3 +314,10 @@ findNearestPlayable : Spot -> List Spot -> Maybe Spot
 findNearestPlayable spot nearbySpots =
     nearestPlayable nearbySpots spot nearestPlayableSettings.steps spot []
         |> List.head
+
+
+spotBorderNearestTo : Spot -> Spot -> Spot
+spotBorderNearestTo otherSpot spot =
+    findShift spot otherSpot
+        |> scaleShift (stoneR / distance spot otherSpot)
+        |> shift spot

@@ -2,7 +2,7 @@ module Play exposing (groupAndItsLiberties, play, playIfLegal, playStones)
 
 import Dict
 import Go exposing (..)
-import Liberties exposing (findLiberties, uniqueLiberties)
+import Liberties
 import List.Extra
 import Set exposing (Set)
 
@@ -50,7 +50,7 @@ findLibertyless stones ( open, closed ) =
             Set.toList closed |> List.map (\( x, y ) -> Spot x y)
 
         toExplore :: exploreLater ->
-            if findLiberties toExplore toExplore.nearby /= [] then
+            if Liberties.findLiberties toExplore toExplore.nearby /= [] then
                 -- has at least one liberty, stop and return nothing
                 []
 
@@ -66,14 +66,14 @@ findGroupAndItsLiberties stones liberties ( open, closed ) =
         [] ->
             -- that's it, we found the whole group
             ( Set.toList closed |> List.map (\( x, y ) -> Spot x y)
-            , uniqueLiberties liberties
+            , Liberties.uniqueLiberties liberties
             )
 
         toExplore :: exploreLater ->
             -- wait there's more
             let
                 newLiberties =
-                    findLiberties toExplore toExplore.nearby
+                    Liberties.findLiberties toExplore toExplore.nearby
             in
             findGroupAndItsLiberties stones (newLiberties ++ liberties) <|
                 newOpenClosed stones toExplore exploreLater closed

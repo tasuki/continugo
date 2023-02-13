@@ -11,7 +11,7 @@ import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
 import Liberties
-import Play exposing (groupAndItsLiberties, play, playStones)
+import Play
 import Process
 import Regex
 import Sgf
@@ -98,7 +98,7 @@ handleHover model hoverSpot =
             -- hovering over a stone: show liberties
             let
                 ( group, liberties ) =
-                    groupAndItsLiberties model.stones over
+                    Play.groupAndItsLiberties model.stones over
             in
             { model
                 | highlightedGroup = group
@@ -111,7 +111,7 @@ handleHover model hoverSpot =
             -- hovering over an empty spot: show ghost move if possible
             { model
                 | ghostStone =
-                    play model.onMove model.stones hoverSpot
+                    Play.play model.onMove model.stones hoverSpot
                         |> Maybe.map Tuple.second
                 , highlightedGroup = []
                 , highlightedLiberties = []
@@ -121,7 +121,7 @@ handleHover model hoverSpot =
 
 handlePlay : Model -> Spot -> ( Model, Cmd Msg )
 handlePlay model playSpot =
-    case play model.onMove model.stones playSpot of
+    case Play.play model.onMove model.stones playSpot of
         Just ( stones, played ) ->
             -- play!
             let
@@ -220,7 +220,7 @@ changeRouteTo url model =
         newModel stonesList =
             { model
                 | record = List.reverse stonesList
-                , stones = playStones stonesList Dict.empty
+                , stones = Play.playStones stonesList Dict.empty
                 , onMove =
                     List.reverse stonesList
                         |> List.head
@@ -351,14 +351,8 @@ viewGhostStone stone =
 
 viewGhostLink : ( Spot, Spot ) -> Svg Msg
 viewGhostLink ( ghost, existing ) =
-    let
-        ghostBorder : Spot
-        ghostBorder =
-            Liberties.findShift ghost existing
-                |> Liberties.scaleShift (stoneR / distance ghost existing)
-                |> Liberties.shift ghost
-    in
-    Svg.g [ SA.opacity "0.4" ] [ viewLink ( ghostBorder, existing ) ]
+    Svg.g [ SA.opacity "0.4" ]
+        [ viewLink ( Liberties.spotBorderNearestTo existing ghost, existing ) ]
 
 
 
