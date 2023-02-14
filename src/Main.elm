@@ -100,7 +100,7 @@ handleHover model hoverSpot =
                     Play.groupAndItsLiberties model.stones over
             in
             { model
-                | highlightedGroup = group
+                | highlightedGroup = List.map .spot group
                 , highlightedLiberties = liberties
                 , ghostStone = Nothing
                 , justPlayed = Nothing

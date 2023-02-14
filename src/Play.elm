@@ -3,8 +3,6 @@ module Play exposing (groupAndItsLiberties, play, playIfLegal, playStones)
 import Dict
 import Go exposing (..)
 import Liberties
-import List.Extra
-import Set exposing (Set)
 
 
 type alias Open =
@@ -12,7 +10,7 @@ type alias Open =
 
 
 type alias Closed =
-    Set ( Int, Int )
+    List Stone
 
 
 spotsToStones : Stones -> List Spot -> List Stone
@@ -23,21 +21,22 @@ spotsToStones stones =
 newOpenClosed : Stones -> Stone -> Open -> Closed -> ( Open, Closed )
 newOpenClosed stones toExplore open closed =
     let
-        notClosed neighbor =
-            Set.member (stoneKey neighbor) closed
+        isClosed : Stone -> Bool
+        isClosed neighbor =
+            List.all ((/=) neighbor) closed
 
         toOpen : List Stone
         toOpen =
             toExplore.adjacent
                 |> spotsToStones stones
-                |> List.Extra.filterNot notClosed
+                |> List.filter isClosed
 
         newOpen : List Stone
         newOpen =
             toOpen ++ open
 
         newClosed =
-            List.foldl (stoneKey >> Set.insert) closed toOpen
+            toOpen ++ closed
     in
     ( newOpen, newClosed )
 
@@ -46,12 +45,12 @@ newOpenClosed stones toExplore open closed =
 -- Group and its liberties
 
 
-findGroupAndItsLiberties : Stones -> List Spot -> ( Open, Closed ) -> ( List Spot, List Spot )
+findGroupAndItsLiberties : Stones -> List Spot -> ( Open, Closed ) -> ( List Stone, List Spot )
 findGroupAndItsLiberties stones liberties ( open, closed ) =
     case open of
         [] ->
             -- that's it, we found the whole group
-            ( Set.toList closed |> List.map (\( x, y ) -> Spot x y)
+            ( closed
             , Liberties.uniqueLiberties liberties
             )
 
@@ -65,21 +64,21 @@ findGroupAndItsLiberties stones liberties ( open, closed ) =
                 newOpenClosed stones toExplore exploreLater closed
 
 
-groupAndItsLiberties : Stones -> Stone -> ( List Spot, List Spot )
+groupAndItsLiberties : Stones -> Stone -> ( List Stone, List Spot )
 groupAndItsLiberties stones stone =
-    findGroupAndItsLiberties stones [] ( [ stone ], Set.singleton <| stoneKey stone )
+    findGroupAndItsLiberties stones [] ( [ stone ], [ stone ] )
 
 
 
 -- Play
 
 
-findLibertyless : Stones -> ( Open, Closed ) -> List Spot
+findLibertyless : Stones -> ( Open, Closed ) -> List Stone
 findLibertyless stones ( open, closed ) =
     case open of
         [] ->
             -- libertyless, return group
-            Set.toList closed |> List.map (\( x, y ) -> Spot x y)
+            closed
 
         toExplore :: exploreLater ->
             if Liberties.hasLiberties toExplore toExplore.nearby then
@@ -92,9 +91,9 @@ findLibertyless stones ( open, closed ) =
                     newOpenClosed stones toExplore exploreLater closed
 
 
-findGroupWithoutLiberties : Stones -> Stone -> List Spot
+findGroupWithoutLiberties : Stones -> Stone -> List Stone
 findGroupWithoutLiberties stones stone =
-    findLibertyless stones ( [ stone ], Set.singleton <| stoneKey stone )
+    findLibertyless stones ( [ stone ], [ stone ] )
 
 
 takeAll : List Spot -> Stones -> Stones
@@ -104,7 +103,6 @@ takeAll spots stones =
         toRemove =
             spotsToStones stones spots
                 |> List.concatMap (findGroupWithoutLiberties stones)
-                |> spotsToStones stones
     in
     List.foldl (\s acc -> removeStone s acc) stones toRemove
 
