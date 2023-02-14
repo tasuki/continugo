@@ -42,22 +42,8 @@ newOpenClosed stones toExplore open closed =
     ( newOpen, newClosed )
 
 
-findLibertyless : Stones -> ( Open, Closed ) -> List Spot
-findLibertyless stones ( open, closed ) =
-    case open of
-        [] ->
-            -- libertyless, return group
-            Set.toList closed |> List.map (\( x, y ) -> Spot x y)
 
-        toExplore :: exploreLater ->
-            if Liberties.findLiberties toExplore toExplore.nearby /= [] then
-                -- has at least one liberty, stop and return nothing
-                []
-
-            else
-                -- has no liberties but has neighbors
-                findLibertyless stones <|
-                    newOpenClosed stones toExplore exploreLater closed
+-- Group and its liberties
 
 
 findGroupAndItsLiberties : Stones -> List Spot -> ( Open, Closed ) -> ( List Spot, List Spot )
@@ -79,14 +65,36 @@ findGroupAndItsLiberties stones liberties ( open, closed ) =
                 newOpenClosed stones toExplore exploreLater closed
 
 
-findGroupWithoutLiberties : Stones -> Stone -> List Spot
-findGroupWithoutLiberties stones stone =
-    findLibertyless stones ( [ stone ], Set.singleton <| stoneKey stone )
-
-
 groupAndItsLiberties : Stones -> Stone -> ( List Spot, List Spot )
 groupAndItsLiberties stones stone =
     findGroupAndItsLiberties stones [] ( [ stone ], Set.singleton <| stoneKey stone )
+
+
+
+-- Play
+
+
+findLibertyless : Stones -> ( Open, Closed ) -> List Spot
+findLibertyless stones ( open, closed ) =
+    case open of
+        [] ->
+            -- libertyless, return group
+            Set.toList closed |> List.map (\( x, y ) -> Spot x y)
+
+        toExplore :: exploreLater ->
+            if Liberties.hasLiberties toExplore toExplore.nearby then
+                -- has at least one liberty, stop and return nothing
+                []
+
+            else
+                -- has no liberties but has neighbors
+                findLibertyless stones <|
+                    newOpenClosed stones toExplore exploreLater closed
+
+
+findGroupWithoutLiberties : Stones -> Stone -> List Spot
+findGroupWithoutLiberties stones stone =
+    findLibertyless stones ( [ stone ], Set.singleton <| stoneKey stone )
 
 
 takeAll : List Spot -> Stones -> Stones
@@ -126,7 +134,7 @@ playIfLegal stones bareStone =
         stone =
             enhanceInfo stones bareStone
     in
-    if isWithinBoard stone.spot && (not <| overlaps stone.spot stone.nearby) then
+    if isWithinBoard stone.spot && (not <| overlapsAny stone.spot stone.nearby) then
         Dict.insert (stoneKey stone) stone stones
             |> addStones (addNearby stone) stone.nearby
             |> addStones (addAdjacent stone) stone.adjacent

@@ -6,29 +6,34 @@
     <style>
     html, body { height: 100%; margin: 0; }
     body { display: flex; align-items: center; justify-content: center; }
-    body { min-height: 100vh; background-color: #FFF; }
     #board { width: 100vmin; height: 100vmin; background-color: #EEA; }
-    #board div { width: 100%; }
-    #hideLines circle { animation: 5s fadeInOpacity; }
-    @keyframes fadeInOpacity {
-        0% { opacity: 0; }
-        100% { opacity: 1; }
-    }
+    #lines { stroke: #993; stroke-width: 1.5; }
+    #stars { fill: #993; }
+
+    #hide-lines circle { fill: #EEA; animation: 5s fadeInOpacity; }
+    @keyframes fadeInOpacity { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+    #liberties { stroke: #CC7; fill: #CC7; stroke-width: 4; }
+    #ghost-links, #ghost-stone { opacity: 0.4; }
+    #stones, #links, #ghost-stone, #ghost-links, #removed-stones { stroke: #222; stroke-width: 4; }
     .black { fill: #222; transform-origin: center left; }
     .white { fill: #FFF; transform-origin: center right; }
-    #stones circle.just-played { animation: 0.2s placeStone; }
+
+    #stones .just-played { animation: 0.2s placeStone; }
     @keyframes placeStone {
         0% { transform: scale(1.5); }
         70% { transform: scale(0.9); }
         100% { transform: scale(1); }
     }
-    #removedStones circle { animation: 0.5s removeStone; transform-origin: center; }
+    #removed-stones circle { animation: 0.5s removeStone; transform-origin: center; }
     @keyframes removeStone {
         0% { transform: scale(1); }
         30% { transform: scale(1.1); }
         100% { transform: scale(0); }
     }
+    #highlights circle { stroke: #900; fill: transparent; stroke-width: 4; }
     </style>
+
     <script src="/continugo.js"></script>
 </head>
 <body>

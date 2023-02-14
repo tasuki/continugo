@@ -10,7 +10,6 @@ import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
-import Liberties
 import Play
 import Process
 import Regex
@@ -208,32 +207,38 @@ recordRegex =
 changeRouteTo : Url.Url -> Model -> ( Model, Cmd Msg )
 changeRouteTo url model =
     let
-        maybeMatch : Maybe String
-        maybeMatch =
+        maybeRecord : Maybe (List Stone)
+        maybeRecord =
             Maybe.map (Regex.find recordRegex) url.query
                 |> Maybe.andThen List.head
                 |> Maybe.map .submatches
                 |> Maybe.andThen List.head
                 |> Maybe.andThen identity
+                |> Maybe.map (Sgf.decode >> List.reverse)
 
-        newModel : List Stone -> Model
-        newModel stonesList =
+        createModel : List Stone -> Model
+        createModel record =
             { model
-                | record = List.reverse stonesList
-                , stones = Play.playStones stonesList Dict.empty
+                | record = record
+                , stones = Play.playStones (List.reverse record) Dict.empty
                 , onMove =
-                    List.reverse stonesList
-                        |> List.head
+                    List.head record
                         |> Maybe.map .player
                         |> Maybe.map otherPlayer
                         |> Maybe.withDefault Black
             }
+
+        maybeNewSpots =
+            Maybe.map (List.map .spot) maybeRecord
+
+        newModel =
+            if maybeNewSpots == Just (List.map .spot model.record) then
+                model
+
+            else
+                Maybe.map createModel maybeRecord |> Maybe.withDefault model
     in
-    ( Maybe.map Sgf.decode maybeMatch
-        |> Maybe.map newModel
-        |> Maybe.withDefault model
-    , Cmd.none
-    )
+    ( newModel, Cmd.none )
 
 
 pushUrl : Nav.Key -> List Stone -> Cmd msg
@@ -277,7 +282,6 @@ hideLines { spot } =
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt <| stoneR * 7
-        , SA.fill "#EEA"
         ]
         []
 
@@ -297,8 +301,6 @@ viewStone extraClass { player, spot } =
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
-        , SA.stroke "#222"
-        , SA.strokeWidth "4"
         , SA.class class
         , SA.class extraClass
         ]
@@ -311,9 +313,6 @@ viewHighlight spot =
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
-        , SA.stroke "#900"
-        , SA.strokeWidth "4"
-        , SA.fill "transparent"
         ]
         []
 
@@ -324,9 +323,6 @@ viewLiberty spot =
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
-        , SA.stroke "#BB6"
-        , SA.strokeWidth "4"
-        , SA.fill "transparent"
         ]
         []
 
@@ -338,21 +334,18 @@ viewLink ( s1, s2 ) =
         , SA.y1 <| String.fromInt s1.y
         , SA.x2 <| String.fromInt s2.x
         , SA.y2 <| String.fromInt s2.y
-        , SA.stroke "#222"
-        , SA.strokeWidth "4"
         ]
         []
 
 
 viewGhostStone : Stone -> Svg Msg
 viewGhostStone stone =
-    Svg.g [ SA.opacity "0.4" ] [ viewStone "" stone ]
+    viewStone "" stone
 
 
 viewGhostLink : ( Spot, Spot ) -> Svg Msg
 viewGhostLink ( ghost, existing ) =
-    Svg.g [ SA.opacity "0.4" ]
-        [ viewLink ( Liberties.spotBorderNearestTo existing ghost, existing ) ]
+    viewLink ( Go.spotBorderNearestTo existing ghost, existing )
 
 
 
@@ -405,20 +398,20 @@ viewSvg model =
             [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
         ]
     , lazy3 Svg.node "g" [ SA.id "lines" ] <| Board.viewLines
-    , lazy3 Svg.node "g" [ SA.id "viewStars" ] <| Board.viewStars
-    , lazy3 Svg.Keyed.node "g" [ SA.id "hideLines", SA.filter "url(#blur-filter)" ] <|
+    , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
+    , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
         List.map hideLinesKeyed (stoneList model.stones)
     , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
         (model.highlightedLiberties |> List.map viewLiberty)
-    , lazy3 Svg.node "g" [ SA.id "ghostLinks" ] <|
+    , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
         List.map viewGhostLink (Maybe.map getStoneLinks model.ghostStone |> Maybe.withDefault [])
-    , lazy3 Svg.node "g" [ SA.id "ghostStone" ] <|
+    , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|
         List.filterMap identity [ Maybe.map viewGhostStone model.ghostStone ]
     , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
         List.map viewKeyedLink (getUniqueLinks model.stones)
     , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
         (stoneList model.stones |> List.map (\s -> viewKeyedStone (classJustPlayed model.justPlayed s) s))
-    , lazy3 Svg.node "g" [ SA.id "removedStones" ] <|
+    , lazy3 Svg.node "g" [ SA.id "removed-stones" ] <|
         (model.justRemoved |> List.map (viewStone "removed"))
     , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
         (model.highlightedGroup |> List.map viewHighlight)

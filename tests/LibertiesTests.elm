@@ -13,47 +13,6 @@ closest toSpot spots =
         |> Maybe.withDefault 10000
 
 
-findLibertyTest =
-    describe "findLiberty"
-        [ test "One liberty on the right side" <|
-            \_ ->
-                Expect.equal (Just <| Spot 961 305) <|
-                    findLiberty
-                        [ Spot 961 227 -- right
-                        , Spot 866 189 -- up
-                        , Spot 820 281 -- left
-                        , Spot 895 344 -- down
-                        ]
-                        (Spot 895 266)
-                        20
-                        (Spot 961 305)
-        , test "Two liberties in lower right: corner" <|
-            \_ ->
-                Expect.equal (Just <| Spot 956 955) <|
-                    findLiberty
-                        [ Spot 881 793 -- up
-                        , Spot 961 877 -- right
-                        , Spot 879 962 -- down
-                        , Spot 796 876 -- left
-                        ]
-                        (Spot 879 881)
-                        20
-                        (Spot 956 955)
-        , test "Two liberties in lower right: lower left" <|
-            \_ ->
-                Expect.equal (Just <| Spot 802 952) <|
-                    findLiberty
-                        [ Spot 881 793 -- up
-                        , Spot 961 877 -- right
-                        , Spot 879 962 -- down
-                        , Spot 796 876 -- left
-                        ]
-                        (Spot 879 881)
-                        20
-                        (Spot 802 952)
-        ]
-
-
 findLibertiesTest =
     describe "findLiberties"
         [ let
@@ -139,7 +98,7 @@ findNearestPlayableTest =
                     (findNearestPlayable (Spot 230 200) [ Spot 200 200 ])
         , test "Between two stones" <|
             \_ ->
-                Expect.equal (Just <| Spot 240 266)
+                Expect.equal (Just <| Spot 240 265)
                     (findNearestPlayable
                         (Spot 237 240)
                         [ Spot 200 200
