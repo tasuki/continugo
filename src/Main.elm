@@ -207,32 +207,38 @@ recordRegex =
 changeRouteTo : Url.Url -> Model -> ( Model, Cmd Msg )
 changeRouteTo url model =
     let
-        maybeMatch : Maybe String
-        maybeMatch =
+        maybeRecord : Maybe (List Stone)
+        maybeRecord =
             Maybe.map (Regex.find recordRegex) url.query
                 |> Maybe.andThen List.head
                 |> Maybe.map .submatches
                 |> Maybe.andThen List.head
                 |> Maybe.andThen identity
+                |> Maybe.map (Sgf.decode >> List.reverse)
 
-        newModel : List Stone -> Model
-        newModel stonesList =
+        createModel : List Stone -> Model
+        createModel record =
             { model
-                | record = List.reverse stonesList
-                , stones = Play.playStones stonesList Dict.empty
+                | record = record
+                , stones = Play.playStones (List.reverse record) Dict.empty
                 , onMove =
-                    List.reverse stonesList
-                        |> List.head
+                    List.head record
                         |> Maybe.map .player
                         |> Maybe.map otherPlayer
                         |> Maybe.withDefault Black
             }
+
+        maybeNewSpots =
+            Maybe.map (List.map .spot) maybeRecord
+
+        newModel =
+            if maybeNewSpots == Just (List.map .spot model.record) then
+                model
+
+            else
+                Maybe.map createModel maybeRecord |> Maybe.withDefault model
     in
-    ( Maybe.map Sgf.decode maybeMatch
-        |> Maybe.map newModel
-        |> Maybe.withDefault model
-    , Cmd.none
-    )
+    ( newModel, Cmd.none )
 
 
 pushUrl : Nav.Key -> List Stone -> Cmd msg
