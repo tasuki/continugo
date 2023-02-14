@@ -1,12 +1,11 @@
 module Liberties exposing
     ( findLiberties
     , findNearestPlayable
+    , hasLiberties
     , uniqueLiberties
     )
 
-import Dict exposing (Dict)
 import Go exposing (..)
-import Set exposing (Set)
 
 
 
@@ -26,45 +25,6 @@ normalize spot zeroSuspect =
 -- filtering and sorting liberties
 
 
-peel : List Spot -> List Spot -> Set ( Int, Int ) -> List Spot
-peel acc liberties set =
-    let
-        allNeighbors : Spot -> Bool
-        allNeighbors l =
-            List.all (\i -> Set.member i set)
-                [ ( l.x, l.y - 1 )
-                , ( l.x, l.y + 1 )
-                , ( l.x - 1, l.y )
-                , ( l.x + 1, l.y )
-                ]
-
-        ( inside, outside ) =
-            List.partition allNeighbors liberties
-
-        newSet =
-            Set.diff set (Set.fromList <| List.map (\l -> ( l.x, l.y )) outside)
-
-        newAcc =
-            outside ++ acc
-    in
-    if List.length inside == 0 then
-        newAcc
-
-    else
-        peel newAcc inside newSet
-
-
-sortByMostOverlap : List Spot -> List Spot
-sortByMostOverlap liberties =
-    -- we want to find the spots that take away as much liberty as possible
-    let
-        libertiesSet : Set ( Int, Int )
-        libertiesSet =
-            Set.fromList <| List.map (\l -> ( l.x, l.y )) liberties
-    in
-    peel [] liberties libertiesSet
-
-
 takeNonOverlapping : List Spot -> List Spot -> List Spot
 takeNonOverlapping acc queue =
     -- take unique liberty spots
@@ -81,8 +41,8 @@ takeNonOverlapping acc queue =
 
 
 uniqueLiberties : List Spot -> List Spot
-uniqueLiberties liberties =
-    sortByMostOverlap liberties |> takeNonOverlapping []
+uniqueLiberties =
+    takeNonOverlapping []
 
 
 
@@ -99,6 +59,7 @@ zeroLibCandidates =
     List.concatMap (\x -> List.map (Spot x) range) range
         |> List.filter (\s -> not <| overlapsAny s [ zero ])
         |> List.filter (adjacent zero)
+        |> List.sortBy (distance zero)
 
 
 isLiberty : List Spot -> Spot -> Bool
@@ -116,6 +77,16 @@ findLiberties { spot } nearbySpots =
     List.map (normalize spot) zeroLibCandidates
         |> List.filter (isLiberty nearbySpots)
         |> uniqueLiberties
+
+
+hasLiberties : Stone -> List Spot -> Bool
+hasLiberties { spot } nearbySpots =
+    let
+        isLib : Spot -> Bool
+        isLib zeroLC =
+            isLiberty nearbySpots (normalize spot zeroLC)
+    in
+    List.any isLib zeroLibCandidates
 
 
 
