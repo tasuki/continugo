@@ -323,9 +323,9 @@ viewLiberty spot =
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
         , SA.r <| String.fromInt stoneR
-        , SA.stroke "#BB6"
+        , SA.stroke "#CC7"
         , SA.strokeWidth "4"
-        , SA.fill "transparent"
+        , SA.fill "#CC7"
         ]
         []
 
