@@ -27,8 +27,6 @@ viewLines =
                 , SA.y1 <| String.fromFloat y1
                 , SA.x2 <| String.fromFloat x2
                 , SA.y2 <| String.fromFloat y2
-                , SA.stroke "#993"
-                , SA.strokeWidth "1.5"
                 ]
                 []
 
@@ -58,7 +56,6 @@ viewStars =
                 [ SA.cx <| String.fromFloat (offset x)
                 , SA.cy <| String.fromFloat (offset y)
                 , SA.r <| String.fromInt 4
-                , SA.fill "#993"
                 ]
                 []
     in
