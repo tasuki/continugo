@@ -105,3 +105,18 @@ Conclusions:
 - steps: 20, shifts 12, stoneForce 1.4  - x * 1.4, scaleFactor step/steps : 16/16 !!! 12 saves it !!!
 
 TL;DR intuitions mostly hold?
+
+# And then there was brute force
+
+It is somehow fast enough? And somehow verifying the distance of all the stone pairs (lots of ^2 and sqrt) is way way way faster than using set subtraction? Some numbers: calculating "nearby stones" times 16 000 distances takes way less time than doing "nearby stones" number of set subtractions. My conclusion is that ^2 and sqrt are basically free, while constructing and diffing sets is hugely expensive.
+
+## Profiling
+
+Just doing some mouse-moving for 14 seconds, 4600 ms scripting total.
+
+self time | total time | activity
+      775 |        805 | Go.overlaps
+      666 |       2204 | List.any
+      338 |        355 | Liberties.normalize
+      215 |       1875 | Play.findGroupWithoutLiberties
+      151 |        238 | Go.isWithinBoard
