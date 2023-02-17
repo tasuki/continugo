@@ -111,7 +111,6 @@ type alias Stone =
     , spot : Spot
     , nearby : List Spot
     , adjacent : List Spot
-    , liberties : List Spot
     }
 
 
@@ -121,7 +120,6 @@ createStone player spot =
     , spot = spot
     , nearby = []
     , adjacent = []
-    , liberties = []
     }
 
 
