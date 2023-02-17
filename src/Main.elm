@@ -10,6 +10,7 @@ import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
 import Json.Decode as D
+import Liberties
 import Play
 import Process
 import Regex
@@ -138,10 +139,13 @@ handlePlay model playSpot =
         Just ( stones, played ) ->
             -- play!
             let
+                stonesWithPotential =
+                    Liberties.addPotential played stones
+
                 newModel =
                     { model
                         | record = played :: model.record
-                        , stones = stones
+                        , stones = Liberties.recalculate (played.spot :: played.nearby) stonesWithPotential
                         , onMove = otherPlayer model.onMove
                         , justPlayed = Just played.spot
                         , justRemoved = removedStones model.stones stones
@@ -230,11 +234,17 @@ changeRouteTo url model =
                 |> Maybe.andThen identity
                 |> Maybe.map (Sgf.decode >> List.reverse)
 
+        addPotentialLiberties : Stones -> Stones
+        addPotentialLiberties stones =
+            List.foldl Liberties.addPotential stones (stoneList stones)
+
         createModel : List Stone -> Model
         createModel record =
             { model
                 | record = record
-                , stones = Play.playStones (List.reverse record) Dict.empty
+                , stones =
+                    Play.playStones (List.reverse record) Dict.empty
+                        |> addPotentialLiberties
                 , onMove =
                     List.head record
                         |> Maybe.map .player

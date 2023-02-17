@@ -1,10 +1,14 @@
 module Liberties exposing
-    ( findLiberties
+    ( addPotential
+    , findLiberties
     , findNearestPlayable
     , hasLiberties
+    , potentialLiberties
+    , recalculate
     , uniqueLiberties
     )
 
+import Dict
 import Go exposing (..)
 
 
@@ -62,31 +66,47 @@ zeroLibCandidates =
         |> List.sortBy (distance zero)
 
 
+potentialLiberties : Spot -> List Spot
+potentialLiberties spot =
+    List.map (normalize spot) zeroLibCandidates
+        |> List.filter isWithinBoard
+
+
+libertiesToCheck : Stone -> List Spot
+libertiesToCheck stone =
+    case stone.potentialLiberties of
+        Just potentialLibs ->
+            potentialLibs
+
+        Nothing ->
+            potentialLiberties stone.spot
+
+
 isLiberty : List Spot -> Spot -> Bool
 isLiberty nearbySpots suspect =
-    let
-        overlapsNearby : Bool
-        overlapsNearby =
-            overlapsAny suspect nearbySpots
-    in
-    isWithinBoard suspect && not overlapsNearby
+    not <| overlapsAny suspect nearbySpots
 
 
 findLiberties : Stone -> List Spot -> List Spot
-findLiberties { spot } nearbySpots =
-    List.map (normalize spot) zeroLibCandidates
+findLiberties stone nearbySpots =
+    libertiesToCheck stone
         |> List.filter (isLiberty nearbySpots)
         |> uniqueLiberties
 
 
 hasLiberties : Stone -> List Spot -> Bool
-hasLiberties { spot } nearbySpots =
+hasLiberties stone nearbySpots =
     let
-        isLib : Spot -> Bool
-        isLib zeroLC =
-            isLiberty nearbySpots (normalize spot zeroLC)
+        isLibertyWithinBoard : Spot -> Bool
+        isLibertyWithinBoard spot =
+            isWithinBoard spot && isLiberty nearbySpots spot
     in
-    List.any isLib zeroLibCandidates
+    case stone.potentialLiberties of
+        Just potentialLibs ->
+            List.any (isLiberty nearbySpots) potentialLibs
+
+        Nothing ->
+            List.any (normalize stone.spot >> isLibertyWithinBoard) zeroLibCandidates
 
 
 
@@ -126,3 +146,27 @@ nearestPlayable origin nearbySpots zeroSuspects =
 findNearestPlayable : Spot -> List Spot -> Maybe Spot
 findNearestPlayable origin nearbySpots =
     nearestPlayable origin nearbySpots zeroNpCandidates
+
+
+
+-- recalc
+
+
+addPotential : Stone -> Stones -> Stones
+addPotential stone =
+    let
+        addPotentialLibs : Stone -> Stone
+        addPotentialLibs s =
+            { s | potentialLiberties = Just <| potentialLiberties s.spot }
+    in
+    Dict.update (stoneKey stone) (Maybe.map addPotentialLibs)
+
+
+recalculate : List Spot -> Stones -> Stones
+recalculate spots stones =
+    let
+        helper : Spot -> Stones -> Stones
+        helper spot acc =
+            acc
+    in
+    List.foldl helper stones spots
