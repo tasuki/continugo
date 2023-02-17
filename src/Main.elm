@@ -82,15 +82,29 @@ type Msg
 handleHover : Model -> Spot -> Model
 handleHover model hoverSpot =
     let
-        maybeOver : Maybe Stone
-        maybeOver =
+        maybeOverStone : Maybe Stone
+        maybeOverStone =
             stoneList model.stones
                 |> List.filter (\s -> distance hoverSpot s.spot < stoneR)
                 |> List.head
+
+        memberOfHighlighted : Stone -> Bool
+        memberOfHighlighted stone =
+            List.member stone.spot model.highlightedGroup
+
+        overAlreadyShown : Bool
+        overAlreadyShown =
+            Maybe.map memberOfHighlighted maybeOverStone |> Maybe.withDefault False
+
+        overJustPlayed : Bool
+        overJustPlayed =
+            Maybe.map .spot maybeOverStone == model.justPlayed
     in
-    case ( maybeOver, Maybe.map .spot maybeOver == model.justPlayed ) of
+    case ( maybeOverStone, overJustPlayed || overAlreadyShown ) of
         ( Just _, True ) ->
-            -- hovering over the stone which was just played: show nothing
+            -- hovering over the stone which was just played OR
+            -- hovering over the stone whose liberties are already shown
+            -- show nothing
             model
 
         ( Just over, False ) ->
