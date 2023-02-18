@@ -1,6 +1,7 @@
 module SamplePositions exposing (..)
 
 import Go exposing (..)
+import Sgf
 
 
 empty =
@@ -40,3 +41,13 @@ suicideOkWhenCapture =
     , createStone Black <| Spot 876 234
     , createStone Black <| Spot 961 240
     ]
+
+
+upperRightTesuji =
+    Sgf.decode <|
+        String.concat
+            [ "B[oAfg];W[fhnT];B[nZpx];W[fYff];B[hFcS];W[fccO];B[ncdj];W[hFoX];"
+            , "B[dJnS];W[dLpq];B[fhmv];W[clnY];B[gFnQ];W[ghpH];B[iGnS];W[jCoZ];"
+            , "B[kHoa];W[pyjc];B[pylO];W[qGgH];B[qTfk];W[qWkw];B[rAlO];W[spfC];"
+            , "B[syee];W[qpdp]"
+            ]
