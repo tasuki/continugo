@@ -15,7 +15,7 @@ The idea might be bad, but it is not even original.
 
 ## Rules
 
-1. You know [how to play go](https://online-go.com/learn-to-play-go/). Exceptions below.
+1. You know [how to play go](https://online-go.com/learn-to-play-go/). Exceptions and clarifications below.
 2. Go is played on an empty square, called a board. It may have lines drawn on it who cares about those.
 3. **Stones may not overlap.**
 4. A point on the board where a stone would fit is called a spot.
