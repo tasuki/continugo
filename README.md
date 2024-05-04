@@ -24,6 +24,19 @@ The idea might be bad, but it is not even original.
 7. When a stone or a group of connected stones has no liberties, it is captured.
 7. Ko: one may not capture just one stone if that stone was played on the previous move and captured just one stone. No positional superko fuck off.
 
+### How to actually play
+
+So far only taking turns on a single-device is implemented. The url holds the game record -- you can bookmark the current position, share it, use the browser back button to undo, etc.
+
+### Gotchas
+
+I think these are (and should be) a part of the game, but some of them are weird.
+
+- Sometimes there's a spot where there's clearly enough space to put a stone but the stone is not appearing: that's because playing there would be a suicide.
+- While suicide by itself is not allowed (it wouldn't be a good move ever I think?), it's perfectly possible to capture *another* group of your stones by removing their last liberty (ie by preventing placement of any and all stones which would be connected to it). I don't want to disallow playing a perfectly valid move just because it captures.
+
+I don't think the rules can be much different, but if you have any ideas I'd love to hear them!
+
 ## Setup
 
 On Debian 12 Bookworm:
@@ -33,7 +46,7 @@ sudo apt install npm uglifyjs
 sudo npm install -g elm@latest-0.19.1 elm-test elm-format serve
 ```
 
-To develop, run `make develop`, see http://localhost:9071/.
+To develop, run `make develop`, see http://localhost:9071/
 
 ## TODO
 
