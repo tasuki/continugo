@@ -7,4 +7,4 @@ develop: serve
 	find . -name '*.elm' | entr elm make src/Main.elm --debug --output=continugo.js
 
 serve:
-	php -S localhost:8000 &
+	serve -p 9071 --single &

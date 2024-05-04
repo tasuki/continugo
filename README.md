@@ -24,6 +24,17 @@ The idea might be bad, but it is not even original.
 7. When a stone or a group of connected stones has no liberties, it is captured.
 7. Ko: one may not capture just one stone if that stone was played on the previous move and captured just one stone. No positional superko fuck off.
 
+## Setup
+
+On Debian 12 Bookworm:
+
+```
+sudo apt install npm uglifyjs
+sudo npm install -g elm@latest-0.19.1 elm-test elm-format serve
+```
+
+To develop, run `make develop`, see http://localhost:9071/.
+
 ## TODO
 
 - [ ] Ask for confirmation before placing a move, esp on mobile
