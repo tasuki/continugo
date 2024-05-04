@@ -259,7 +259,7 @@ pushUrl : Nav.Key -> List Stone -> Cmd msg
 pushUrl navKey record =
     -- Bravely go where no legal URL has gone before.
     -- I prefer URLs to look nice rather than be valid.
-    Nav.pushUrl navKey <| "/game?record=" ++ (Sgf.encode <| List.reverse record)
+    Nav.pushUrl navKey <| "?record=" ++ (Sgf.encode <| List.reverse record)
 
 
 
