@@ -22,7 +22,9 @@ The idea might be bad, but it is not even original.
 5. Spots whose centres are closer than **the stone diameter times the square root of two** are *considered adjacent* and, when occupied by friendly stones, are shown connected by a line.
 6. A **liberty is an adjacent spot where a stone would fit**.
 7. When a stone or a group of connected stones has no liberties, it is captured.
-7. Ko: one may not capture just one stone if that stone was played on the previous move and captured just one stone. No positional superko fuck off.
+8. Ko: one may not capture just one stone if that stone was played on the previous move and captured just one stone. No positional superko fuck off.
+9. Scoring: after two consecutive passes, whoever has more stones on the board wins (yes we have group tax!).
+
 
 ### How to actually play
 
@@ -50,7 +52,9 @@ To develop, run `make develop`, see http://localhost:9071/
 
 ## TODO
 
+- [ ] Add pass button
+- [ ] Add some kind of help
+- [ ] Implement scoring
 - [ ] Ask for confirmation before placing a move, esp on mobile
 - [ ] Drag from stone to place a stone as far as possible and still connected
-- [ ] Scoring
 - [ ] Enforce ko

@@ -14,7 +14,7 @@ coordRange =
 
 
 stoneR =
-    -- stone radius
+    -- stone radius: coordRange / boardSize / 2
     -- 9x9: 55.6, 13x13: 38.5, 19x19: 26.3
     38
 

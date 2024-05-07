@@ -50,19 +50,22 @@ type alias Model =
     }
 
 
+emptyModel navKey =
+    { record = []
+    , stones = Dict.empty
+    , ghostStone = Nothing
+    , highlightedGroup = []
+    , highlightedLiberties = []
+    , justPlayed = Nothing
+    , justRemoved = []
+    , onMove = Black
+    , navKey = navKey
+    }
+
+
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url navKey =
-    changeRouteTo url
-        { record = []
-        , stones = Dict.empty
-        , ghostStone = Nothing
-        , highlightedGroup = []
-        , highlightedLiberties = []
-        , justPlayed = Nothing
-        , justRemoved = []
-        , onMove = Black
-        , navKey = navKey
-        }
+    changeRouteTo url (emptyModel navKey)
 
 
 
@@ -242,15 +245,8 @@ changeRouteTo url model =
                         |> Maybe.withDefault Black
             }
 
-        maybeNewSpots =
-            Maybe.map (List.map .spot) maybeRecord
-
         newModel =
-            if maybeNewSpots == Just (List.map .spot model.record) then
-                model
-
-            else
-                Maybe.map createModel maybeRecord |> Maybe.withDefault model
+            Maybe.map createModel maybeRecord |> Maybe.withDefault model
     in
     ( newModel, Cmd.none )
 
@@ -432,6 +428,11 @@ viewSvg model =
     ]
 
 
+menuLink action text =
+    H.div [ HA.class "item" ]
+        [ H.a [ HA.href "/" ] [ H.div [ HA.class "icon" ] [ H.text text ] ] ]
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -440,7 +441,13 @@ view model =
     in
     { title = "#" ++ (String.fromInt <| List.length model.record) ++ " – ContinuGo"
     , body =
-        [ H.div [ HA.id "board" ]
+        [ H.div [ HA.id "menu" ]
+            [ menuLink "action" "?"
+            , menuLink "action" "⚪︎︎︎"
+            , menuLink "action" "‹"
+            , menuLink "action" "︎︎›︎"
+            ]
+        , H.div [ HA.id "board" ]
             [ Svg.svg
                 [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
                 (viewSvg model)
