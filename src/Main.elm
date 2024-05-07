@@ -430,7 +430,7 @@ viewSvg model =
 
 menuLink action text =
     H.div [ HA.class "item" ]
-        [ H.a [ HA.href "/" ] [ H.div [ HA.class "icon" ] [ H.text text ] ] ]
+        [ H.a [ HA.href "/" ] [ H.div [ HA.class "icon" ] [ text ] ] ]
 
 
 view : Model -> Browser.Document Msg
@@ -442,10 +442,10 @@ view model =
     { title = "#" ++ (String.fromInt <| List.length model.record) ++ " – ContinuGo"
     , body =
         [ H.div [ HA.id "menu" ]
-            [ menuLink "action" "?"
-            , menuLink "action" "⚪︎︎︎"
-            , menuLink "action" "‹"
-            , menuLink "action" "︎︎›︎"
+            [ menuLink "action" (H.text "?")
+            , menuLink "action" (H.text "*")
+            , menuLink "action" (H.text "‹")
+            , menuLink "action" (H.text "︎︎›︎")
             ]
         , H.div [ HA.id "board" ]
             [ Svg.svg
