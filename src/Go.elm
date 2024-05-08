@@ -1,6 +1,9 @@
 module Go exposing (..)
 
 import Dict exposing (Dict)
+import Svg exposing (Svg)
+import Svg.Attributes as SA
+import Svg.Lazy exposing (..)
 
 
 
@@ -299,3 +302,118 @@ spotBorderNearestTo otherSpot spot =
             s + (roundAwayFromZero <| factor * (toFloat <| os - s))
     in
     Spot (coord spot.x otherSpot.x) (coord spot.y otherSpot.y)
+
+
+
+-- VIEW
+
+
+hideLines : Stone -> Svg msg
+hideLines { spot } =
+    Svg.circle
+        [ SA.cx <| String.fromInt spot.x
+        , SA.cy <| String.fromInt spot.y
+        , SA.r <| String.fromInt <| stoneR * 7
+        ]
+        []
+
+
+viewStone : String -> Stone -> Svg msg
+viewStone extraClass { player, spot } =
+    let
+        class =
+            case player of
+                Black ->
+                    "black"
+
+                White ->
+                    "white"
+    in
+    Svg.circle
+        [ SA.cx <| String.fromInt spot.x
+        , SA.cy <| String.fromInt spot.y
+        , SA.r <| String.fromInt stoneR
+        , SA.class class
+        , SA.class extraClass
+        ]
+        []
+
+
+viewHighlight : Spot -> Svg msg
+viewHighlight spot =
+    Svg.circle
+        [ SA.cx <| String.fromInt spot.x
+        , SA.cy <| String.fromInt spot.y
+        , SA.r <| String.fromInt stoneR
+        ]
+        []
+
+
+viewLiberty : Spot -> Svg msg
+viewLiberty spot =
+    Svg.circle
+        [ SA.cx <| String.fromInt spot.x
+        , SA.cy <| String.fromInt spot.y
+        , SA.r <| String.fromInt stoneR
+        ]
+        []
+
+
+viewLink : ( Spot, Spot ) -> Svg msg
+viewLink ( s1, s2 ) =
+    Svg.line
+        [ SA.x1 <| String.fromInt s1.x
+        , SA.y1 <| String.fromInt s1.y
+        , SA.x2 <| String.fromInt s2.x
+        , SA.y2 <| String.fromInt s2.y
+        ]
+        []
+
+
+viewGhostStone : Stone -> Svg msg
+viewGhostStone stone =
+    viewStone "" stone
+
+
+viewGhostLink : ( Spot, Spot ) -> Svg msg
+viewGhostLink ( ghost, existing ) =
+    viewLink ( spotBorderNearestTo existing ghost, existing )
+
+
+
+-- Keyed
+
+
+spotKeyStr : Spot -> String
+spotKeyStr s =
+    "-" ++ String.fromInt s.x ++ "-" ++ String.fromInt s.y
+
+
+hideLinesKeyed : Stone -> ( String, Svg msg )
+hideLinesKeyed stone =
+    ( "hide" ++ spotKeyStr stone.spot
+    , lazy hideLines stone
+    )
+
+
+viewKeyedStone : String -> Stone -> ( String, Svg msg )
+viewKeyedStone extraClass stone =
+    ( "stone" ++ spotKeyStr stone.spot
+    , lazy2 viewStone extraClass stone
+    )
+
+
+viewKeyedLink : ( Spot, Spot ) -> ( String, Svg msg )
+viewKeyedLink ( s1, s2 ) =
+    ( "link" ++ spotKeyStr s1 ++ spotKeyStr s2
+    , lazy viewLink ( s1, s2 )
+    )
+
+
+classJustPlayed : Maybe Spot -> Stone -> String
+classJustPlayed justPlayed stone =
+    if justPlayed == Just stone.spot then
+        "just-played"
+
+    else
+        ""
