@@ -7,6 +7,7 @@ import Browser.Events
 import Browser.Navigation as Nav
 import Dict
 import Go exposing (..)
+import Help
 import Html as H
 import Html.Attributes as HA
 import Html.Events as HE
@@ -47,6 +48,7 @@ type alias Model =
     , justPlayed : Maybe Spot
     , justRemoved : List Stone
     , onMove : Player
+    , showHelp : Bool
     , navKey : Nav.Key
     }
 
@@ -61,6 +63,7 @@ emptyModel navKey =
     , justPlayed = Nothing
     , justRemoved = []
     , onMove = Black
+    , showHelp = False
     , navKey = navKey
     }
 
@@ -225,6 +228,11 @@ update msg model =
         New ->
             updateModel (emptyModel model.navKey)
 
+        Help ->
+            ( { model | showHelp = not model.showHelp }
+            , Cmd.none
+            )
+
         UrlChanged url ->
             changeRouteTo url model
 
@@ -356,10 +364,12 @@ viewSvg model =
     ]
 
 
-menuLink : msg -> H.Html msg -> H.Html msg
-menuLink action text =
+menuLink : msg -> String -> String -> H.Html msg
+menuLink action iconText tooltip =
     H.div [ HA.class "item" ]
-        [ H.div [ HA.class "icon", HE.onClick action ] [ text ] ]
+        [ H.div [ HA.class "icon", HE.onClick action ]
+            [ H.text iconText, H.span [ HA.class "tooltip" ] [ H.text <| " " ++ tooltip ] ]
+        ]
 
 
 view : Model -> Browser.Document Msg
@@ -375,20 +385,29 @@ view model =
 
                 n ->
                     "ContinuGo: #" ++ (String.fromInt <| n)
+
+        content =
+            if model.showHelp then
+                H.div [ HA.id "help" ] [ Help.help ]
+
+            else
+                H.div [ HA.id "board-container" ]
+                    [ H.div [ HA.id "board" ]
+                        [ Svg.svg
+                            [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
+                            (viewSvg model)
+                        ]
+                    ]
     in
     { title = title
     , body =
         [ H.div [ HA.id "menu" ]
-            [ menuLink New (H.text "!")
-            , menuLink Help (H.text "?")
-            , menuLink PlayPass (H.text "*")
-            , menuLink Prev (H.text "‹")
-            , menuLink Next (H.text "︎︎›︎")
+            [ menuLink New "!" "new"
+            , menuLink Help "?" "help"
+            , menuLink PlayPass "*" "pass"
+            , menuLink Prev "‹" "undo"
+            , menuLink Next "︎︎›︎" "redo"
             ]
-        , H.div [ HA.id "board" ]
-            [ Svg.svg
-                [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
-                (viewSvg model)
-            ]
+        , content
         ]
     }

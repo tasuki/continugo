@@ -1,16 +1,29 @@
 @font-face {
-    font-family: 'Recursive Mono'; font-style: normal; font-weight: 400; font-display: swap;
-    src: url('rec-mono-csl-st-regular.woff2') format('woff2');
+    font-family: "Recursive Mono"; font-style: normal; font-weight: 400; font-display: swap;
+    src: url('rec-mono-csl-regular.woff2') format('woff2');
+}
+@font-face {
+    font-family: "Recursive Mono"; font-style: italic; font-weight: 400; font-display: swap;
+    src: url('rec-mono-csl-italic.woff2') format('woff2');
+}
+@font-face {
+    font-family: "Recursive Mono"; font-style: normal; font-weight: 700; font-display: swap;
+    src: url('rec-mono-csl-bold.woff2') format('woff2');
 }
 
-html, body { font-family: "Recursive Mono"; height: 100%; margin: 0; overflow: hidden; }
-body { display: flex; align-items: center; justify-content: center; }
+html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 #menu { position: absolute; left: 0px; top: 0px; }
 #menu .item { float: left; padding: 1px 0 0 1px; }
 @media screen and (min-aspect-ratio: 1/1) { #menu .item { float: none; } }
 #menu .icon { display: block; cursor: pointer; background-color: #222; color: #fff;
-    border-radius: 50%; line-height: 30px; width: 30px; height: 30px; text-align: center; }
+    border-radius: 30px; line-height: 30px; width: 30px; height: 30px; text-align: center; }
 
+#menu .icon .tooltip { display: none; }
+#menu .icon:hover .tooltip { display: inline; }
+@media screen and (min-aspect-ratio: 1/1) { #menu .icon:hover { width:auto; padding: 0 10px; } }
+@media screen and (max-aspect-ratio: 1/1) { #menu .icon:hover .tooltip { display: block; position: absolute; top: 25px; color: #222; } }
+
+#board-container { display: flex; align-items: center; justify-content: center; height: 100%; overflow: hidden; }
 #board { width: 100vmin; height: 100vmin; background-color: #CB5; }
 #lines { stroke: #0009; stroke-width: 1.5; }
 #stars { fill: #0009; }
@@ -37,3 +50,8 @@ body { display: flex; align-items: center; justify-content: center; }
     100% { transform: scale(0); }
 }
 #highlights circle { stroke: #900; fill: transparent; stroke-width: 4; }
+
+#help { margin: 40px auto 0 auto; padding: 0 10px 10px 10px; max-width: 600px; }
+@media screen and (min-aspect-ratio: 1/1) {
+    #help { margin-top: 0 auto 0 auto; }
+}
