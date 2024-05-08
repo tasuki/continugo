@@ -51,6 +51,7 @@ type alias Model =
     }
 
 
+emptyModel : Nav.Key -> Model
 emptyModel navKey =
     { record = []
     , stones = Dict.empty
@@ -80,6 +81,10 @@ type Msg
     | PlayPass
     | Hover Spot (Result BD.Error BD.Element)
     | RemoveStones
+    | Prev
+    | Next
+    | Help
+    | New
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
 
@@ -167,17 +172,10 @@ handlePlay model playSpot =
             ( model, Cmd.none )
 
 
-handlePass : Model -> ( Model, Cmd Msg )
-handlePass model =
-    let
-        newModel =
-            { model
-                | record = { player = model.onMove, move = Pass } :: model.record
-                , onMove = otherPlayer model.onMove
-            }
-    in
+updateModel : Model -> ( Model, Cmd Msg )
+updateModel model =
     ( model
-    , pushUrl newModel.navKey newModel.record
+    , pushUrl model.navKey model.record
     )
 
 
@@ -193,7 +191,11 @@ update msg model =
             handlePlay model (toBoardCoords clickedCoords element)
 
         PlayPass ->
-            handlePass model
+            updateModel
+                { model
+                    | record = { player = model.onMove, move = Pass } :: model.record
+                    , onMove = otherPlayer model.onMove
+                }
 
         MouseMoved hoverCoords ->
             ( model
@@ -210,8 +212,18 @@ update msg model =
             , Cmd.none
             )
 
-        LinkClicked urlRequest ->
-            ( model, Cmd.none )
+        Prev ->
+            ( model
+            , Nav.back model.navKey 1
+            )
+
+        Next ->
+            ( model
+            , Nav.forward model.navKey 1
+            )
+
+        New ->
+            updateModel (emptyModel model.navKey)
 
         UrlChanged url ->
             changeRouteTo url model
@@ -276,9 +288,17 @@ changeRouteTo url model =
 
 pushUrl : Nav.Key -> List Play -> Cmd msg
 pushUrl navKey record =
-    -- Bravely go where no legal URL has gone before.
-    -- I prefer URLs to look nice rather than be valid.
-    Nav.pushUrl navKey <| "?record=" ++ (Sgf.encode <| List.reverse record)
+    let
+        rec =
+            if List.length record > 0 then
+                -- Bravely go where no legal URL has gone before.
+                -- I prefer URLs to look nice rather than be valid.
+                "?record=" ++ (Sgf.encode <| List.reverse record)
+
+            else
+                "?"
+    in
+    Nav.pushUrl navKey rec
 
 
 
@@ -451,19 +471,10 @@ viewSvg model =
     ]
 
 
-menuLink : Maybe msg -> H.Html msg -> H.Html msg
-menuLink maybeAction text =
-    let
-        attrs =
-            case maybeAction of
-                Just action ->
-                    [ HA.class "icon", HE.onClick action ]
-
-                Nothing ->
-                    [ HA.class "icon" ]
-    in
+menuLink : msg -> H.Html msg -> H.Html msg
+menuLink action text =
     H.div [ HA.class "item" ]
-        [ H.div attrs [ text ] ]
+        [ H.div [ HA.class "icon", HE.onClick action ] [ text ] ]
 
 
 view : Model -> Browser.Document Msg
@@ -483,11 +494,11 @@ view model =
     { title = title
     , body =
         [ H.div [ HA.id "menu" ]
-            [ menuLink Nothing (H.text "?")
-            , menuLink Nothing (H.text "!")
-            , menuLink (Just PlayPass) (H.text "*")
-            , menuLink Nothing (H.text "‹")
-            , menuLink Nothing (H.text "︎︎›︎")
+            [ menuLink New (H.text "!")
+            , menuLink Help (H.text "?")
+            , menuLink PlayPass (H.text "*")
+            , menuLink Prev (H.text "‹")
+            , menuLink Next (H.text "︎︎›︎")
             ]
         , H.div [ HA.id "board" ]
             [ Svg.svg
