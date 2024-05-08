@@ -8,9 +8,8 @@ body { display: flex; align-items: center; justify-content: center; }
 #menu { position: absolute; left: 0px; top: 0px; }
 #menu .item { float: left; padding: 1px 0 0 1px; }
 @media screen and (min-aspect-ratio: 1/1) { #menu .item { float: none; } }
-#menu .icon { display: block; background-color: #222; color: #fff;
+#menu .icon { display: block; cursor: pointer; background-color: #222; color: #fff;
     border-radius: 50%; line-height: 30px; width: 30px; height: 30px; text-align: center; }
-#menu a { text-decoration: none; }
 
 #board { width: 100vmin; height: 100vmin; background-color: #CB5; }
 #lines { stroke: #0009; stroke-width: 1.5; }

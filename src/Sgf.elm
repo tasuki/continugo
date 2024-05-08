@@ -24,8 +24,8 @@ indexLen =
     List.length indexes
 
 
-encodeMove : Stone -> String
-encodeMove stone =
+encodePlay : Play -> String
+encodePlay play =
     let
         charFromIndex : Int -> String
         charFromIndex drop =
@@ -39,24 +39,32 @@ encodeMove stone =
             (charFromIndex <| c // indexLen) ++ (charFromIndex <| modBy indexLen c)
 
         player =
-            case stone.player of
+            case play.player of
                 Black ->
                     "B"
 
                 White ->
                     "W"
+
+        encodedPlay =
+            case play.move of
+                Place stone ->
+                    "[" ++ coord stone.spot.x ++ coord stone.spot.y ++ "]"
+
+                Pass ->
+                    "[]"
     in
-    player ++ "[" ++ coord stone.spot.x ++ coord stone.spot.y ++ "]"
+    player ++ encodedPlay
 
 
-moveRegex : Regex.Regex
-moveRegex =
+playRegex : Regex.Regex
+playRegex =
     Maybe.withDefault Regex.never <|
-        Regex.fromString "^([BW])\\[([a-zA-Z]{2})([a-zA-Z]{2})\\]$"
+        Regex.fromString "^([BW])\\[([a-zA-Z]{2})?([a-zA-Z]{2})?\\]$"
 
 
-decodeMove : String -> Maybe Stone
-decodeMove move =
+decodePlay : String -> Maybe Play
+decodePlay move =
     let
         charToIndex : Char -> Maybe Int
         charToIndex c =
@@ -83,29 +91,32 @@ decodeMove move =
                 _ ->
                     Nothing
 
-        maybeMatch : List (Maybe String)
-        maybeMatch =
-            Regex.find moveRegex move
+        maybePlay : List (Maybe String)
+        maybePlay =
+            Regex.find playRegex move
                 |> List.concatMap .submatches
     in
-    case maybeMatch of
+    case maybePlay of
         [ Just player, Just xEncoded, Just yEncoded ] ->
             case ( maybePlayer player, maybeCoord xEncoded, maybeCoord yEncoded ) of
                 ( Just p, Just x, Just y ) ->
-                    Just <| createStone p { x = x, y = y }
+                    Just { player = p, move = Place <| createStone p { x = x, y = y } }
 
                 _ ->
                     Nothing
+
+        [ Just player, Nothing, Nothing ] ->
+            Maybe.map (\p -> { player = p, move = Pass }) (maybePlayer player)
 
         _ ->
             Nothing
 
 
-encode : List Stone -> String
-encode stoneList =
-    String.join ";" <| List.map encodeMove stoneList
+encode : List Play -> String
+encode plays =
+    String.join ";" <| List.map encodePlay plays
 
 
-decode : String -> List Stone
+decode : String -> List Play
 decode sgf =
-    String.split ";" sgf |> List.filterMap decodeMove
+    String.split ";" sgf |> List.filterMap decodePlay

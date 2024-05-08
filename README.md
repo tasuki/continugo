@@ -52,7 +52,6 @@ To develop, run `make develop`, see http://localhost:9071/
 
 ## TODO
 
-- [ ] Add pass button
 - [ ] Add some kind of help
 - [ ] Implement scoring
 - [ ] Ask for confirmation before placing a move, esp on mobile

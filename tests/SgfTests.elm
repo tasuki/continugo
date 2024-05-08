@@ -8,26 +8,26 @@ import Test exposing (..)
 
 
 type alias Case =
-    ( List Stone, String, String )
+    ( List Play, String, String )
 
 
 cases : List Case
 cases =
     [ ( [], "", "an empty list" )
-    , ( [ createStone Black { x = 100, y = 200 }
-        , createStone White { x = 300, y = 400 }
+    , ( [ createPlay Black { x = 100, y = 200 }
+        , createPlay White { x = 300, y = 400 }
         ]
       , "B[bWdS];W[fOhK]"
       , "a position with round coordinates"
       )
-    , ( [ createStone Black { x = 53, y = 53 }
-        , createStone White { x = 636, y = 636 }
+    , ( [ createPlay Black { x = 53, y = 53 }
+        , createPlay White { x = 636, y = 636 }
         ]
       , "B[bbbb];W[mmmm]"
       , "a position with round SGF identifiers"
       )
     , ( SamplePositions.basicTest
-      , "B[kOgc];W[kPeA];W[mlgt];W[mDhZ];W[jLhe];W[kxiN]"
+      , "B[kOgc];W[kPeA];W[mlgt];W[mDhZ];W[jLhe];W[kxiN];B[]"
       , "basic test"
       )
     ]

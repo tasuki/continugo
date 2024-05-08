@@ -142,13 +142,13 @@ playIfLegal stones bareStone =
         Nothing
 
 
-playStones : List Stone -> Stones -> Stones
+playStones : List Play -> Stones -> Stones
 playStones toPlay stones =
     let
         playStone stone acc =
             playIfLegal acc stone |> Maybe.withDefault acc
     in
-    List.foldl playStone stones toPlay
+    List.foldl playStone stones (stonesFromPlays toPlay)
 
 
 play : Player -> Stones -> Spot -> Maybe ( Stones, Stone )

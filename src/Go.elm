@@ -211,6 +211,49 @@ removedStones old new =
 
 
 
+-- Moves
+
+
+type Move
+    = Place Stone
+    | Pass
+
+
+type alias Play =
+    { player : Player
+    , move : Move
+    }
+
+
+createPlay : Player -> Spot -> Play
+createPlay player spot =
+    { player = player
+    , move = Place <| createStone player spot
+    }
+
+
+createPass : Player -> Play
+createPass player =
+    { player = player
+    , move = Pass
+    }
+
+
+stonesFromPlays : List Play -> List Stone
+stonesFromPlays plays =
+    let
+        getMaybeStone play =
+            case play.move of
+                Place stone ->
+                    Just stone
+
+                _ ->
+                    Nothing
+    in
+    List.filterMap getMaybeStone plays
+
+
+
 -- Links helpers
 
 

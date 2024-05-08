@@ -9,6 +9,7 @@ import Dict
 import Go exposing (..)
 import Html as H
 import Html.Attributes as HA
+import Html.Events as HE
 import Json.Decode as D
 import Play
 import Process
@@ -38,7 +39,7 @@ main =
 
 
 type alias Model =
-    { record : List Stone
+    { record : List Play
     , stones : Stones
     , ghostStone : Maybe Stone
     , highlightedGroup : List Spot
@@ -73,9 +74,10 @@ init _ url navKey =
 
 
 type Msg
-    = Clicked Spot
-    | MouseMoved Spot
+    = MouseMoved Spot
+    | Clicked Spot
     | PlayIfLegal Spot (Result BD.Error BD.Element)
+    | PlayPass
     | Hover Spot (Result BD.Error BD.Element)
     | RemoveStones
     | LinkClicked Browser.UrlRequest
@@ -141,9 +143,12 @@ handlePlay model playSpot =
         Just ( stones, played ) ->
             -- play!
             let
+                play =
+                    { player = played.player, move = Place played }
+
                 newModel =
                     { model
-                        | record = played :: model.record
+                        | record = play :: model.record
                         , stones = stones
                         , onMove = otherPlayer model.onMove
                         , justPlayed = Just played.spot
@@ -152,7 +157,7 @@ handlePlay model playSpot =
             in
             ( newModel
             , Cmd.batch
-                [ pushUrl newModel.navKey <| newModel.record
+                [ pushUrl newModel.navKey newModel.record
                 , Process.sleep 500 |> Task.perform (\_ -> RemoveStones)
                 ]
             )
@@ -160,6 +165,20 @@ handlePlay model playSpot =
         _ ->
             -- illegal move
             ( model, Cmd.none )
+
+
+handlePass : Model -> ( Model, Cmd Msg )
+handlePass model =
+    let
+        newModel =
+            { model
+                | record = { player = model.onMove, move = Pass } :: model.record
+                , onMove = otherPlayer model.onMove
+            }
+    in
+    ( model
+    , pushUrl newModel.navKey newModel.record
+    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -172,6 +191,9 @@ update msg model =
 
         PlayIfLegal clickedCoords (Ok element) ->
             handlePlay model (toBoardCoords clickedCoords element)
+
+        PlayPass ->
+            handlePass model
 
         MouseMoved hoverCoords ->
             ( model
@@ -224,7 +246,7 @@ recordRegex =
 changeRouteTo : Url.Url -> Model -> ( Model, Cmd Msg )
 changeRouteTo url model =
     let
-        maybeRecord : Maybe (List Stone)
+        maybeRecord : Maybe (List Play)
         maybeRecord =
             Maybe.map (Regex.find recordRegex) url.query
                 |> Maybe.andThen List.head
@@ -233,7 +255,7 @@ changeRouteTo url model =
                 |> Maybe.andThen identity
                 |> Maybe.map (Sgf.decode >> List.reverse)
 
-        createModel : List Stone -> Model
+        createModel : List Play -> Model
         createModel record =
             { model
                 | record = record
@@ -246,12 +268,13 @@ changeRouteTo url model =
             }
 
         newModel =
-            Maybe.map createModel maybeRecord |> Maybe.withDefault model
+            Maybe.map createModel maybeRecord
+                |> Maybe.withDefault (emptyModel model.navKey)
     in
     ( newModel, Cmd.none )
 
 
-pushUrl : Nav.Key -> List Stone -> Cmd msg
+pushUrl : Nav.Key -> List Play -> Cmd msg
 pushUrl navKey record =
     -- Bravely go where no legal URL has gone before.
     -- I prefer URLs to look nice rather than be valid.
@@ -428,9 +451,19 @@ viewSvg model =
     ]
 
 
-menuLink action text =
+menuLink : Maybe msg -> H.Html msg -> H.Html msg
+menuLink maybeAction text =
+    let
+        attrs =
+            case maybeAction of
+                Just action ->
+                    [ HA.class "icon", HE.onClick action ]
+
+                Nothing ->
+                    [ HA.class "icon" ]
+    in
     H.div [ HA.class "item" ]
-        [ H.a [ HA.href "/" ] [ H.div [ HA.class "icon" ] [ text ] ] ]
+        [ H.div attrs [ text ] ]
 
 
 view : Model -> Browser.Document Msg
@@ -438,14 +471,23 @@ view model =
     let
         intsToStr ints =
             List.map String.fromInt ints |> String.join " "
+
+        title =
+            case List.length model.record of
+                0 ->
+                    "ContinuGo: freed from the tyranny of the grid"
+
+                n ->
+                    "ContinuGo: #" ++ (String.fromInt <| n)
     in
-    { title = "#" ++ (String.fromInt <| List.length model.record) ++ " – ContinuGo"
+    { title = title
     , body =
         [ H.div [ HA.id "menu" ]
-            [ menuLink "action" (H.text "?")
-            , menuLink "action" (H.text "*")
-            , menuLink "action" (H.text "‹")
-            , menuLink "action" (H.text "︎︎›︎")
+            [ menuLink Nothing (H.text "?")
+            , menuLink Nothing (H.text "!")
+            , menuLink (Just PlayPass) (H.text "*")
+            , menuLink Nothing (H.text "‹")
+            , menuLink Nothing (H.text "︎︎›︎")
             ]
         , H.div [ HA.id "board" ]
             [ Svg.svg

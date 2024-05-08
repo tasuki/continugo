@@ -9,37 +9,38 @@ empty =
 
 
 basicTest =
-    [ createStone Black { x = 560, y = 314 }
-    , createStone White { x = 561, y = 234 } -- up
-    , createStone White { x = 635, y = 331 } -- lower right
-    , createStone White { x = 653, y = 415 } -- lower right further
-    , createStone White { x = 505, y = 368 } -- lower left
-    , createStone White { x = 543, y = 455 } -- lower left further
+    [ createPlay Black { x = 560, y = 314 }
+    , createPlay White { x = 561, y = 234 } -- up
+    , createPlay White { x = 635, y = 331 } -- lower right
+    , createPlay White { x = 653, y = 415 } -- lower right further
+    , createPlay White { x = 505, y = 368 } -- lower left
+    , createPlay White { x = 543, y = 455 } -- lower left further
+    , createPass Black
     ]
 
 
 twoLibertiesLowerRight =
-    [ createStone Black <| Spot 879 881
-    , createStone White <| Spot 881 793 -- up
-    , createStone White <| Spot 961 877 -- right
-    , createStone White <| Spot 879 962 -- down
-    , createStone White <| Spot 796 876 -- left
+    [ createPlay Black <| Spot 879 881
+    , createPlay White <| Spot 881 793 -- up
+    , createPlay White <| Spot 961 877 -- right
+    , createPlay White <| Spot 879 962 -- down
+    , createPlay White <| Spot 796 876 -- left
     ]
 
 
 nearestPlayableTest =
-    [ createStone White <| Spot 200 200
-    , createStone White <| Spot 280 200
+    [ createPlay White <| Spot 200 200
+    , createPlay White <| Spot 280 200
     ]
 
 
 suicideOkWhenCapture =
-    [ createStone White <| Spot 842 74
-    , createStone White <| Spot 909 151
-    , createStone Black <| Spot 730 73
-    , createStone Black <| Spot 800 161
-    , createStone Black <| Spot 876 234
-    , createStone Black <| Spot 961 240
+    [ createPlay White <| Spot 842 74
+    , createPlay White <| Spot 909 151
+    , createPlay Black <| Spot 730 73
+    , createPlay Black <| Spot 800 161
+    , createPlay Black <| Spot 876 234
+    , createPlay Black <| Spot 961 240
     ]
 
 
