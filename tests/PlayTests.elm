@@ -37,17 +37,14 @@ longGameRecord =
             ]
 
 
-suicideOkWhenCapture =
-    [ createPlay White <| Spot 842 74
-    , createPlay White <| Spot 909 151
-    , createPlay Black <| Spot 730 73
-    , createPlay Black <| Spot 800 161
-    , createPlay Black <| Spot 876 234
-    , createPlay Black <| Spot 961 240
-    ]
+suicideRecord : List Play
+suicideRecord =
+    Sgf.decode <|
+        "B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS];B[aMaM]"
 
 
-suicideOkWhenCaptureConnected =
+connectedSuicideRecord : List Play
+connectedSuicideRecord =
     Sgf.decode <|
         "B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS]"
 
@@ -62,37 +59,41 @@ type alias Case =
 
 cases : List Case
 cases =
-    [ { name = "Adds a move"
+    [ { name = "Add a move"
       , record = Sgf.decode ""
       , playStone = stoneFromStr "B[boob]"
       , newStones = Just 1
       }
-    , { name = "Doesn't add an illegal move"
+    , { name = "Don't add an illegal move"
       , record = Sgf.decode ""
       , playStone = stoneFromStr "B[butt]"
       , newStones = Nothing
       }
-    , { name = "Captures a group of four stones"
+    , { name = "Capture a group of four stones"
       , record = longGameRecord
-      , playStone = createStone Black <| Spot 839 240
+      , playStone = stoneFromStr "B[qheG]"
       , newStones = Just -3
       }
-    , { name = "Allows suicide when taking"
-      , record = suicideOkWhenCapture
-      , playStone = createStone Black <| Spot 943 58
-      , newStones = Just -1
+    , { name = "Disallow suicide"
+      , record = suicideRecord
+      , playStone = stoneFromStr "B[cIaS]"
+      , newStones = Nothing
       }
-
-    --, { name = "Allows capturing a one-eyed group"
-    --  , record = suicideOkWhenCaptureConnected
-    --  , playStone = stoneFromStr "W[aMaM]"
-    --  , newStones = Just 0
-    --  }
-    --, { name = "Allows one-eyed group to survive a little longer"
-    --  , record = suicideOkWhenCaptureConnected
-    --  , playStone = stoneFromStr "B[aMaM]"
-    --  , newStones = Just 0
-    --  }
+    , { name = "Allow suicide when taking"
+      , record = suicideRecord
+      , playStone = stoneFromStr "W[cIaS]"
+      , newStones = Just -4
+      }
+    , { name = "Allow capturing a one-eyed group with a stone inside"
+      , record = connectedSuicideRecord
+      , playStone = stoneFromStr "W[aMaM]"
+      , newStones = Just -3
+      }
+    , { name = "Allow one-eyed group to survive a little longer by taking"
+      , record = connectedSuicideRecord
+      , playStone = stoneFromStr "B[aMaM]"
+      , newStones = Just 0
+      }
     ]
 
 

@@ -96,12 +96,13 @@ findGroupWithoutLiberties stones stone =
     findLibertyless stones ( [ stone ], [ stone ] )
 
 
-takeAll : List Spot -> Stones -> Stones
-takeAll spots stones =
+takeAll : Player -> List Spot -> Stones -> Stones
+takeAll player spots stones =
     let
         toRemove : List Stone
         toRemove =
             spotsToStones stones spots
+                |> List.filter (\s -> s.player == player)
                 |> List.concatMap (findGroupWithoutLiberties stones)
     in
     List.foldl (\s acc -> removeStone s acc) stones toRemove
@@ -110,8 +111,13 @@ takeAll spots stones =
 maybePlay : Stone -> Stones -> Maybe Stones
 maybePlay stone stones =
     let
+        stonesAfterTake : Stones
         stonesAfterTake =
-            takeAll stone.nearby stones
+            stones
+                -- take enemy stones
+                |> takeAll (otherPlayer stone.player) stone.nearby
+                -- also take own stones if necessary
+                |> takeAll stone.player stone.nearby
 
         stonesIfHasLibertiesAfterTake : Stone -> Maybe Stones
         stonesIfHasLibertiesAfterTake newStone =
