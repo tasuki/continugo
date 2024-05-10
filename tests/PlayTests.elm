@@ -4,24 +4,28 @@ import Dict
 import Expect
 import Go exposing (..)
 import Play exposing (..)
-import SamplePositions
 import Sgf
 import Test exposing (..)
 
 
-playIfLegalTest =
-    describe "playIfLegal"
-        [ test "Allows suicide when taking" <|
-            \_ ->
-                Expect.equal (Just 5) <|
-                    Maybe.map (stoneList >> List.length) <|
-                        playIfLegal
-                            (playStones SamplePositions.suicideOkWhenCapture Dict.empty)
-                            (createStone Black <| Spot 943 58)
-        ]
+stoneFromStr : String -> Stone
+stoneFromStr str =
+    Sgf.decode str
+        |> List.head
+        |> Maybe.andThen
+            (\play ->
+                case play.move of
+                    Place s ->
+                        Just s
+
+                    _ ->
+                        Nothing
+            )
+        |> Maybe.withDefault (createStone Black <| Spot 0 0)
 
 
-record =
+longGameRecord : List Play
+longGameRecord =
     Sgf.decode <|
         String.concat
             [ "B[oifh];W[fgoc];B[odpz];W[fhfm];B[ihdL];W[lfem];B[ekpj];W[fsqe];"
@@ -33,20 +37,80 @@ record =
             ]
 
 
-spot =
-    Spot 839 240
+suicideOkWhenCapture =
+    [ createPlay White <| Spot 842 74
+    , createPlay White <| Spot 909 151
+    , createPlay Black <| Spot 730 73
+    , createPlay Black <| Spot 800 161
+    , createPlay Black <| Spot 876 234
+    , createPlay Black <| Spot 961 240
+    ]
 
 
+suicideOkWhenCaptureConnected =
+    Sgf.decode <|
+        "B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS]"
+
+
+type alias Case =
+    { name : String
+    , record : List Play
+    , playStone : Stone
+    , newStones : Maybe Int
+    }
+
+
+cases : List Case
+cases =
+    [ { name = "Adds a move"
+      , record = Sgf.decode ""
+      , playStone = stoneFromStr "B[boob]"
+      , newStones = Just 1
+      }
+    , { name = "Doesn't add an illegal move"
+      , record = Sgf.decode ""
+      , playStone = stoneFromStr "B[butt]"
+      , newStones = Nothing
+      }
+    , { name = "Captures a group of four stones"
+      , record = longGameRecord
+      , playStone = createStone Black <| Spot 839 240
+      , newStones = Just -3
+      }
+    , { name = "Allows suicide when taking"
+      , record = suicideOkWhenCapture
+      , playStone = createStone Black <| Spot 943 58
+      , newStones = Just -1
+      }
+
+    --, { name = "Allows capturing a one-eyed group"
+    --  , record = suicideOkWhenCaptureConnected
+    --  , playStone = stoneFromStr "W[aMaM]"
+    --  , newStones = Just 0
+    --  }
+    --, { name = "Allows one-eyed group to survive a little longer"
+    --  , record = suicideOkWhenCaptureConnected
+    --  , playStone = stoneFromStr "B[aMaM]"
+    --  , newStones = Just 0
+    --  }
+    ]
+
+
+playCase : Case -> Test
+playCase tc =
+    let
+        stones =
+            playStones tc.record Dict.empty
+
+        newStones =
+            playNearby tc.playStone.player stones tc.playStone.spot
+                |> Maybe.map (\( s, _ ) -> Dict.size s - Dict.size stones)
+    in
+    test tc.name <|
+        \_ ->
+            Expect.equal tc.newStones newStones
+
+
+playTest : Test
 playTest =
-    describe "play"
-        [ test "Captures a group of four stones" <|
-            \_ ->
-                let
-                    stones =
-                        playStones record Dict.empty
-                in
-                Expect.equal (Just 3) <|
-                    (play Black stones spot
-                        |> Maybe.map (\( s, _ ) -> Dict.size stones - Dict.size s)
-                    )
-        ]
+    cases |> List.map playCase |> describe "play"

@@ -1,4 +1,4 @@
-module Play exposing (groupAndItsLiberties, play, playIfLegal, playStones)
+module Play exposing (groupAndItsLiberties, playNearby, playStones)
 
 import Dict
 import Go exposing (..)
@@ -144,6 +144,7 @@ playIfLegal stones bareStone =
 
 playStones : List Play -> Stones -> Stones
 playStones toPlay stones =
+    -- recreates the exact list of plays
     let
         playStone stone acc =
             playIfLegal acc stone |> Maybe.withDefault acc
@@ -151,8 +152,9 @@ playStones toPlay stones =
     List.foldl playStone stones (stonesFromPlays toPlay)
 
 
-play : Player -> Stones -> Spot -> Maybe ( Stones, Stone )
-play onMove stones spot =
+playNearby : Player -> Stones -> Spot -> Maybe ( Stones, Stone )
+playNearby onMove stones spot =
+    -- if spot unplayable, determines nearby spot to play
     let
         nearby : List Stone
         nearby =

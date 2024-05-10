@@ -2,7 +2,6 @@ module SgfTests exposing (..)
 
 import Expect
 import Go exposing (..)
-import SamplePositions
 import Sgf
 import Test exposing (..)
 
@@ -26,7 +25,14 @@ cases =
       , "B[bbbb];W[mmmm]"
       , "a position with round SGF identifiers"
       )
-    , ( SamplePositions.basicTest
+    , ( [ createPlay Black <| Spot 560 314
+        , createPlay White <| Spot 561 234 -- up
+        , createPlay White <| Spot 635 331 -- lower right
+        , createPlay White <| Spot 653 415 -- lower right further
+        , createPlay White <| Spot 505 368 -- lower left
+        , createPlay White <| Spot 543 455 -- lower left further
+        , createPass Black
+        ]
       , "B[kOgc];W[kPeA];W[mlgt];W[mDhZ];W[jLhe];W[kxiN];B[]"
       , "basic test"
       )

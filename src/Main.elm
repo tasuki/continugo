@@ -137,7 +137,7 @@ handleHover model hoverSpot =
             -- hovering over an empty spot: show ghost move if possible
             { model
                 | ghostStone =
-                    Play.play model.onMove model.stones hoverSpot
+                    Play.playNearby model.onMove model.stones hoverSpot
                         |> Maybe.map Tuple.second
                 , highlightedGroup = []
                 , highlightedLiberties = []
@@ -147,7 +147,7 @@ handleHover model hoverSpot =
 
 handlePlay : Model -> Spot -> ( Model, Cmd Msg )
 handlePlay model playSpot =
-    case Play.play model.onMove model.stones playSpot of
+    case Play.playNearby model.onMove model.stones playSpot of
         Just ( stones, played ) ->
             -- play!
             let
