@@ -24,6 +24,7 @@ import Task
 import Url exposing (Url)
 
 
+main : Program () Model Msg
 main =
     Browser.application
         { init = init
@@ -182,28 +183,44 @@ updateModel model =
     )
 
 
+ifNotFinished : Model -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+ifNotFinished model inf =
+    if isFinished model.record then
+        ( model, Cmd.none )
+
+    else
+        inf
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Clicked clickedCoords ->
-            ( model
-            , BD.getElement "board" |> Task.attempt (PlayIfLegal clickedCoords)
-            )
+            ifNotFinished model <|
+                ( model
+                , BD.getElement "board" |> Task.attempt (PlayIfLegal clickedCoords)
+                )
 
         PlayIfLegal clickedCoords (Ok element) ->
             handlePlay model (toBoardCoords clickedCoords element)
 
         PlayPass ->
-            updateModel
-                { model
-                    | record = { player = model.onMove, move = Pass } :: model.record
-                    , onMove = otherPlayer model.onMove
-                }
+            let
+                record =
+                    { player = model.onMove, move = Pass } :: model.record
+            in
+            ifNotFinished model <|
+                updateModel
+                    { model
+                        | record = record
+                        , onMove = otherPlayer model.onMove
+                    }
 
         MouseMoved hoverCoords ->
-            ( model
-            , BD.getElement "board" |> Task.attempt (Hover hoverCoords)
-            )
+            ifNotFinished model <|
+                ( model
+                , BD.getElement "board" |> Task.attempt (Hover hoverCoords)
+                )
 
         Hover hoverCoords (Ok element) ->
             ( handleHover model (toBoardCoords hoverCoords element)
@@ -314,7 +331,7 @@ pushUrl navKey record =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
     Sub.batch
         [ Browser.Events.onClick
             (D.map Clicked
@@ -386,6 +403,14 @@ view model =
                 n ->
                     "ContinuGo: #" ++ (String.fromInt <| n)
 
+        score : H.Html msg
+        score =
+            if isFinished model.record then
+                H.div [ HA.id "score" ] [ H.text <| resultString model.stones ]
+
+            else
+                H.div [] []
+
         content =
             if model.showHelp then
                 H.div [ HA.id "help" ] [ Help.help ]
@@ -396,6 +421,7 @@ view model =
                         [ Svg.svg
                             [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
                             (viewSvg model)
+                        , score
                         ]
                     ]
     in

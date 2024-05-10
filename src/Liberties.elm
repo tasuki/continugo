@@ -17,6 +17,7 @@ zero =
     Spot 0 0
 
 
+normalize : Spot -> Spot -> Spot
 normalize spot zeroSuspect =
     Spot (spot.x + zeroSuspect.x) (spot.y + zeroSuspect.y)
 
