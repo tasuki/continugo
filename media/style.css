@@ -55,7 +55,7 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
     background: #000A; color: #FFF; text-align: center; line-height: 100vmin;
     font-size: 80px; }
 
-#help { margin: 40px auto 0 auto; padding: 0 10px 10px 10px; max-width: 600px; }
+#help { margin: 60px auto 0 auto; padding: 0 10px 10px 10px; max-width: 600px; }
 @media screen and (min-aspect-ratio: 1/1) {
-    #help { margin-top: 0 auto 0 auto; }
+    #help { margin: 0 auto 0 auto; }
 }
