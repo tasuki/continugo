@@ -33,6 +33,7 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 
 #liberties { stroke: #0002; fill: #0002; stroke-width: 4; }
 #ghost-links, #ghost-stone { opacity: 0.4; }
+#staged-stone circle { stroke: #900; fill:transparent; stroke-width: 4; }
 #stones, #links, #ghost-stone, #ghost-links, #removed-stones { stroke: #222; stroke-width: 4; }
 .black { fill: #222; transform-origin: center left; }
 .white { fill: #FFF; transform-origin: center right; }

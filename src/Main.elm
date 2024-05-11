@@ -11,6 +11,7 @@ import Html as H
 import Html.Attributes as HA
 import Html.Events as HE
 import Json.Decode as D
+import Maybe.Extra
 import Play
 import Process
 import Regex
@@ -48,6 +49,8 @@ type alias Model =
     , justPlayed : Maybe Spot
     , justRemoved : List Stone
     , onMove : Player
+    , startedTouching : Maybe Spot
+    , stagedMove : Maybe Stone
     , showHelp : Bool
     , navKey : Nav.Key
     }
@@ -63,6 +66,8 @@ emptyModel navKey =
     , justPlayed = Nothing
     , justRemoved = []
     , onMove = Black
+    , startedTouching = Nothing
+    , stagedMove = Nothing
     , showHelp = False
     , navKey = navKey
     }
@@ -77,12 +82,18 @@ init _ url navKey =
 -- UPDATE
 
 
+type alias WindowCoords =
+    { x : Int, y : Int }
+
+
 type Msg
-    = MouseMoved Spot
-    | Clicked Spot
-    | PlayIfLegal Spot (Result BD.Error BD.Element)
+    = Started WindowCoords
+    | Moved WindowCoords
+    | Finished WindowCoords
+    | StartedBoard WindowCoords (Result BD.Error BD.Element)
+    | MovedBoard WindowCoords (Result BD.Error BD.Element)
+    | FinishedBoard WindowCoords (Result BD.Error BD.Element)
     | PlayPass
-    | Hover Spot (Result BD.Error BD.Element)
     | RemoveStones
     | Prev
     | Next
@@ -175,8 +186,8 @@ handlePlay model playSpot =
             ( model, Cmd.none )
 
 
-updateModel : Model -> ( Model, Cmd Msg )
-updateModel model =
+updatePosition : Model -> ( Model, Cmd Msg )
+updatePosition model =
     ( model
     , pushUrl model.navKey model.record
     )
@@ -191,17 +202,81 @@ ifNotFinished model inf =
         inf
 
 
+addBoard : Model -> (Result BD.Error BD.Element -> Msg) -> ( Model, Cmd Msg )
+addBoard model msg =
+    ifNotFinished model <|
+        ( model
+        , BD.getElement "board" |> Task.attempt msg
+        )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Clicked clickedCoords ->
-            ifNotFinished model <|
-                ( model
-                , BD.getElement "board" |> Task.attempt (PlayIfLegal clickedCoords)
+        Started windowCoords ->
+            addBoard model (StartedBoard windowCoords)
+
+        Moved windowCoords ->
+            addBoard model (MovedBoard windowCoords)
+
+        Finished windowCoords ->
+            addBoard model (FinishedBoard windowCoords)
+
+        StartedBoard windowCoords (Ok element) ->
+            let
+                coords =
+                    toBoardCoords windowCoords element
+            in
+            Maybe.map .spot model.stagedMove
+                |> Maybe.Extra.filter (isWithinStone coords)
+                |> Maybe.map
+                    (handlePlay
+                        { model
+                            | startedTouching = Just coords
+                            , stagedMove = Nothing
+                        }
+                    )
+                |> Maybe.withDefault ( model, Cmd.none )
+
+        MovedBoard windowCoords (Ok element) ->
+            let
+                coords =
+                    toBoardCoords windowCoords element
+            in
+            if
+                Maybe.map .spot model.stagedMove
+                    |> Maybe.Extra.filter (isWithinStone coords)
+                    |> Maybe.Extra.isJust
+            then
+                -- hovering over staged move
+                ( model, Cmd.none )
+
+            else
+                ( handleHover { model | stagedMove = Nothing } coords
+                , Cmd.none
                 )
 
-        PlayIfLegal clickedCoords (Ok element) ->
-            handlePlay model (toBoardCoords clickedCoords element)
+        FinishedBoard windowCoords (Ok element) ->
+            let
+                coords =
+                    toBoardCoords windowCoords element
+            in
+            if model.startedTouching == Just coords then
+                handlePlay { model | startedTouching = Nothing } coords
+
+            else
+                let
+                    stagedMove : Maybe Stone
+                    stagedMove =
+                        Play.playNearby model.onMove model.stones coords
+                            |> Maybe.map Tuple.second
+                in
+                ( { model
+                    | startedTouching = Nothing
+                    , stagedMove = stagedMove
+                  }
+                , Cmd.none
+                )
 
         PlayPass ->
             let
@@ -209,22 +284,11 @@ update msg model =
                     { player = model.onMove, move = Pass } :: model.record
             in
             ifNotFinished model <|
-                updateModel
+                updatePosition
                     { model
                         | record = record
                         , onMove = otherPlayer model.onMove
                     }
-
-        MouseMoved hoverCoords ->
-            ifNotFinished model <|
-                ( model
-                , BD.getElement "board" |> Task.attempt (Hover hoverCoords)
-                )
-
-        Hover hoverCoords (Ok element) ->
-            ( handleHover model (toBoardCoords hoverCoords element)
-            , Cmd.none
-            )
 
         RemoveStones ->
             ( { model | justRemoved = [] }
@@ -242,7 +306,7 @@ update msg model =
             )
 
         New ->
-            updateModel (emptyModel model.navKey)
+            updatePosition (emptyModel model.navKey)
 
         Help ->
             ( { model | showHelp = not model.showHelp }
@@ -256,7 +320,7 @@ update msg model =
             ( model, Cmd.none )
 
 
-toBoardCoords : Spot -> BD.Element -> Spot
+toBoardCoords : WindowCoords -> BD.Element -> Spot
 toBoardCoords windowCoords element =
     { x =
         round <|
@@ -349,6 +413,8 @@ viewSvg model =
         List.map viewKeyedLink (getUniqueLinks model.stones)
     , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
         (stoneList model.stones |> List.map (\s -> viewKeyedStone (classJustPlayed model.justPlayed s) s))
+    , lazy3 Svg.node "g" [ SA.id "staged-stone" ] <|
+        List.filterMap identity [ Maybe.map viewStagedStone model.stagedMove ]
     , lazy3 Svg.node "g" [ SA.id "removed-stones" ] <|
         (model.justRemoved |> List.map (viewStone "removed"))
     , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
@@ -382,6 +448,15 @@ decodeTouch msg =
         )
 
 
+decodeChangedTouch : (Spot -> msg) -> D.Decoder msg
+decodeChangedTouch msg =
+    D.map msg
+        (D.map2 Spot
+            (D.at [ "changedTouches", "0" ] <| D.field "pageX" D.int)
+            (D.at [ "changedTouches", "0" ] <| D.field "pageY" D.int)
+        )
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -411,9 +486,13 @@ view model =
             else
                 H.div
                     [ HA.id "board-container"
-                    , HE.on "click" <| decodeMouse Clicked
-                    , HE.on "mousemove" <| decodeMouse MouseMoved
-                    , HE.on "touchmove" <| decodeTouch MouseMoved
+                    , HE.on "mousedown" <| decodeMouse Started
+                    , HE.on "mousemove" <| decodeMouse Moved
+                    , HE.on "mouseup" <| decodeMouse Finished
+                    , HE.on "touchstart" <| decodeTouch Started
+                    , HE.on "touchmove" <| decodeTouch Moved
+                    , HE.on "touchend" <| decodeChangedTouch Finished
+                    , HE.on "touchcancel" <| decodeChangedTouch Finished
                     ]
                     [ H.div
                         [ HA.id "board" ]

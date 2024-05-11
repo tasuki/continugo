@@ -51,6 +51,11 @@ distance s1 s2 =
     sqrt <| toFloat ((s1.x - s2.x) ^ 2 + (s1.y - s2.y) ^ 2)
 
 
+isWithinStone : Spot -> Spot -> Bool
+isWithinStone s1 s2 =
+    distance s1 s2 < stoneR
+
+
 overlaps : Spot -> Spot -> Bool
 overlaps s1 s2 =
     distance s1 s2 < diameter
@@ -409,6 +414,11 @@ viewLink ( s1, s2 ) =
         , SA.y2 <| String.fromInt s2.y
         ]
         []
+
+
+viewStagedStone : Stone -> Svg msg
+viewStagedStone stone =
+    viewStone "" stone
 
 
 viewGhostStone : Stone -> Svg msg
