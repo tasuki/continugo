@@ -23,7 +23,7 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 @media screen and (min-aspect-ratio: 1/1) { #menu .icon:hover { width:auto; padding: 0 10px; } }
 @media screen and (max-aspect-ratio: 1/1) { #menu .icon:hover .tooltip { display: block; position: absolute; top: 25px; color: #222; } }
 
-#board-container { display: flex; align-items: center; justify-content: center; height: 100%; overflow: hidden; }
+#board-container { display: flex; align-items: center; justify-content: center; height: 100%; overflow: hidden; touch-action: none; }
 #board { width: 100vmin; height: 100vmin; background-color: #CB5; position: relative; }
 #lines { stroke: #0009; stroke-width: 1.5; }
 #stars { fill: #0009; }

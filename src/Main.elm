@@ -3,7 +3,6 @@ module Main exposing (..)
 import Board
 import Browser
 import Browser.Dom as BD
-import Browser.Events
 import Browser.Navigation as Nav
 import Dict
 import Go exposing (..)
@@ -29,7 +28,7 @@ main =
     Browser.application
         { init = init
         , update = update
-        , subscriptions = subscriptions
+        , subscriptions = \_ -> Sub.none
         , view = view
         , onUrlRequest = LinkClicked
         , onUrlChange = UrlChanged
@@ -327,30 +326,6 @@ pushUrl navKey record =
 
 
 
--- SUBSCRIPTIONS
-
-
-subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.batch
-        [ Browser.Events.onClick
-            (D.map Clicked
-                (D.map2 Spot
-                    (D.field "pageX" D.int)
-                    (D.field "pageY" D.int)
-                )
-            )
-        , Browser.Events.onMouseMove
-            (D.map MouseMoved
-                (D.map2 Spot
-                    (D.field "pageX" D.int)
-                    (D.field "pageY" D.int)
-                )
-            )
-        ]
-
-
-
 -- VIEW
 
 
@@ -389,6 +364,24 @@ menuLink action iconText tooltip =
         ]
 
 
+decodeMouse : (Spot -> msg) -> D.Decoder msg
+decodeMouse msg =
+    D.map msg
+        (D.map2 Spot
+            (D.field "pageX" D.int)
+            (D.field "pageY" D.int)
+        )
+
+
+decodeTouch : (Spot -> msg) -> D.Decoder msg
+decodeTouch msg =
+    D.map msg
+        (D.map2 Spot
+            (D.at [ "touches", "0" ] <| D.field "pageX" D.int)
+            (D.at [ "touches", "0" ] <| D.field "pageY" D.int)
+        )
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -416,8 +409,14 @@ view model =
                 H.div [ HA.id "help" ] [ Help.help ]
 
             else
-                H.div [ HA.id "board-container" ]
-                    [ H.div [ HA.id "board" ]
+                H.div
+                    [ HA.id "board-container"
+                    , HE.on "click" <| decodeMouse Clicked
+                    , HE.on "mousemove" <| decodeMouse MouseMoved
+                    , HE.on "touchmove" <| decodeTouch MouseMoved
+                    ]
+                    [ H.div
+                        [ HA.id "board" ]
                         [ Svg.svg
                             [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
                             (viewSvg model)
