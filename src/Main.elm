@@ -90,9 +90,9 @@ type Msg
     = Started WindowCoords
     | Moved WindowCoords
     | Finished WindowCoords
-    | StartedBoard WindowCoords (Result BD.Error BD.Element)
-    | MovedBoard WindowCoords (Result BD.Error BD.Element)
-    | FinishedBoard WindowCoords (Result BD.Error BD.Element)
+    | StartedBoard (Result BD.Error Spot)
+    | MovedBoard (Result BD.Error Spot)
+    | FinishedBoard (Result BD.Error Spot)
     | PlayPass
     | RemoveStones
     | Prev
@@ -109,7 +109,7 @@ handleHover model hoverSpot =
         maybeOverStone : Maybe Stone
         maybeOverStone =
             stoneList model.stones
-                |> List.filter (\s -> distance hoverSpot s.spot < stoneR)
+                |> List.filter (\s -> isWithinStone hoverSpot s.spot)
                 |> List.head
 
         memberOfHighlighted : Stone -> Bool
@@ -147,9 +147,7 @@ handleHover model hoverSpot =
         ( Nothing, _ ) ->
             -- hovering over an empty spot: show ghost move if possible
             { model
-                | ghostStone =
-                    Play.playNearby model.onMove model.stones hoverSpot
-                        |> Maybe.map Tuple.second
+                | ghostStone = playStone model hoverSpot
                 , highlightedGroup = []
                 , highlightedLiberties = []
                 , justPlayed = Nothing
@@ -186,11 +184,10 @@ handlePlay model playSpot =
             ( model, Cmd.none )
 
 
-updatePosition : Model -> ( Model, Cmd Msg )
-updatePosition model =
-    ( model
-    , pushUrl model.navKey model.record
-    )
+playStone : Model -> Spot -> Maybe Stone
+playStone model coords =
+    Play.playNearby model.onMove model.stones coords
+        |> Maybe.map Tuple.second
 
 
 ifNotFinished : Model -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
@@ -202,11 +199,30 @@ ifNotFinished model inf =
         inf
 
 
-addBoard : Model -> (Result BD.Error BD.Element -> Msg) -> ( Model, Cmd Msg )
-addBoard model msg =
-    ifNotFinished model <|
+filterStaged : Spot -> Model -> Maybe Stone
+filterStaged coords model =
+    model.stagedMove
+        |> Maybe.Extra.filter (\s -> isWithinStone coords s.spot)
+
+
+withBoardCoords : Model -> WindowCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
+withBoardCoords model windowCoords msg =
+    let
+        toBoardSpot : BD.Element -> Spot
+        toBoardSpot element =
+            { x =
+                round <|
+                    (toFloat windowCoords.x - element.element.x)
+                        * (toFloat coordRange / element.element.width)
+            , y =
+                round <|
+                    (toFloat windowCoords.y - element.element.y)
+                        * (toFloat coordRange / element.element.height)
+            }
+    in
+    ifNotFinished model
         ( model
-        , BD.getElement "board" |> Task.attempt msg
+        , Task.attempt msg <| Task.map toBoardSpot <| BD.getElement "board"
         )
 
 
@@ -214,67 +230,48 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Started windowCoords ->
-            addBoard model (StartedBoard windowCoords)
+            withBoardCoords model windowCoords StartedBoard
 
         Moved windowCoords ->
-            addBoard model (MovedBoard windowCoords)
+            withBoardCoords model windowCoords MovedBoard
 
         Finished windowCoords ->
-            addBoard model (FinishedBoard windowCoords)
+            withBoardCoords model windowCoords FinishedBoard
 
-        StartedBoard windowCoords (Ok element) ->
-            let
-                coords =
-                    toBoardCoords windowCoords element
-            in
-            Maybe.map .spot model.stagedMove
-                |> Maybe.Extra.filter (isWithinStone coords)
-                |> Maybe.map
-                    (handlePlay
-                        { model
-                            | startedTouching = Just coords
-                            , stagedMove = Nothing
-                        }
+        StartedBoard (Ok coords) ->
+            ( { model
+                | startedTouching = Just coords
+                , stagedMove = filterStaged coords model
+              }
+            , Cmd.none
+            )
+
+        MovedBoard (Ok coords) ->
+            case filterStaged coords model of
+                Just _ ->
+                    -- hovering over staged move
+                    ( model, Cmd.none )
+
+                Nothing ->
+                    ( handleHover { model | stagedMove = Nothing } coords
+                    , Cmd.none
                     )
-                |> Maybe.withDefault ( model, Cmd.none )
 
-        MovedBoard windowCoords (Ok element) ->
+        FinishedBoard (Ok coords) ->
             let
-                coords =
-                    toBoardCoords windowCoords element
-            in
-            if
-                Maybe.map .spot model.stagedMove
-                    |> Maybe.Extra.filter (isWithinStone coords)
-                    |> Maybe.Extra.isJust
-            then
-                -- hovering over staged move
-                ( model, Cmd.none )
-
-            else
-                ( handleHover { model | stagedMove = Nothing } coords
-                , Cmd.none
-                )
-
-        FinishedBoard windowCoords (Ok element) ->
-            let
-                coords =
-                    toBoardCoords windowCoords element
+                modelNoTouchNoStage =
+                    { model | startedTouching = Nothing, stagedMove = Nothing }
             in
             if model.startedTouching == Just coords then
-                handlePlay { model | startedTouching = Nothing } coords
+                case filterStaged coords model of
+                    Just staged ->
+                        handlePlay modelNoTouchNoStage staged.spot
+
+                    Nothing ->
+                        handlePlay modelNoTouchNoStage coords
 
             else
-                let
-                    stagedMove : Maybe Stone
-                    stagedMove =
-                        Play.playNearby model.onMove model.stones coords
-                            |> Maybe.map Tuple.second
-                in
-                ( { model
-                    | startedTouching = Nothing
-                    , stagedMove = stagedMove
-                  }
+                ( { modelNoTouchNoStage | stagedMove = playStone model coords }
                 , Cmd.none
                 )
 
@@ -320,19 +317,6 @@ update msg model =
             ( model, Cmd.none )
 
 
-toBoardCoords : WindowCoords -> BD.Element -> Spot
-toBoardCoords windowCoords element =
-    { x =
-        round <|
-            (toFloat windowCoords.x - element.element.x)
-                * (toFloat coordRange / element.element.width)
-    , y =
-        round <|
-            (toFloat windowCoords.y - element.element.y)
-                * (toFloat coordRange / element.element.height)
-    }
-
-
 
 -- ROUTING / URL
 
@@ -372,6 +356,13 @@ changeRouteTo url model =
                 |> Maybe.withDefault (emptyModel model.navKey)
     in
     ( newModel, Cmd.none )
+
+
+updatePosition : Model -> ( Model, Cmd Msg )
+updatePosition model =
+    ( model
+    , pushUrl model.navKey model.record
+    )
 
 
 pushUrl : Nav.Key -> List Play -> Cmd msg
