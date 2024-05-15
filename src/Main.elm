@@ -448,6 +448,13 @@ decodeChangedTouch msg =
         )
 
 
+eventNoDefault : String -> D.Decoder msg -> H.Attribute msg
+eventNoDefault event decoder =
+    HE.preventDefaultOn event <|
+        D.map (\msg -> ( msg, True )) <|
+            decoder
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -477,13 +484,14 @@ view model =
             else
                 H.div
                     [ HA.id "board-container"
-                    , HE.on "mousedown" <| decodeMouse Started
-                    , HE.on "mousemove" <| decodeMouse Moved
-                    , HE.on "mouseup" <| decodeMouse Finished
-                    , HE.on "touchstart" <| decodeTouch Started
-                    , HE.on "touchmove" <| decodeTouch Moved
-                    , HE.on "touchend" <| decodeChangedTouch Finished
-                    , HE.on "touchcancel" <| decodeChangedTouch Finished
+                    , eventNoDefault "mousedown" <| decodeMouse Started
+                    , eventNoDefault "mousedown" <| decodeMouse Started
+                    , eventNoDefault "mousemove" <| decodeMouse Moved
+                    , eventNoDefault "mouseup" <| decodeMouse Finished
+                    , eventNoDefault "touchstart" <| decodeTouch Started
+                    , eventNoDefault "touchmove" <| decodeTouch Moved
+                    , eventNoDefault "touchend" <| decodeChangedTouch Finished
+                    , eventNoDefault "touchcancel" <| decodeChangedTouch Finished
                     ]
                     [ H.div
                         [ HA.id "board" ]
