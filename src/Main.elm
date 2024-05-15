@@ -83,7 +83,7 @@ init _ url navKey =
 
 
 type alias WindowCoords =
-    { x : Int, y : Int }
+    { x : Float, y : Float }
 
 
 type Msg
@@ -212,11 +212,11 @@ withBoardCoords model windowCoords msg =
         toBoardSpot element =
             { x =
                 round <|
-                    (toFloat windowCoords.x - element.element.x)
+                    (windowCoords.x - element.element.x)
                         * (toFloat coordRange / element.element.width)
             , y =
                 round <|
-                    (toFloat windowCoords.y - element.element.y)
+                    (windowCoords.y - element.element.y)
                         * (toFloat coordRange / element.element.height)
             }
     in
@@ -421,38 +421,31 @@ menuLink action iconText tooltip =
         ]
 
 
-decodeMouse : (Spot -> msg) -> D.Decoder msg
+decodeMouse : (WindowCoords -> msg) -> D.Decoder msg
 decodeMouse msg =
     D.map msg
-        (D.map2 Spot
-            (D.field "pageX" D.int)
-            (D.field "pageY" D.int)
+        (D.map2 WindowCoords
+            (D.field "pageX" D.float)
+            (D.field "pageY" D.float)
         )
 
 
-decodeTouch : (Spot -> msg) -> D.Decoder msg
+decodeTouch : (WindowCoords -> msg) -> D.Decoder msg
 decodeTouch msg =
     D.map msg
-        (D.map2 Spot
-            (D.at [ "touches", "0" ] <| D.field "pageX" D.int)
-            (D.at [ "touches", "0" ] <| D.field "pageY" D.int)
+        (D.map2 WindowCoords
+            (D.at [ "touches", "0" ] <| D.field "pageX" D.float)
+            (D.at [ "touches", "0" ] <| D.field "pageY" D.float)
         )
 
 
-decodeChangedTouch : (Spot -> msg) -> D.Decoder msg
+decodeChangedTouch : (WindowCoords -> msg) -> D.Decoder msg
 decodeChangedTouch msg =
     D.map msg
-        (D.map2 Spot
-            (D.at [ "changedTouches", "0" ] <| D.field "pageX" D.int)
-            (D.at [ "changedTouches", "0" ] <| D.field "pageY" D.int)
+        (D.map2 WindowCoords
+            (D.at [ "changedTouches", "0" ] <| D.field "pageX" D.float)
+            (D.at [ "changedTouches", "0" ] <| D.field "pageY" D.float)
         )
-
-
-eventNoDefault : String -> D.Decoder msg -> H.Attribute msg
-eventNoDefault event decoder =
-    HE.preventDefaultOn event <|
-        D.map (\msg -> ( msg, True )) <|
-            decoder
 
 
 view : Model -> Browser.Document Msg
@@ -484,14 +477,13 @@ view model =
             else
                 H.div
                     [ HA.id "board-container"
-                    , eventNoDefault "mousedown" <| decodeMouse Started
-                    , eventNoDefault "mousedown" <| decodeMouse Started
-                    , eventNoDefault "mousemove" <| decodeMouse Moved
-                    , eventNoDefault "mouseup" <| decodeMouse Finished
-                    , eventNoDefault "touchstart" <| decodeTouch Started
-                    , eventNoDefault "touchmove" <| decodeTouch Moved
-                    , eventNoDefault "touchend" <| decodeChangedTouch Finished
-                    , eventNoDefault "touchcancel" <| decodeChangedTouch Finished
+                    , HE.on "mousedown" <| decodeMouse Started
+                    , HE.on "mousemove" <| decodeMouse Moved
+                    , HE.on "mouseup" <| decodeMouse Finished
+                    , HE.on "touchstart" <| decodeTouch Started
+                    , HE.on "touchmove" <| decodeTouch Moved
+                    , HE.on "touchend" <| decodeChangedTouch Finished
+                    , HE.on "touchcancel" <| decodeChangedTouch Finished
                     ]
                     [ H.div
                         [ HA.id "board" ]
