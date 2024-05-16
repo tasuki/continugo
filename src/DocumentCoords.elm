@@ -1,5 +1,7 @@
 module DocumentCoords exposing (..)
 
+import Browser.Dom as BD
+import Go
 import Json.Decode as D
 
 
@@ -10,6 +12,27 @@ type ActionSource
 
 type alias DocumentCoords =
     { x : Float, y : Float, source : ActionSource }
+
+
+
+-- Utils
+
+
+toBoardSpot : DocumentCoords -> BD.Element -> Go.Spot
+toBoardSpot documentCoords element =
+    { x =
+        round <|
+            (documentCoords.x - element.element.x)
+                * (toFloat Go.coordRange / element.element.width)
+    , y =
+        round <|
+            (documentCoords.y - element.element.y)
+                * (toFloat Go.coordRange / element.element.height)
+    }
+
+
+
+-- Decoders
 
 
 coordsDecoder : ActionSource -> D.Decoder DocumentCoords

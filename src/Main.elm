@@ -40,6 +40,12 @@ main =
 -- MODEL
 
 
+type DragFrom
+    = DragNone
+    | DragSpot Spot
+    | DragStone Stone
+
+
 type alias Model =
     { record : List Play
     , stones : Stones
@@ -49,7 +55,7 @@ type alias Model =
     , justPlayed : Maybe Spot
     , justRemoved : List Stone
     , onMove : Player
-    , startedTouching : Maybe Spot
+    , dragFrom : DragFrom
     , stagedMove : Maybe Stone
     , showHelp : Bool
     , navKey : Nav.Key
@@ -66,7 +72,7 @@ emptyModel navKey =
     , justPlayed = Nothing
     , justRemoved = []
     , onMove = Black
-    , startedTouching = Nothing
+    , dragFrom = DragNone
     , stagedMove = Nothing
     , showHelp = False
     , navKey = navKey
@@ -144,7 +150,7 @@ handleHover model hoverSpot =
         ( Nothing, _ ) ->
             -- hovering over an empty spot: show ghost move if possible
             { model
-                | ghostStone = playStone model hoverSpot
+                | ghostStone = playStone hoverSpot model
                 , highlightedGroup = []
                 , highlightedLiberties = []
                 , justPlayed = Nothing
@@ -181,10 +187,16 @@ handlePlay model playSpot =
             ( model, Cmd.none )
 
 
-playStone : Model -> Spot -> Maybe Stone
-playStone model coords =
+playStone : Spot -> Model -> Maybe Stone
+playStone coords model =
     Play.playNearby model.onMove model.stones coords
         |> Maybe.map Tuple.second
+
+
+filterStaged : Spot -> Model -> Maybe Stone
+filterStaged coords model =
+    model.stagedMove
+        |> Maybe.Extra.filter (\s -> isWithinStone coords s.spot)
 
 
 ifNotFinished : Model -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
@@ -196,49 +208,32 @@ ifNotFinished model inf =
         inf
 
 
-filterStaged : Spot -> Model -> Maybe Stone
-filterStaged coords model =
-    model.stagedMove
-        |> Maybe.Extra.filter (\s -> isWithinStone coords s.spot)
-
-
 withBoardCoords : Model -> DocumentCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
 withBoardCoords model documentCoords msg =
-    let
-        toBoardSpot : BD.Element -> Spot
-        toBoardSpot element =
-            { x =
-                round <|
-                    (documentCoords.x - element.element.x)
-                        * (toFloat coordRange / element.element.width)
-            , y =
-                round <|
-                    (documentCoords.y - element.element.y)
-                        * (toFloat coordRange / element.element.height)
-            }
-    in
     ifNotFinished model
         ( model
-        , Task.attempt msg <| Task.map toBoardSpot <| BD.getElement "board"
+        , Task.attempt msg <|
+            Task.map (DC.toBoardSpot documentCoords) <|
+                BD.getElement "board"
         )
+
+
+withBoardCoordsGuardMultitouch : Model -> DocumentCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
+withBoardCoordsGuardMultitouch model documentCoords action =
+    if documentCoords.source == DC.Touch && model.dragFrom == DragNone then
+        ( model, Cmd.none )
+
+    else
+        withBoardCoords model documentCoords action
 
 
 clearTouch : Model -> Model
 clearTouch model =
     { model
-        | startedTouching = Nothing
+        | dragFrom = DragNone
         , stagedMove = Nothing
         , ghostStone = Nothing
     }
-
-
-guardMultitouch : Model -> DocumentCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
-guardMultitouch model documentCoords action =
-    if documentCoords.source == DC.Touch && model.startedTouching == Nothing then
-        ( model, Cmd.none )
-
-    else
-        withBoardCoords model documentCoords action
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -248,17 +243,17 @@ update msg model =
             withBoardCoords model documentCoords StartedBoard
 
         Moved documentCoords ->
-            guardMultitouch model documentCoords MovedBoard
+            withBoardCoordsGuardMultitouch model documentCoords MovedBoard
 
         Finished documentCoords ->
-            guardMultitouch model documentCoords FinishedBoard
+            withBoardCoordsGuardMultitouch model documentCoords FinishedBoard
 
         ClearTouch ->
             ( clearTouch model, Cmd.none )
 
         StartedBoard (Ok coords) ->
             ( { model
-                | startedTouching = Just coords
+                | dragFrom = DragSpot coords
                 , stagedMove = filterStaged coords model
               }
             , Cmd.none
@@ -280,7 +275,7 @@ update msg model =
                 ctm =
                     clearTouch model
             in
-            if model.startedTouching == Just coords then
+            if model.dragFrom == DragSpot coords then
                 case filterStaged coords model of
                     Just staged ->
                         handlePlay ctm staged.spot
@@ -291,7 +286,7 @@ update msg model =
             else
                 let
                     sm =
-                        playStone model coords
+                        playStone coords model
                 in
                 ( { ctm | stagedMove = sm, ghostStone = sm }
                 , Cmd.none

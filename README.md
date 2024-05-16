@@ -26,6 +26,6 @@ To develop, run `make develop`, see http://localhost:9071/
 
 ## TODO
 
-- [ ] Ask for confirmation before placing a move, esp on mobile
 - [ ] Drag from stone to place a stone as far as possible and still connected
-- [ ] Enforce ko
+- [ ] Test whether the "adjacent distance" of 1.4142 isn't too high
+- [ ] Enforce ko: low priority, likely won't happen much...
