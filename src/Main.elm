@@ -232,6 +232,7 @@ withBoardCoords model windowCoords msg =
         )
 
 
+clearTouch : Model -> Model
 clearTouch model =
     { model
         | startedTouching = Nothing
@@ -464,31 +465,43 @@ decodeMouse msg =
     D.map msg <| coordsDecoder Mouse
 
 
-singleTouchDecoder : (WindowCoords -> Msg) -> D.Decoder Msg
+tupleDecoder : ( D.Decoder a, D.Decoder b ) -> D.Decoder ( a, b )
+tupleDecoder ( a, b ) =
+    D.map2 Tuple.pair a b
+
+
+singleTouchDecoder : (WindowCoords -> Msg) -> D.Decoder ( Msg, Bool )
 singleTouchDecoder msg =
     let
+        decodeTouches : Int -> ( D.Decoder Msg, D.Decoder Bool )
         decodeTouches n =
             case n of
-                0 ->
-                    D.succeed ClearTouch
-
                 1 ->
-                    D.map msg <| D.field "0" <| coordsDecoder Touch
+                    ( D.map msg <| D.field "0" <| coordsDecoder Touch
+                    , D.succeed True
+                    )
 
                 _ ->
-                    D.succeed ClearTouch
+                    ( D.succeed ClearTouch
+                    , D.succeed False
+                    )
     in
-    D.field "length" D.int |> D.andThen decodeTouches
+    D.field "length" D.int |> D.andThen (decodeTouches >> tupleDecoder)
+
+
+decodeSingleTouch : (WindowCoords -> Msg) -> D.Decoder ( Msg, Bool )
+decodeSingleTouch msg =
+    D.field "touches" <| singleTouchDecoder msg
 
 
 decodeTouch : (WindowCoords -> Msg) -> D.Decoder Msg
 decodeTouch msg =
-    D.field "touches" <| singleTouchDecoder msg
+    D.at [ "touches", "0" ] <| D.map msg <| coordsDecoder Touch
 
 
 decodeChangedTouch : (WindowCoords -> Msg) -> D.Decoder Msg
 decodeChangedTouch msg =
-    D.field "changedTouches" <| singleTouchDecoder msg
+    D.at [ "changedTouches", "0" ] <| D.map msg <| coordsDecoder Touch
 
 
 view : Model -> Browser.Document Msg
@@ -524,7 +537,7 @@ view model =
                     , HE.on "mousemove" <| decodeMouse Moved
                     , HE.on "mouseup" <| decodeMouse Finished
                     , HE.on "touchstart" <| decodeTouch Started
-                    , HE.on "touchmove" <| decodeTouch Moved
+                    , HE.preventDefaultOn "touchmove" <| decodeSingleTouch Moved
                     , HE.on "touchend" <| decodeChangedTouch Finished
                     , HE.on "touchcancel" <| decodeChangedTouch Finished
                     ]
