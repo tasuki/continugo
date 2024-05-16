@@ -421,31 +421,43 @@ menuLink action iconText tooltip =
         ]
 
 
+coordsDecoder : D.Decoder WindowCoords
+coordsDecoder =
+    D.map2 WindowCoords
+        (D.field "pageX" D.float)
+        (D.field "pageY" D.float)
+
+
 decodeMouse : (WindowCoords -> msg) -> D.Decoder msg
 decodeMouse msg =
-    D.map msg
-        (D.map2 WindowCoords
-            (D.field "pageX" D.float)
-            (D.field "pageY" D.float)
-        )
+    D.map msg coordsDecoder
+
+
+singleTouchDecoder : D.Decoder WindowCoords
+singleTouchDecoder =
+    let
+        decodeTouches n =
+            case n of
+                0 ->
+                    D.fail "No touch points"
+
+                1 ->
+                    D.field "0" coordsDecoder
+
+                _ ->
+                    D.fail "More than one touch point"
+    in
+    D.field "length" D.int |> D.andThen decodeTouches
 
 
 decodeTouch : (WindowCoords -> msg) -> D.Decoder msg
 decodeTouch msg =
-    D.map msg
-        (D.map2 WindowCoords
-            (D.at [ "touches", "0" ] <| D.field "pageX" D.float)
-            (D.at [ "touches", "0" ] <| D.field "pageY" D.float)
-        )
+    D.map msg (D.field "touches" singleTouchDecoder)
 
 
 decodeChangedTouch : (WindowCoords -> msg) -> D.Decoder msg
 decodeChangedTouch msg =
-    D.map msg
-        (D.map2 WindowCoords
-            (D.at [ "changedTouches", "0" ] <| D.field "pageX" D.float)
-            (D.at [ "changedTouches", "0" ] <| D.field "pageY" D.float)
-        )
+    D.map msg (D.field "changedTouches" singleTouchDecoder)
 
 
 view : Model -> Browser.Document Msg
