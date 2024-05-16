@@ -2,49 +2,49 @@ module DecodersTests exposing (..)
 
 import Expect
 import Json.Decode as D
-import Main exposing (WindowCoords)
+import Main exposing (Msg(..))
 import Test exposing (..)
 
 
-type alias Case a =
+type alias Case =
     { name : String
     , json : String
-    , decoder : D.Decoder a
-    , decodesTo : Result String a
+    , decoder : D.Decoder Main.Msg
+    , decodesTo : Result String Main.Msg
     }
 
 
-cases : List (Case WindowCoords)
+cases : List Case
 cases =
     [ { name = "Decodes touch"
       , json = """{ "touches": { "0": { "pageX": 2.71828, "pageY": 3.141592 }, "length": 1 } }"""
-      , decoder = Main.decodeTouch identity
-      , decodesTo = Ok { x = 2.71828, y = 3.141592 }
+      , decoder = Main.decodeTouch Main.Moved
+      , decodesTo = Ok <| Main.Moved { x = 2.71828, y = 3.141592, source = Main.Touch }
       }
-    , { name = "Does not decode when nothing touches"
+    , { name = "Decodes to clearing touch when nothing touches"
       , json = """{ "touches": { "length": 0 } }"""
-      , decoder = Main.decodeTouch identity
-      , decodesTo = Err "No touch point"
+      , decoder = Main.decodeTouch Main.Moved
+      , decodesTo = Ok <| Main.ClearTouch
       }
-    , { name = "Does not decode when there are several touches"
+    , { name = "Decodes to clearing touch when there are several touches"
       , json = """{ "touches": { "0": { "pageX": 1, "pageY": 1 }, "1": { "pageX": 2, "pageY": 2 }, "length": 2 } }"""
-      , decoder = Main.decodeTouch identity
-      , decodesTo = Err "More than one touch point"
+      , decoder = Main.decodeTouch Main.Moved
+      , decodesTo = Ok <| Main.ClearTouch
       }
     , { name = "Decodes changed touch"
       , json = """{ "changedTouches": { "0": { "pageX": 2.71828, "pageY": 3.141592 }, "length": 1 } }"""
-      , decoder = Main.decodeChangedTouch identity
-      , decodesTo = Ok { x = 2.71828, y = 3.141592 }
+      , decoder = Main.decodeChangedTouch Main.Moved
+      , decodesTo = Ok <| Main.Moved { x = 2.71828, y = 3.141592, source = Main.Touch }
       }
     ]
 
 
-decodeCase : Case WindowCoords -> Test
+decodeCase : Case -> Test
 decodeCase tc =
     test tc.name <|
         \_ ->
             let
-                decoded : Result String WindowCoords
+                decoded : Result String Main.Msg
                 decoded =
                     D.decodeString tc.decoder tc.json
                         |> Result.mapError D.errorToString

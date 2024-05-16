@@ -82,14 +82,20 @@ init _ url navKey =
 -- UPDATE
 
 
+type ActionSource
+    = Mouse
+    | Touch
+
+
 type alias WindowCoords =
-    { x : Float, y : Float }
+    { x : Float, y : Float, source : ActionSource }
 
 
 type Msg
     = Started WindowCoords
     | Moved WindowCoords
     | Finished WindowCoords
+    | ClearTouch
     | StartedBoard (Result BD.Error Spot)
     | MovedBoard (Result BD.Error Spot)
     | FinishedBoard (Result BD.Error Spot)
@@ -226,6 +232,23 @@ withBoardCoords model windowCoords msg =
         )
 
 
+clearTouch model =
+    { model
+        | startedTouching = Nothing
+        , stagedMove = Nothing
+        , ghostStone = Nothing
+    }
+
+
+guardMultitouch : Model -> WindowCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
+guardMultitouch model windowCoords action =
+    if windowCoords.source == Touch && model.startedTouching == Nothing then
+        ( model, Cmd.none )
+
+    else
+        withBoardCoords model windowCoords action
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -233,10 +256,13 @@ update msg model =
             withBoardCoords model windowCoords StartedBoard
 
         Moved windowCoords ->
-            withBoardCoords model windowCoords MovedBoard
+            guardMultitouch model windowCoords MovedBoard
 
         Finished windowCoords ->
-            withBoardCoords model windowCoords FinishedBoard
+            guardMultitouch model windowCoords FinishedBoard
+
+        ClearTouch ->
+            ( clearTouch model, Cmd.none )
 
         StartedBoard (Ok coords) ->
             ( { model
@@ -259,19 +285,23 @@ update msg model =
 
         FinishedBoard (Ok coords) ->
             let
-                modelNoTouchNoStage =
-                    { model | startedTouching = Nothing, stagedMove = Nothing }
+                ctm =
+                    clearTouch model
             in
             if model.startedTouching == Just coords then
                 case filterStaged coords model of
                     Just staged ->
-                        handlePlay modelNoTouchNoStage staged.spot
+                        handlePlay ctm staged.spot
 
                     Nothing ->
-                        handlePlay modelNoTouchNoStage coords
+                        handlePlay ctm coords
 
             else
-                ( { modelNoTouchNoStage | stagedMove = playStone model coords }
+                let
+                    sm =
+                        playStone model coords
+                in
+                ( { ctm | stagedMove = sm, ghostStone = sm }
                 , Cmd.none
                 )
 
@@ -421,43 +451,44 @@ menuLink action iconText tooltip =
         ]
 
 
-coordsDecoder : D.Decoder WindowCoords
-coordsDecoder =
-    D.map2 WindowCoords
+coordsDecoder : ActionSource -> D.Decoder WindowCoords
+coordsDecoder source =
+    D.map3 WindowCoords
         (D.field "pageX" D.float)
         (D.field "pageY" D.float)
+        (D.succeed source)
 
 
 decodeMouse : (WindowCoords -> msg) -> D.Decoder msg
 decodeMouse msg =
-    D.map msg coordsDecoder
+    D.map msg <| coordsDecoder Mouse
 
 
-singleTouchDecoder : D.Decoder WindowCoords
-singleTouchDecoder =
+singleTouchDecoder : (WindowCoords -> Msg) -> D.Decoder Msg
+singleTouchDecoder msg =
     let
         decodeTouches n =
             case n of
                 0 ->
-                    D.fail "No touch points"
+                    D.succeed ClearTouch
 
                 1 ->
-                    D.field "0" coordsDecoder
+                    D.map msg <| D.field "0" <| coordsDecoder Touch
 
                 _ ->
-                    D.fail "More than one touch point"
+                    D.succeed ClearTouch
     in
     D.field "length" D.int |> D.andThen decodeTouches
 
 
-decodeTouch : (WindowCoords -> msg) -> D.Decoder msg
+decodeTouch : (WindowCoords -> Msg) -> D.Decoder Msg
 decodeTouch msg =
-    D.map msg (D.field "touches" singleTouchDecoder)
+    D.field "touches" <| singleTouchDecoder msg
 
 
-decodeChangedTouch : (WindowCoords -> msg) -> D.Decoder msg
+decodeChangedTouch : (WindowCoords -> Msg) -> D.Decoder Msg
 decodeChangedTouch msg =
-    D.map msg (D.field "changedTouches" singleTouchDecoder)
+    D.field "changedTouches" <| singleTouchDecoder msg
 
 
 view : Model -> Browser.Document Msg
