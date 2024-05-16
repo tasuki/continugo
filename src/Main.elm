@@ -5,12 +5,12 @@ import Browser
 import Browser.Dom as BD
 import Browser.Navigation as Nav
 import Dict
+import DocumentCoords as DC exposing (DocumentCoords)
 import Go exposing (..)
 import Help
 import Html as H
 import Html.Attributes as HA
 import Html.Events as HE
-import Json.Decode as D
 import Maybe.Extra
 import Play
 import Process
@@ -82,19 +82,10 @@ init _ url navKey =
 -- UPDATE
 
 
-type ActionSource
-    = Mouse
-    | Touch
-
-
-type alias WindowCoords =
-    { x : Float, y : Float, source : ActionSource }
-
-
 type Msg
-    = Started WindowCoords
-    | Moved WindowCoords
-    | Finished WindowCoords
+    = Started DocumentCoords
+    | Moved DocumentCoords
+    | Finished DocumentCoords
     | ClearTouch
     | StartedBoard (Result BD.Error Spot)
     | MovedBoard (Result BD.Error Spot)
@@ -211,18 +202,18 @@ filterStaged coords model =
         |> Maybe.Extra.filter (\s -> isWithinStone coords s.spot)
 
 
-withBoardCoords : Model -> WindowCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
-withBoardCoords model windowCoords msg =
+withBoardCoords : Model -> DocumentCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
+withBoardCoords model documentCoords msg =
     let
         toBoardSpot : BD.Element -> Spot
         toBoardSpot element =
             { x =
                 round <|
-                    (windowCoords.x - element.element.x)
+                    (documentCoords.x - element.element.x)
                         * (toFloat coordRange / element.element.width)
             , y =
                 round <|
-                    (windowCoords.y - element.element.y)
+                    (documentCoords.y - element.element.y)
                         * (toFloat coordRange / element.element.height)
             }
     in
@@ -241,26 +232,26 @@ clearTouch model =
     }
 
 
-guardMultitouch : Model -> WindowCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
-guardMultitouch model windowCoords action =
-    if windowCoords.source == Touch && model.startedTouching == Nothing then
+guardMultitouch : Model -> DocumentCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
+guardMultitouch model documentCoords action =
+    if documentCoords.source == DC.Touch && model.startedTouching == Nothing then
         ( model, Cmd.none )
 
     else
-        withBoardCoords model windowCoords action
+        withBoardCoords model documentCoords action
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Started windowCoords ->
-            withBoardCoords model windowCoords StartedBoard
+        Started documentCoords ->
+            withBoardCoords model documentCoords StartedBoard
 
-        Moved windowCoords ->
-            guardMultitouch model windowCoords MovedBoard
+        Moved documentCoords ->
+            guardMultitouch model documentCoords MovedBoard
 
-        Finished windowCoords ->
-            guardMultitouch model windowCoords FinishedBoard
+        Finished documentCoords ->
+            guardMultitouch model documentCoords FinishedBoard
 
         ClearTouch ->
             ( clearTouch model, Cmd.none )
@@ -452,58 +443,6 @@ menuLink action iconText tooltip =
         ]
 
 
-coordsDecoder : ActionSource -> D.Decoder WindowCoords
-coordsDecoder source =
-    D.map3 WindowCoords
-        (D.field "pageX" D.float)
-        (D.field "pageY" D.float)
-        (D.succeed source)
-
-
-decodeMouse : (WindowCoords -> msg) -> D.Decoder msg
-decodeMouse msg =
-    D.map msg <| coordsDecoder Mouse
-
-
-tupleDecoder : ( D.Decoder a, D.Decoder b ) -> D.Decoder ( a, b )
-tupleDecoder ( a, b ) =
-    D.map2 Tuple.pair a b
-
-
-singleTouchDecoder : (WindowCoords -> Msg) -> D.Decoder ( Msg, Bool )
-singleTouchDecoder msg =
-    let
-        decodeTouches : Int -> ( D.Decoder Msg, D.Decoder Bool )
-        decodeTouches n =
-            case n of
-                1 ->
-                    ( D.map msg <| D.field "0" <| coordsDecoder Touch
-                    , D.succeed True
-                    )
-
-                _ ->
-                    ( D.succeed ClearTouch
-                    , D.succeed False
-                    )
-    in
-    D.field "length" D.int |> D.andThen (decodeTouches >> tupleDecoder)
-
-
-decodeSingleTouch : (WindowCoords -> Msg) -> D.Decoder ( Msg, Bool )
-decodeSingleTouch msg =
-    D.field "touches" <| singleTouchDecoder msg
-
-
-decodeTouch : (WindowCoords -> Msg) -> D.Decoder Msg
-decodeTouch msg =
-    D.at [ "touches", "0" ] <| D.map msg <| coordsDecoder Touch
-
-
-decodeChangedTouch : (WindowCoords -> Msg) -> D.Decoder Msg
-decodeChangedTouch msg =
-    D.at [ "changedTouches", "0" ] <| D.map msg <| coordsDecoder Touch
-
-
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -533,13 +472,13 @@ view model =
             else
                 H.div
                     [ HA.id "board-container"
-                    , HE.on "mousedown" <| decodeMouse Started
-                    , HE.on "mousemove" <| decodeMouse Moved
-                    , HE.on "mouseup" <| decodeMouse Finished
-                    , HE.on "touchstart" <| decodeTouch Started
-                    , HE.preventDefaultOn "touchmove" <| decodeSingleTouch Moved
-                    , HE.on "touchend" <| decodeChangedTouch Finished
-                    , HE.on "touchcancel" <| decodeChangedTouch Finished
+                    , HE.on "mousedown" <| DC.decodeMouse Started
+                    , HE.on "mousemove" <| DC.decodeMouse Moved
+                    , HE.on "mouseup" <| DC.decodeMouse Finished
+                    , HE.on "touchstart" <| DC.decodeTouch Started
+                    , HE.preventDefaultOn "touchmove" <| DC.decodeSingleTouch ClearTouch Moved
+                    , HE.on "touchend" <| DC.decodeChangedTouch Finished
+                    , HE.on "touchcancel" <| DC.decodeChangedTouch Finished
                     ]
                     [ H.div
                         [ HA.id "board" ]

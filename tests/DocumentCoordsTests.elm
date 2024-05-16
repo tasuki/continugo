@@ -1,8 +1,8 @@
-module DecodersTests exposing (..)
+module DocumentCoordsTests exposing (..)
 
+import DocumentCoords exposing (..)
 import Expect
 import Json.Decode as D
-import Main exposing (Msg(..))
 import Test exposing (..)
 
 
@@ -14,37 +14,37 @@ type alias Case c =
     }
 
 
-cases : List (Case Main.Msg)
+cases : List (Case DocumentCoords)
 cases =
     [ { name = "Decodes touch"
       , json = """{ "touches": { "0": { "pageX": 2.71828, "pageY": 3.141592 }, "length": 1 } }"""
-      , decoder = Main.decodeTouch Main.Moved
-      , decodesTo = Ok <| Main.Moved { x = 2.71828, y = 3.141592, source = Main.Touch }
+      , decoder = decodeTouch identity
+      , decodesTo = Ok <| { x = 2.71828, y = 3.141592, source = Touch }
       }
     , { name = "Decodes changed touch"
       , json = """{ "changedTouches": { "0": { "pageX": 2.71828, "pageY": 3.141592 }, "length": 1 } }"""
-      , decoder = Main.decodeChangedTouch Main.Moved
-      , decodesTo = Ok <| Main.Moved { x = 2.71828, y = 3.141592, source = Main.Touch }
+      , decoder = decodeChangedTouch identity
+      , decodesTo = Ok <| { x = 2.71828, y = 3.141592, source = Touch }
       }
     ]
 
 
-preventDefaultCases : List (Case ( Main.Msg, Bool ))
+preventDefaultCases : List (Case ( Maybe DocumentCoords, Bool ))
 preventDefaultCases =
     [ { name = "Decodes single touch and prevents default"
       , json = """{ "touches": { "0": { "pageX": 2.71828, "pageY": 3.141592 }, "length": 1 } }"""
-      , decoder = Main.decodeSingleTouch Main.Moved
-      , decodesTo = Ok <| ( Main.Moved { x = 2.71828, y = 3.141592, source = Main.Touch }, True )
+      , decoder = decodeSingleTouch Nothing Just
+      , decodesTo = Ok <| ( Just { x = 2.71828, y = 3.141592, source = Touch }, True )
       }
     , { name = "Decodes to clearing touch and not preventing default when there are several touches"
       , json = """{ "touches": { "0": { "pageX": 1, "pageY": 1 }, "1": { "pageX": 2, "pageY": 2 }, "length": 2 } }"""
-      , decoder = Main.decodeSingleTouch Main.Moved
-      , decodesTo = Ok <| ( Main.ClearTouch, False )
+      , decoder = decodeSingleTouch Nothing Just
+      , decodesTo = Ok <| ( Nothing, False )
       }
     , { name = "Decodes to clearing touch and not preventing default when nothing touches"
       , json = """{ "touches": { "length": 0 } }"""
-      , decoder = Main.decodeSingleTouch Main.Moved
-      , decodesTo = Ok <| ( Main.ClearTouch, False )
+      , decoder = decodeSingleTouch Nothing Just
+      , decodesTo = Ok <| ( Nothing, False )
       }
     ]
 
