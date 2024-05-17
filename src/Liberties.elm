@@ -1,9 +1,4 @@
-module Liberties exposing
-    ( findLiberties
-    , findNearestPlayable
-    , hasLiberties
-    , uniqueLiberties
-    )
+module Liberties exposing (..)
 
 import Go exposing (..)
 
@@ -58,7 +53,7 @@ zeroLibCandidates =
             List.range -(ceiling adjacentDistance) (ceiling adjacentDistance)
     in
     List.concatMap (\x -> List.map (Spot x) range) range
-        |> List.filter (\s -> not <| overlapsAny s [ zero ])
+        |> List.filter (\s -> not <| overlaps s zero)
         |> List.filter (adjacent zero)
         |> List.sortBy (distance zero)
 

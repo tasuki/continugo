@@ -1,4 +1,4 @@
-module Play exposing (groupAndItsLiberties, playNearby, playStones)
+module Play exposing (groupAndItsLiberties, playIfLegal, playNearby, playStones)
 
 import Dict
 import Go exposing (..)

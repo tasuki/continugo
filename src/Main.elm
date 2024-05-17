@@ -6,11 +6,13 @@ import Browser.Dom as BD
 import Browser.Navigation as Nav
 import Dict
 import DocumentCoords as DC exposing (DocumentCoords)
+import DragFrom as DF exposing (DragFrom)
 import Go exposing (..)
 import Help
 import Html as H
 import Html.Attributes as HA
 import Html.Events as HE
+import List.Extra
 import Maybe.Extra
 import Play
 import Process
@@ -40,12 +42,6 @@ main =
 -- MODEL
 
 
-type DragFrom
-    = DragNone
-    | DragSpot Spot
-    | DragStone Stone
-
-
 type alias Model =
     { record : List Play
     , stones : Stones
@@ -72,7 +68,7 @@ emptyModel navKey =
     , justPlayed = Nothing
     , justRemoved = []
     , onMove = Black
-    , dragFrom = DragNone
+    , dragFrom = DF.DragNone
     , stagedMove = Nothing
     , showHelp = False
     , navKey = navKey
@@ -112,8 +108,7 @@ handleHover model hoverSpot =
         maybeOverStone : Maybe Stone
         maybeOverStone =
             stoneList model.stones
-                |> List.filter (\s -> isWithinStone hoverSpot s.spot)
-                |> List.head
+                |> List.Extra.find (\s -> isWithinStone hoverSpot s.spot)
 
         memberOfHighlighted : Stone -> Bool
         memberOfHighlighted stone =
@@ -157,6 +152,26 @@ handleHover model hoverSpot =
             }
 
 
+handleDrag : Model -> Stone -> Spot -> Model
+handleDrag model draggedFrom draggedTo =
+    let
+        stone : Stone
+        stone =
+            DF.findDragged model.stones model.onMove draggedFrom draggedTo
+
+        ghostStone : Maybe Stone
+        ghostStone =
+            Play.playIfLegal model.stones stone
+                |> Maybe.andThen (Dict.get (stoneKey stone))
+    in
+    { model
+        | ghostStone = ghostStone
+        , highlightedGroup = []
+        , highlightedLiberties = []
+        , justPlayed = Nothing
+    }
+
+
 handlePlay : Model -> Spot -> ( Model, Cmd Msg )
 handlePlay model playSpot =
     case Play.playNearby model.onMove model.stones playSpot of
@@ -167,13 +182,14 @@ handlePlay model playSpot =
                     { player = played.player, move = Place played }
 
                 newModel =
-                    { model
-                        | record = play :: model.record
-                        , stones = stones
-                        , onMove = otherPlayer model.onMove
-                        , justPlayed = Just played.spot
-                        , justRemoved = removedStones model.stones stones
-                    }
+                    clearTouch
+                        { model
+                            | record = play :: model.record
+                            , stones = stones
+                            , onMove = otherPlayer model.onMove
+                            , justPlayed = Just played.spot
+                            , justRemoved = removedStones model.stones stones
+                        }
             in
             ( newModel
             , Cmd.batch
@@ -184,7 +200,7 @@ handlePlay model playSpot =
 
         _ ->
             -- illegal move
-            ( model, Cmd.none )
+            ( clearTouch model, Cmd.none )
 
 
 playStone : Spot -> Model -> Maybe Stone
@@ -220,7 +236,7 @@ withBoardCoords model documentCoords msg =
 
 withBoardCoordsGuardMultitouch : Model -> DocumentCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
 withBoardCoordsGuardMultitouch model documentCoords action =
-    if documentCoords.source == DC.Touch && model.dragFrom == DragNone then
+    if documentCoords.source == DC.Touch && model.dragFrom == DF.DragNone then
         ( model, Cmd.none )
 
     else
@@ -230,10 +246,25 @@ withBoardCoordsGuardMultitouch model documentCoords action =
 clearTouch : Model -> Model
 clearTouch model =
     { model
-        | dragFrom = DragNone
+        | dragFrom = DF.DragNone
         , stagedMove = Nothing
         , ghostStone = Nothing
     }
+
+
+handleMove : Spot -> Model -> Model
+handleMove coords model =
+    case ( filterStaged coords model, model.dragFrom ) of
+        ( Just _, _ ) ->
+            -- hovering over staged move
+            model
+
+        ( _, DF.DragStone draggedFrom ) ->
+            handleDrag model draggedFrom coords
+
+        _ ->
+            -- just hovering
+            handleHover { model | stagedMove = Nothing } coords
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -253,42 +284,29 @@ update msg model =
 
         StartedBoard (Ok coords) ->
             ( { model
-                | dragFrom = DragSpot coords
+                | dragFrom = DF.getDragFrom model.stones model.onMove coords
                 , stagedMove = filterStaged coords model
               }
             , Cmd.none
             )
 
         MovedBoard (Ok coords) ->
-            case filterStaged coords model of
-                Just _ ->
-                    -- hovering over staged move
-                    ( model, Cmd.none )
-
-                Nothing ->
-                    ( handleHover { model | stagedMove = Nothing } coords
-                    , Cmd.none
-                    )
+            ( handleMove coords model, Cmd.none )
 
         FinishedBoard (Ok coords) ->
-            let
-                ctm =
-                    clearTouch model
-            in
-            if model.dragFrom == DragSpot coords then
+            if model.dragFrom == DF.DragSpot coords then
                 case filterStaged coords model of
                     Just staged ->
-                        handlePlay ctm staged.spot
+                        handlePlay model staged.spot
 
                     Nothing ->
-                        handlePlay ctm coords
+                        handlePlay model coords
 
             else
-                let
-                    sm =
-                        playStone coords model
-                in
-                ( { ctm | stagedMove = sm, ghostStone = sm }
+                ( { model
+                    | dragFrom = DF.DragNone
+                    , stagedMove = model.ghostStone
+                  }
                 , Cmd.none
                 )
 
