@@ -44,15 +44,16 @@ main =
 
 type alias Model =
     { record : List Play
+    , onMove : Player
     , stones : Stones
     , ghostStone : Maybe Stone
     , highlightedGroup : List Spot
     , highlightedLiberties : List Spot
     , justPlayed : Maybe Spot
     , justRemoved : List Stone
-    , onMove : Player
     , dragFrom : DragFrom
     , stagedMove : Maybe Stone
+    , lastPointer : Maybe Spot
     , showHelp : Bool
     , navKey : Nav.Key
     }
@@ -61,15 +62,16 @@ type alias Model =
 emptyModel : Nav.Key -> Model
 emptyModel navKey =
     { record = []
+    , onMove = Black
     , stones = Dict.empty
     , ghostStone = Nothing
     , highlightedGroup = []
     , highlightedLiberties = []
     , justPlayed = Nothing
     , justRemoved = []
-    , onMove = Black
     , dragFrom = DF.DragNone
     , stagedMove = Nothing
+    , lastPointer = Nothing
     , showHelp = False
     , navKey = navKey
     }
@@ -252,8 +254,8 @@ clearTouch model =
     }
 
 
-handleMove : Spot -> Model -> Model
-handleMove coords model =
+handleMoved : Spot -> Model -> Model
+handleMoved coords model =
     case ( filterStaged coords model, model.dragFrom ) of
         ( Just _, _ ) ->
             -- hovering over staged move
@@ -263,8 +265,18 @@ handleMove coords model =
             handleDrag model draggedFrom coords
 
         _ ->
-            -- just hovering
-            handleHover { model | stagedMove = Nothing } coords
+            -- handle hovering
+            let
+                gettingCloser : ( Stone, Spot ) -> Bool
+                gettingCloser ( staged, lastPointer ) =
+                    distance staged.spot lastPointer + 1 >= distance staged.spot coords
+            in
+            Maybe.map2 Tuple.pair model.stagedMove model.lastPointer
+                |> Maybe.Extra.filter gettingCloser
+                -- if getting closer, keep the staged move
+                |> Maybe.map (\_ -> model)
+                -- if getting farther or n/a, clear the staged move
+                |> Maybe.withDefault (handleHover { model | stagedMove = Nothing } coords)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -291,7 +303,11 @@ update msg model =
             )
 
         MovedBoard (Ok coords) ->
-            ( handleMove coords model, Cmd.none )
+            let
+                setLastPointer m =
+                    { m | lastPointer = Just coords }
+            in
+            ( handleMoved coords model |> setLastPointer, Cmd.none )
 
         FinishedBoard (Ok coords) ->
             if model.dragFrom == DF.DragSpot coords then
