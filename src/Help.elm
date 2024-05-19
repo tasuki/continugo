@@ -9,32 +9,34 @@ help =
     Markdown.toHtml [] """
 ## ContinuGo
 
-Long enough have we suffered under the constraints imposed upon us by the grid of intersections. Down with the grid!
+Long have we suffered under the tyranny of the grid of intersections. Down with the grid!
 
 ### Rules
 
-1. You know [how to play go](https://online-go.com/learn-to-play-go/). Exceptions and clarifications below.
-2. Go is played on an empty square, called a board. It may have lines drawn on it who cares about those.
-3. **Stones may not overlap.**
-4. A point on the board where a stone would fit is called a spot.
-5. Spots whose centres are closer than **the stone diameter times the square root of two** are *considered adjacent* and, when occupied by friendly stones, are shown connected by a line.
-6. A **liberty is an adjacent spot where a stone would fit**.
-7. When a stone or a group of connected stones has no liberties, it is captured.
-8. Ko: one may not capture just one stone if that stone was played on the previous move and captured just one stone. No positional superko fuck off.
-9. Scoring: after two consecutive passes, whoever has more stones on the board wins (yes we have group tax!).
+1. You know [how to play go](https://online-go.com/learn-to-play-go/). Here are the exceptions and clarifications.
+2. Go is played on an empty square, called a board. Lines may be drawn on it who cares about those.
+3. Stones may not overlap.
+4. A point on the board where a stone can fit is called a spot.
+5. Spots whose centres are **closer than the stone diameter times the square root of two are considered adjacent**. Adjacent spots occupied by friendly stones are shown connected by a line.
+6. A **liberty is an adjacent spot where a stone can fit**.
+7. When a stone or a group of connected stones loses all liberties, it is captured.
+8. Ko: one may not capture just one stone if that stone was played on the previous turn and captured just one stone. No positional superko fuck off.
+9. Scoring: after two consecutive passes, whoever has more stones on the board wins. (Yes, area scoring with group tax!)
 
 ### How to actually play
 
-So far only taking turns on a single-device is implemented. The url holds the game record - you can bookmark the current position, share it, use the browser back button to undo, etc.
+- Currently, only taking turns on a single device is implemented.
+- The url holds the game record - you can bookmark the current position, share it to play by email, use the browser back button to undo, etc.
+- Hover over (or touch) stones to see their liberties.
+- Mouse down and move (or touch-move) to stage a move, then click the staged move to confirm it.
+- Pull from your own stone to place a stone as far as possible while it stays connected.
+- If a spot clearly has enough space for a stone but the stone is not appearing, that means playing there would be a suicide.
+- While suicide itself is not allowed, you can **capture another group of your own stones** by removing their last liberty. It feels this could be useful at times.
 
-Some possible gotchas, I think these are - and should be - a part of the game, but some of are weird:
+### Code/bugs/feedback
 
-- Sometimes there's a spot where there's clearly enough space to put a stone but the stone is not appearing: that's because playing there would be a suicide.
-- While suicide by itself is not allowed (it wouldn't be a good move ever I think?), it's perfectly possible to capture *another* group of your stones by removing their last liberty (ie by preventing placement of any and all stones which would be connected to it). I don't want to disallow playing a perfectly valid move just because it captures.
+How else could go work if not played on the grid?
+It feels like I discovered this rather than invented it...
 
-I don't think the rules can be much different, but if you have any ideas I'd love to hear them!
-
-### Code/bugs
-
-[Code is on GitHub](https://github.com/tasuki/continugo), [bug reports also go there](https://github.com/tasuki/continugo/issues).
+[Code available on GitHub](https://github.com/tasuki/continugo), [bug reports and feature requests also go there please](https://github.com/tasuki/continugo/issues).
 """
