@@ -157,14 +157,14 @@ handleHover model hoverSpot =
 handleDrag : Model -> Stone -> Spot -> Model
 handleDrag model draggedFrom draggedTo =
     let
-        stone : Stone
-        stone =
+        candidateStone : Stone
+        candidateStone =
             DF.findDragged model.stones model.onMove draggedFrom draggedTo
 
         ghostStone : Maybe Stone
         ghostStone =
-            Play.playIfLegal model.stones stone
-                |> Maybe.andThen (Dict.get (stoneKey stone))
+            Play.playIfLegal model.stones candidateStone
+                |> Maybe.andThen (Dict.get (stoneKey candidateStone))
     in
     { model
         | ghostStone = ghostStone
@@ -184,14 +184,13 @@ handlePlay model playSpot =
                     { player = played.player, move = Place played }
 
                 newModel =
-                    clearTouch
-                        { model
-                            | record = play :: model.record
-                            , stones = stones
-                            , onMove = otherPlayer model.onMove
-                            , justPlayed = Just played.spot
-                            , justRemoved = removedStones model.stones stones
-                        }
+                    { model
+                        | record = play :: model.record
+                        , stones = stones
+                        , onMove = otherPlayer model.onMove
+                        , justPlayed = Just played.spot
+                        , justRemoved = removedStones model.stones stones
+                    }
             in
             ( newModel
             , Cmd.batch
@@ -202,7 +201,7 @@ handlePlay model playSpot =
 
         _ ->
             -- illegal move
-            ( clearTouch model, Cmd.none )
+            ( model, Cmd.none )
 
 
 playStone : Spot -> Model -> Maybe Stone
@@ -218,40 +217,31 @@ filterStaged coords model =
 
 
 ifNotFinished : Model -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
-ifNotFinished model inf =
+ifNotFinished model newModelCmd =
     if isFinished model.record then
         ( model, Cmd.none )
 
     else
-        inf
+        newModelCmd
 
 
-withBoardCoords : Model -> DocumentCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
-withBoardCoords model documentCoords msg =
+ifNoMultiTouch : DocumentCoords -> Model -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+ifNoMultiTouch documentCoords model newModelCmd =
+    if documentCoords.source == DC.Touch && model.dragFrom == DF.DragNone then
+        ( model, Cmd.none )
+
+    else
+        newModelCmd
+
+
+withBoardCoords : DocumentCoords -> Model -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
+withBoardCoords documentCoords model msg =
     ifNotFinished model
         ( model
         , Task.attempt msg <|
             Task.map (DC.toBoardSpot documentCoords) <|
                 BD.getElement "board"
         )
-
-
-withBoardCoordsGuardMultitouch : Model -> DocumentCoords -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
-withBoardCoordsGuardMultitouch model documentCoords action =
-    if documentCoords.source == DC.Touch && model.dragFrom == DF.DragNone then
-        ( model, Cmd.none )
-
-    else
-        withBoardCoords model documentCoords action
-
-
-clearTouch : Model -> Model
-clearTouch model =
-    { model
-        | dragFrom = DF.DragNone
-        , stagedMove = Nothing
-        , ghostStone = Nothing
-    }
 
 
 handleMoved : Spot -> Model -> Model
@@ -269,7 +259,7 @@ handleMoved coords model =
             let
                 gettingCloser : ( Stone, Spot ) -> Bool
                 gettingCloser ( staged, lastPointer ) =
-                    distance staged.spot lastPointer + 1 >= distance staged.spot coords
+                    distance staged.spot lastPointer > distance staged.spot coords
             in
             Maybe.map2 Tuple.pair model.stagedMove model.lastPointer
                 |> Maybe.Extra.filter gettingCloser
@@ -283,16 +273,23 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Started documentCoords ->
-            withBoardCoords model documentCoords StartedBoard
+            withBoardCoords documentCoords model StartedBoard
 
         Moved documentCoords ->
-            withBoardCoordsGuardMultitouch model documentCoords MovedBoard
+            ifNoMultiTouch documentCoords model <|
+                withBoardCoords documentCoords model MovedBoard
 
         Finished documentCoords ->
-            withBoardCoordsGuardMultitouch model documentCoords FinishedBoard
+            ifNoMultiTouch documentCoords model <|
+                withBoardCoords documentCoords model FinishedBoard
 
         ClearTouch ->
-            ( clearTouch model, Cmd.none )
+            ( { model
+                | dragFrom = DF.DragNone
+                , ghostStone = Nothing
+              }
+            , Cmd.none
+            )
 
         StartedBoard (Ok coords) ->
             ( { model
@@ -311,12 +308,20 @@ update msg model =
 
         FinishedBoard (Ok coords) ->
             if model.dragFrom == DF.DragSpot coords then
+                let
+                    cleared =
+                        { model
+                            | dragFrom = DF.DragNone
+                            , stagedMove = Nothing
+                            , ghostStone = Nothing
+                        }
+                in
                 case filterStaged coords model of
                     Just staged ->
-                        handlePlay model staged.spot
+                        handlePlay cleared staged.spot
 
                     Nothing ->
-                        handlePlay model coords
+                        handlePlay cleared coords
 
             else
                 ( { model
@@ -385,8 +390,7 @@ changeRouteTo url model =
         maybeRecord =
             Maybe.map (Regex.find recordRegex) url.query
                 |> Maybe.andThen List.head
-                |> Maybe.map .submatches
-                |> Maybe.andThen List.head
+                |> Maybe.andThen (.submatches >> List.head)
                 |> Maybe.andThen identity
                 |> Maybe.map (Sgf.decode >> List.reverse)
 
@@ -397,8 +401,7 @@ changeRouteTo url model =
                 , stones = Play.playStones (List.reverse record) Dict.empty
                 , onMove =
                     List.head record
-                        |> Maybe.map .player
-                        |> Maybe.map otherPlayer
+                        |> Maybe.map (.player >> otherPlayer)
                         |> Maybe.withDefault Black
             }
 
