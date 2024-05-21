@@ -1,0 +1,15 @@
+{
+    "name": "ContinuGo",
+    "short_name": "ContinuGo",
+    "start_url": "",
+    "display": "standalone",
+    "background_color": "#FFF",
+    "theme_color": "#FFF",
+    "icons": [
+        {
+            "src": "media/favicon.svg",
+            "type": "image/svg+xml",
+            "sizes": "any"
+        }
+    ]
+}
