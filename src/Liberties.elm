@@ -1,5 +1,6 @@
 module Liberties exposing (..)
 
+import Board exposing (stoneRadius)
 import Go exposing (..)
 
 
@@ -94,10 +95,10 @@ zeroNpCandidates =
     -- precompute circle of candidates around zero: 4.5k spots
     let
         range =
-            List.range -stoneR stoneR
+            List.range -stoneRadius stoneRadius
     in
     List.concatMap (\x -> List.map (Spot x) range) range
-        |> List.filter (\s -> distance s zero < stoneR)
+        |> List.filter (\s -> distance s zero < toFloat stoneRadius)
         |> List.sortBy (distance zero)
 
 

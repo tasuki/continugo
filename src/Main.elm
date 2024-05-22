@@ -515,7 +515,7 @@ view model =
                     [ H.div
                         [ HA.id "board" ]
                         [ Svg.svg
-                            [ SA.viewBox <| intsToStr [ 0, 0, coordRange, coordRange ] ]
+                            [ SA.viewBox <| intsToStr [ 0, 0, Board.coordRange, Board.coordRange ] ]
                             (viewSvg model)
                         , score
                         ]

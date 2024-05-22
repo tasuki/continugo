@@ -1,5 +1,6 @@
 module DocumentCoords exposing (..)
 
+import Board
 import Browser.Dom as BD
 import Go
 import Json.Decode as D
@@ -23,11 +24,11 @@ toBoardSpot documentCoords element =
     { x =
         round <|
             (documentCoords.x - element.element.x)
-                * (toFloat Go.coordRange / element.element.width)
+                * (toFloat Board.coordRange / element.element.width)
     , y =
         round <|
             (documentCoords.y - element.element.y)
-                * (toFloat Go.coordRange / element.element.height)
+                * (toFloat Board.coordRange / element.element.height)
     }
 
 

@@ -1,5 +1,6 @@
 module Go exposing (..)
 
+import Board exposing (coordRange, stoneRadius)
 import Dict exposing (Dict)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
@@ -10,31 +11,22 @@ import Svg.Lazy exposing (..)
 -- Config and constants
 
 
-coordRange =
-    -- number of coordinates on actual board
-    -- sorry this is actually still discrete
-    1000
-
-
-stoneR =
-    -- stone radius: coordRange / boardSize / 2
-    -- 9x9: 55.6, 13x13: 38.5, 19x19: 26.3
-    38
-
-
+diameter : Int
 diameter =
     -- stone diameter
-    2 * stoneR
+    2 * stoneRadius
 
 
+adjacentDistance : Float
 adjacentDistance =
     -- stones which are considered connected
-    1.4142 * diameter
+    sqrt 2 * toFloat diameter
 
 
+nearbyDistance : Float
 nearbyDistance =
     -- stones that could affect this stone's liberty status
-    2 * diameter + adjacentDistance
+    2 * toFloat diameter + adjacentDistance
 
 
 
@@ -53,12 +45,12 @@ distance s1 s2 =
 
 isWithinStone : Spot -> Spot -> Bool
 isWithinStone s1 s2 =
-    distance s1 s2 < stoneR
+    distance s1 s2 < toFloat stoneRadius
 
 
 overlaps : Spot -> Spot -> Bool
 overlaps s1 s2 =
-    distance s1 s2 < diameter
+    distance s1 s2 < toFloat diameter
 
 
 overlapsAny : Spot -> List Spot -> Bool
@@ -73,12 +65,12 @@ adjacent s1 s2 =
 
 boardMin : Int
 boardMin =
-    stoneR
+    stoneRadius
 
 
 boardMax : Int
 boardMax =
-    coordRange - stoneR
+    coordRange - stoneRadius
 
 
 isWithinBoard : Spot -> Bool
@@ -335,7 +327,7 @@ spotBorderNearestTo : Spot -> Spot -> Spot
 spotBorderNearestTo otherSpot spot =
     let
         factor =
-            stoneR / distance spot otherSpot
+            toFloat stoneRadius / distance spot otherSpot
 
         roundAwayFromZero x =
             if x < 0 then
@@ -359,7 +351,7 @@ hideLines { spot } =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt <| stoneR * 7
+        , SA.r <| String.fromInt <| stoneRadius * 7
         ]
         []
 
@@ -378,7 +370,7 @@ viewStone extraClass { player, spot } =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt stoneR
+        , SA.r <| String.fromInt stoneRadius
         , SA.class class
         , SA.class extraClass
         ]
@@ -390,7 +382,7 @@ viewHighlight spot =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt stoneR
+        , SA.r <| String.fromInt stoneRadius
         ]
         []
 
@@ -400,7 +392,7 @@ viewLiberty spot =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt stoneR
+        , SA.r <| String.fromInt stoneRadius
         ]
         []
 

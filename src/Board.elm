@@ -1,21 +1,39 @@
 module Board exposing (..)
 
-import Go exposing (coordRange)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 
 
+coordRange : Int
+coordRange =
+    -- number of coordinates on actual board
+    -- sorry this is actually still discrete
+    1000
+
+
+boardSize : Int
 boardSize =
+    -- the number of "intersections"
+    -- what was an intersection again?
     13
 
 
-preciseR =
-    coordRange / (boardSize * 2)
+preciseRadius : Float
+preciseRadius =
+    -- for drawing the lines
+    toFloat coordRange / (toFloat boardSize * 2)
+
+
+stoneRadius : Int
+stoneRadius =
+    -- 9x9: 55.55, 13x13: 38.46, 19x19: 26.31
+    -- this doesn't work as a float for a multitude of reasons
+    floor preciseRadius
 
 
 offset : Float -> Float
-offset lines =
-    lines * preciseR * 2 - preciseR
+offset offsetBy =
+    offsetBy * preciseRadius * 2 - preciseRadius
 
 
 viewLines : List (Svg msg)
@@ -31,7 +49,7 @@ viewLines =
                 []
 
         ( start, end ) =
-            ( preciseR, offset boardSize )
+            ( preciseRadius, offset <| toFloat boardSize )
 
         offsets =
             List.range 1 boardSize |> List.map toFloat
@@ -51,10 +69,11 @@ viewStars =
         ( a, z ) =
             ( 4, boardSize - 3 )
 
+        star : Int -> Int -> Svg msg
         star x y =
             Svg.circle
-                [ SA.cx <| String.fromFloat (offset x)
-                , SA.cy <| String.fromFloat (offset y)
+                [ SA.cx <| String.fromFloat <| offset <| toFloat x
+                , SA.cy <| String.fromFloat <| offset <| toFloat y
                 , SA.r <| String.fromInt 4
                 ]
                 []
