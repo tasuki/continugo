@@ -13,7 +13,9 @@ The idea might be bad, but it is not even original.
 - [AnalogChess](https://github.com/ehulinsky/AnalogChess), [play online](https://replit.com/@EricMiller8/AnalogChess-fixed-icons)
 - [Not Tetris 2](https://stabyourself.net/nottetris2/), [source](https://github.com/Stabyourself/nottetris2/tree/master)
 
-## Setup
+## Develop
+
+[![CI](https://github.com/tasuki/continugo/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/tasuki/continugo/actions/workflows/ci.yml)
 
 On Debian 12 Bookworm:
 
