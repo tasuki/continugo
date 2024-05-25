@@ -30,15 +30,8 @@ newOpenClosed stones toExplore open closed =
             toExplore.adjacent
                 |> spotsToStones stones
                 |> List.filter isClosed
-
-        newOpen : List Stone
-        newOpen =
-            toOpen ++ open
-
-        newClosed =
-            toOpen ++ closed
     in
-    ( newOpen, newClosed )
+    ( toOpen ++ open, toOpen ++ closed )
 
 
 
@@ -105,7 +98,7 @@ takeAll player spots stones =
                 |> List.filter (\s -> s.player == player)
                 |> List.concatMap (findGroupWithoutLiberties stones)
     in
-    List.foldl (\s acc -> removeStone s acc) stones toRemove
+    List.foldl removeStone stones toRemove
 
 
 maybePlay : Stone -> Stones -> Maybe Stones
