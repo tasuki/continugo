@@ -1,4 +1,4 @@
-module Sgf exposing (decode, encode)
+module Sgf exposing (decode, decodePlay, encode)
 
 import Go exposing (..)
 import List.Extra
