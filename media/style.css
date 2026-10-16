@@ -27,12 +27,12 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 #board { width: 100vmin; height: 100vmin; background-color: #CB5; position: relative; }
 #lines { stroke: #0009; stroke-width: 1.5; }
 #stars { fill: #0009; }
-#dead-zone-fill { fill: #A94; }
+#dead-zone-fill { fill: #3333; }
 
 #hide-lines circle { fill: #CB5; animation: 5s fadeInOpacity; }
 @keyframes fadeInOpacity { 0% { opacity: 0; } 100% { opacity: 1; } }
 
-#liberties { stroke: #0002; fill: #0002; stroke-width: 4; }
+#liberty-area-fill { fill: #9003; }
 #ghost-links, #ghost-stone { opacity: 0.4; }
 #staged-stone circle { stroke: #900; fill:transparent; stroke-width: 4; }
 #stones, #links, #ghost-stone, #ghost-links, #removed-stones { stroke: #222; stroke-width: 4; }

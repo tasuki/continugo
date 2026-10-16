@@ -1,4 +1,4 @@
-module Play exposing (groupAndItsLiberties, playIfLegal, playNearby, playStones)
+module Play exposing (group, playIfLegal, playNearby, playStones)
 
 import Dict
 import Go exposing (..)
@@ -35,31 +35,22 @@ newOpenClosed stones toExplore open closed =
 
 
 
--- Group and its liberties
+-- Group
 
 
-findGroupAndItsLiberties : Stones -> List Spot -> ( Open, Closed ) -> ( List Stone, List Spot )
-findGroupAndItsLiberties stones liberties ( open, closed ) =
+findGroup : Stones -> ( Open, Closed ) -> List Stone
+findGroup stones ( open, closed ) =
     case open of
         [] ->
-            -- that's it, we found the whole group
-            ( closed
-            , Liberties.uniqueLiberties liberties
-            )
+            closed
 
         toExplore :: exploreLater ->
-            -- wait there's more
-            let
-                newLiberties =
-                    Liberties.findLiberties toExplore toExplore.nearby
-            in
-            findGroupAndItsLiberties stones (newLiberties ++ liberties) <|
-                newOpenClosed stones toExplore exploreLater closed
+            findGroup stones (newOpenClosed stones toExplore exploreLater closed)
 
 
-groupAndItsLiberties : Stones -> Stone -> ( List Stone, List Spot )
-groupAndItsLiberties stones stone =
-    findGroupAndItsLiberties stones [] ( [ stone ], [ stone ] )
+group : Stones -> Stone -> List Stone
+group stones stone =
+    findGroup stones ( [ stone ], [ stone ] )
 
 
 

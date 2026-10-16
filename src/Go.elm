@@ -387,16 +387,6 @@ viewHighlight spot =
         []
 
 
-viewLiberty : Spot -> Svg msg
-viewLiberty spot =
-    Svg.circle
-        [ SA.cx <| String.fromInt spot.x
-        , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt stoneRadius
-        ]
-        []
-
-
 viewLink : ( Spot, Spot ) -> Svg msg
 viewLink ( s1, s2 ) =
     Svg.line

@@ -1,4 +1,4 @@
-module DeadZones exposing (Geometry, Point, canCover, geometry, view)
+module DeadZones exposing (Geometry, Point, canCover, geometry, libertyGeometry, view, viewLiberties)
 
 {-| A visual, continuous-space model, independent of turns and suicide rules.
 
@@ -8,10 +8,13 @@ keep its interior, and stroke its exposed boundary with a round, diameter-wide
 stroke. Intersection points are kept too, even when a playable pocket shrinks
 to a single point and has no boundary arcs left.
 
+For a group's liberty-area, first restrict the possible centres to the union
+of adjacency discs around its members. Both displays share the same sweep.
+
 -}
 
 import Board exposing (coordRange, stoneRadius)
-import Go exposing (Spot, Stones, diameter, spotKeyStr, stoneList)
+import Go exposing (Spot, Stones, adjacentDistance, diameter, spotKeyStr, stoneList)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 import Svg.Keyed
@@ -21,8 +24,12 @@ type alias Point =
     { x : Float, y : Float }
 
 
+type alias Circle =
+    { center : Point, radius : Float }
+
+
 type alias Arc =
-    { center : Point, start : Float, end : Float }
+    { center : Point, radius : Float, start : Float, end : Float }
 
 
 type alias Line =
@@ -31,6 +38,7 @@ type alias Line =
 
 type alias Geometry =
     { centers : List Point
+    , reach : Maybe (List Point)
     , arcs : List Arc
     , lines : List Line
     , points : List Point
@@ -72,9 +80,21 @@ placeable centers p =
     p.x >= low - epsilon && p.x <= high + epsilon && p.y >= low - epsilon && p.y <= high + epsilon && List.all (\c -> distance c p >= deadRadius - epsilon) centers
 
 
-onCircle : Point -> Float -> Point
+inReach : Maybe (List Point) -> Point -> Bool
+inReach reach p =
+    reach
+        |> Maybe.map (List.any (\c -> distance c p <= adjacentDistance + epsilon))
+        |> Maybe.withDefault True
+
+
+validCenter : List Point -> Maybe (List Point) -> Point -> Bool
+validCenter centers reach p =
+    placeable centers p && inReach reach p
+
+
+onCircle : { a | center : Point, radius : Float } -> Float -> Point
 onCircle c angle =
-    Point (c.x + deadRadius * cos angle) (c.y + deadRadius * sin angle)
+    Point (c.center.x + c.radius * cos angle) (c.center.y + c.radius * sin angle)
 
 
 angleOf : Point -> Point -> Float
@@ -90,33 +110,36 @@ angleOf c p =
         angle
 
 
-circleCrossings : Point -> Point -> List Point
+circleCrossings : Circle -> Circle -> List Point
 circleCrossings a b =
     let
         d =
-            distance a b
+            distance a.center b.center
     in
-    if d <= epsilon || d > 2 * deadRadius then
+    if d <= epsilon || d > a.radius + b.radius || d < abs (a.radius - b.radius) then
         []
 
     else
         let
+            alongCenters =
+                (a.radius ^ 2 - b.radius ^ 2 + d ^ 2) / (2 * d)
+
             h =
-                sqrt (max 0 (deadRadius ^ 2 - (d / 2) ^ 2))
+                sqrt (max 0 (a.radius ^ 2 - alongCenters ^ 2))
+
+            ux =
+                (b.center.x - a.center.x) / d
+
+            uy =
+                (b.center.y - a.center.y) / d
 
             mx =
-                (a.x + b.x) / 2
+                a.center.x + alongCenters * ux
 
             my =
-                (a.y + b.y) / 2
-
-            dx =
-                (b.x - a.x) / d * h
-
-            dy =
-                (b.y - a.y) / d * h
+                a.center.y + alongCenters * uy
         in
-        [ Point (mx - dy) (my + dx), Point (mx + dy) (my - dx) ]
+        [ Point (mx - h * uy) (my + h * ux), Point (mx + h * uy) (my - h * ux) ]
 
 
 boardEdges : List Line
@@ -135,7 +158,7 @@ along line t =
         (line.start.y + t * (line.end.y - line.start.y))
 
 
-lineCrossings : Line -> Point -> List Float
+lineCrossings : Line -> Circle -> List Float
 lineCrossings line c =
     let
         dx =
@@ -148,10 +171,10 @@ lineCrossings line c =
             dx ^ 2 + dy ^ 2
 
         b =
-            2 * (dx * (line.start.x - c.x) + dy * (line.start.y - c.y))
+            2 * (dx * (line.start.x - c.center.x) + dy * (line.start.y - c.center.y))
 
         cc =
-            (line.start.x - c.x) ^ 2 + (line.start.y - c.y) ^ 2 - deadRadius ^ 2
+            (line.start.x - c.center.x) ^ 2 + (line.start.y - c.center.y) ^ 2 - c.radius ^ 2
 
         discriminant =
             b ^ 2 - 4 * a * cc
@@ -175,51 +198,79 @@ intervals values =
 
 
 geometry : List Spot -> Geometry
-geometry spots =
+geometry =
+    regionGeometry Nothing
+
+
+{-| Restrict possible centres to spots adjacent to at least one group member,
+then expand by a stone radius, just like the deadzone's swept area.
+-}
+libertyGeometry : List Spot -> List Spot -> Geometry
+libertyGeometry stones group =
+    regionGeometry (Just group) stones
+
+
+toPoint : Spot -> Point
+toPoint p =
+    Point (toFloat p.x) (toFloat p.y)
+
+
+regionGeometry : Maybe (List Spot) -> List Spot -> Geometry
+regionGeometry group spots =
     let
         centers =
-            List.map (\p -> Point (toFloat p.x) (toFloat p.y)) spots
+            List.map toPoint spots
+
+        reach =
+            Maybe.map (List.map toPoint) group
+
+        circles =
+            List.map (\c -> Circle c deadRadius) centers
+                ++ List.map (\c -> Circle c adjacentDistance) (Maybe.withDefault [] reach)
 
         circleBoundary c =
             let
-                -- Only these discs can cover any part of this circle.
                 neighbours =
-                    List.filter (\other -> other /= c && distance c other <= 2 * deadRadius + epsilon) centers
+                    List.filter (\other -> other /= c && distance c.center other.center <= c.radius + other.radius + epsilon) circles
+
+                nearbyStones =
+                    List.filter (\other -> distance c.center other <= c.radius + deadRadius + epsilon) centers
 
                 crossings =
                     List.concatMap (circleCrossings c) neighbours
                         ++ List.concatMap (\edge -> List.map (along edge) (lineCrossings edge c)) boardEdges
 
                 arcs =
-                    (0 :: pi :: (2 * pi) :: List.map (angleOf c) crossings)
+                    (0 :: pi :: (2 * pi) :: List.map (angleOf c.center) crossings)
                         |> intervals
-                        |> List.filter (\( a, b ) -> placeable neighbours (onCircle c ((a + b) / 2)))
-                        |> List.map (\( a, b ) -> Arc c a b)
+                        |> List.filter (\( a, b ) -> validCenter nearbyStones reach (onCircle c ((a + b) / 2)))
+                        |> List.map (\( a, b ) -> Arc c.center c.radius a b)
             in
-            ( arcs, List.filter (placeable centers) crossings )
+            ( arcs, List.filter (validCenter centers reach) crossings )
 
         edgeBoundary edge =
             let
                 cuts =
-                    0 :: 1 :: List.concatMap (lineCrossings edge) centers
+                    0 :: 1 :: List.concatMap (lineCrossings edge) circles
 
                 lines =
                     intervals cuts
-                        |> List.filter (\( a, b ) -> placeable centers (along edge ((a + b) / 2)))
+                        |> List.filter (\( a, b ) -> validCenter centers reach (along edge ((a + b) / 2)))
                         |> List.map (\( a, b ) -> Line (along edge a) (along edge b))
             in
-            ( lines, List.map (along edge) cuts |> List.filter (placeable centers) )
+            ( lines, List.map (along edge) cuts |> List.filter (validCenter centers reach) )
 
-        circles =
-            List.map circleBoundary centers
+        circleBoundaries =
+            List.map circleBoundary circles
 
         edges =
             List.map edgeBoundary boardEdges
     in
     { centers = centers
-    , arcs = List.concatMap Tuple.first circles
+    , reach = reach
+    , arcs = List.concatMap Tuple.first circleBoundaries
     , lines = List.concatMap Tuple.first edges
-    , points = List.concatMap Tuple.second circles ++ List.concatMap Tuple.second edges
+    , points = List.concatMap Tuple.second circleBoundaries ++ List.concatMap Tuple.second edges
     }
 
 
@@ -248,15 +299,15 @@ canCover shape p =
                     angleOf arc.center p
             in
             if angle >= arc.start && angle <= arc.end then
-                abs (distance p arc.center - deadRadius)
+                abs (distance p arc.center - arc.radius)
 
             else
-                min (distance p (onCircle arc.center arc.start)) (distance p (onCircle arc.center arc.end))
+                min (distance p (onCircle arc arc.start)) (distance p (onCircle arc arc.end))
 
         near d =
             d <= radius + epsilon
     in
-    p.x >= 0 && p.x <= toFloat coordRange && p.y >= 0 && p.y <= toFloat coordRange && (placeable shape.centers p || List.any (arcDistance >> near) shape.arcs || List.any (lineDistance >> near) shape.lines || List.any (distance p >> near) shape.points)
+    p.x >= 0 && p.x <= toFloat coordRange && p.y >= 0 && p.y <= toFloat coordRange && (validCenter shape.centers shape.reach p || List.any (arcDistance >> near) shape.arcs || List.any (lineDistance >> near) shape.lines || List.any (distance p >> near) shape.points)
 
 
 pointString : Point -> String
@@ -291,23 +342,45 @@ view stones =
         [ ( positionKey, viewGeometry (geometry spots) ) ]
 
 
-viewGeometry : Geometry -> Svg msg
-viewGeometry shape =
+maskAttributes : String -> List (Svg.Attribute msg)
+maskAttributes name =
+    [ SA.id name, SA.maskUnits "userSpaceOnUse", SA.x "0", SA.y "0", SA.width (String.fromInt coordRange), SA.height (String.fromInt coordRange) ]
+
+
+sweptMasks : String -> Geometry -> List (Svg msg)
+sweptMasks name shape =
     let
         arcPath arc =
-            "M " ++ pointString (onCircle arc.center arc.start) ++ " A " ++ String.fromFloat deadRadius ++ " " ++ String.fromFloat deadRadius ++ " 0 0 1 " ++ pointString (onCircle arc.center arc.end)
+            "M " ++ pointString (onCircle arc arc.start) ++ " A " ++ String.fromFloat arc.radius ++ " " ++ String.fromFloat arc.radius ++ " 0 0 1 " ++ pointString (onCircle arc arc.end)
 
         linePath line =
             "M " ++ pointString line.start ++ " L " ++ pointString line.end
 
-        maskAttributes name =
-            [ SA.id name, SA.maskUnits "userSpaceOnUse", SA.x "0", SA.y "0", SA.width (String.fromInt coordRange), SA.height (String.fromInt coordRange) ]
+        reachMask =
+            name ++ "-reach"
+
+        reachAttributes =
+            case shape.reach of
+                Nothing ->
+                    []
+
+                Just _ ->
+                    [ SA.mask ("url(#" ++ reachMask ++ ")") ]
+
+        reachDefinition =
+            case shape.reach of
+                Nothing ->
+                    []
+
+                Just centers ->
+                    [ Svg.mask (maskAttributes reachMask) (List.map (circle adjacentDistance "white") centers) ]
     in
-    Svg.g []
-        [ Svg.defs []
-            [ Svg.mask (maskAttributes "stone-swept-area")
-                [ Svg.rect [ SA.x (String.fromFloat low), SA.y (String.fromFloat low), SA.width (String.fromFloat (high - low)), SA.height (String.fromFloat (high - low)), SA.fill "white" ] []
-                , Svg.g [] (List.map (circle deadRadius "black") shape.centers)
+    reachDefinition
+        ++ [ Svg.mask (maskAttributes name)
+                [ Svg.g reachAttributes
+                    [ Svg.rect [ SA.x (String.fromFloat low), SA.y (String.fromFloat low), SA.width (String.fromFloat (high - low)), SA.height (String.fromFloat (high - low)), SA.fill "white" ] []
+                    , Svg.g [] (List.map (circle deadRadius "black") shape.centers)
+                    ]
                 , Svg.path
                     [ SA.d (String.join " " (List.map arcPath shape.arcs ++ List.map linePath shape.lines))
                     , SA.fill "none"
@@ -319,10 +392,44 @@ viewGeometry shape =
                     []
                 , Svg.g [] (List.map (circle radius "white") shape.points)
                 ]
-            , Svg.mask (maskAttributes "dead-zone-area")
-                [ boardRect [ SA.fill "white" ]
-                , boardRect [ SA.fill "black", SA.mask "url(#stone-swept-area)" ]
-                ]
-            ]
+           ]
+
+
+viewGeometry : Geometry -> Svg msg
+viewGeometry shape =
+    Svg.g []
+        [ Svg.defs []
+            (sweptMasks "stone-swept-area" shape
+                ++ [ Svg.mask (maskAttributes "dead-zone-area")
+                        [ boardRect [ SA.fill "white" ]
+                        , boardRect [ SA.fill "black", SA.mask "url(#stone-swept-area)" ]
+                        ]
+                   ]
+            )
         , boardRect [ SA.id "dead-zone-fill", SA.mask "url(#dead-zone-area)" ]
         ]
+
+
+viewLiberties : Stones -> List Spot -> Svg msg
+viewLiberties stones group =
+    let
+        spots =
+            List.map .spot (stoneList stones)
+
+        positionKey =
+            (List.map spotKeyStr spots |> String.join "") ++ "/" ++ (List.map spotKeyStr group |> String.join "")
+    in
+    Svg.Keyed.node "g"
+        [ SA.id "liberties", SA.pointerEvents "none" ]
+        (if List.isEmpty group then
+            []
+
+         else
+            [ ( positionKey
+              , Svg.g []
+                    [ Svg.defs [] (sweptMasks "liberty-swept-area" (libertyGeometry spots group))
+                    , boardRect [ SA.id "liberty-area-fill", SA.mask "url(#liberty-swept-area)" ]
+                    ]
+              )
+            ]
+        )

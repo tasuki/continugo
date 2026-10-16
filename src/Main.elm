@@ -49,7 +49,6 @@ type alias Model =
     , stones : Stones
     , ghostStone : Maybe Stone
     , highlightedGroup : List Spot
-    , highlightedLiberties : List Spot
     , justPlayed : Maybe Spot
     , justRemoved : List Stone
     , dragFrom : DragFrom
@@ -67,7 +66,6 @@ emptyModel navKey =
     , stones = Dict.empty
     , ghostStone = Nothing
     , highlightedGroup = []
-    , highlightedLiberties = []
     , justPlayed = Nothing
     , justRemoved = []
     , dragFrom = DF.DragNone
@@ -135,12 +133,11 @@ handleHover model hoverSpot =
         ( Just over, False ) ->
             -- hovering over a stone: show liberties
             let
-                ( group, liberties ) =
-                    Play.groupAndItsLiberties model.stones over
+                group =
+                    Play.group model.stones over
             in
             { model
                 | highlightedGroup = List.map .spot group
-                , highlightedLiberties = liberties
                 , ghostStone = Nothing
                 , justPlayed = Nothing
             }
@@ -150,7 +147,6 @@ handleHover model hoverSpot =
             { model
                 | ghostStone = playStone hoverSpot model
                 , highlightedGroup = []
-                , highlightedLiberties = []
                 , justPlayed = Nothing
             }
 
@@ -170,7 +166,6 @@ handleDrag model draggedFrom draggedTo =
     { model
         | ghostStone = ghostStone
         , highlightedGroup = []
-        , highlightedLiberties = []
         , justPlayed = Nothing
     }
 
@@ -191,6 +186,7 @@ handlePlay model playSpot =
                         , onMove = otherPlayer model.onMove
                         , justPlayed = Just played.spot
                         , justRemoved = removedStones model.stones stones
+                        , highlightedGroup = []
                     }
             in
             ( newModel
@@ -400,6 +396,7 @@ changeRouteTo url model =
             { model
                 | record = record
                 , stones = Play.playStones (List.reverse record) Dict.empty
+                , highlightedGroup = []
                 , onMove =
                     List.head record
                         |> Maybe.map (.player >> otherPlayer)
@@ -450,8 +447,7 @@ viewSvg model =
     , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
         List.map hideLinesKeyed (stoneList model.stones)
     , lazy DeadZones.view model.stones
-    , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
-        (model.highlightedLiberties |> List.map viewLiberty)
+    , lazy2 DeadZones.viewLiberties model.stones model.highlightedGroup
     , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
         List.map viewGhostLink (Maybe.map getStoneLinks model.ghostStone |> Maybe.withDefault [])
     , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|

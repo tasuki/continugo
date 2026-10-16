@@ -1,10 +1,10 @@
 module DeadZonesTests exposing (tests)
 
 import Board exposing (stoneRadius)
-import DeadZones exposing (Point, canCover, geometry)
+import DeadZones exposing (Point, canCover, geometry, libertyGeometry)
 import Expect
 import Fuzz
-import Go exposing (Spot, diameter)
+import Go exposing (Spot, adjacentDistance, diameter)
 import Test exposing (..)
 
 
@@ -114,6 +114,67 @@ tests =
                 in
                 Expect.equal ( False, True )
                     ( canCover shape (Point 10 10), canCover shape (Point 12 12) )
+        , describe "A group's liberty-area"
+            [ test "An empty group has no highlighted area" <|
+                \_ ->
+                    Expect.equal False (canCover (libertyGeometry [] []) (Point 500 500))
+            , test "A lone stone has a continuous ring reaching one radius beyond adjacency" <|
+                \_ ->
+                    let
+                        shape =
+                            libertyGeometry [ Spot 500 500 ] [ Spot 500 500 ]
+                    in
+                    Expect.equal [ False, True, True, False ]
+                        (List.map (canCover shape)
+                            [ Point (500 + r - 1) 500
+                            , Point (500 + r) 500
+                            , Point (500 + adjacentDistance + r - 1) 500
+                            , Point (500 + adjacentDistance + r + 1) 500
+                            ]
+                        )
+            , test "Every member contributes, but a distant stone outside the group does not" <|
+                \_ ->
+                    let
+                        shape =
+                            libertyGeometry [ Spot 400 500, Spot 500 500, Spot 800 500 ] [ Spot 400 500, Spot 500 500 ]
+                    in
+                    Expect.equal [ True, True, False ]
+                        (List.map (canCover shape) [ Point 300 500, Point 600 500, Point 850 500 ])
+            , test "Other stones block the liberty-area" <|
+                \_ ->
+                    Expect.equal ( True, False )
+                        ( canCover (libertyGeometry [ Spot 500 500 ] [ Spot 500 500 ]) (Point 580 500)
+                        , canCover (libertyGeometry [ Spot 500 500, Spot 600 500 ] [ Spot 500 500 ]) (Point 580 500)
+                        )
+            , test "An isolated liberty centre still highlights a stone-sized opening" <|
+                \_ ->
+                    let
+                        shape =
+                            libertyGeometry
+                                [ Spot (500 - d) 500, Spot (500 + d) 500, Spot 500 (500 - d), Spot 500 (500 + d) ]
+                                [ Spot (500 - d) 500 ]
+                    in
+                    Expect.equal [ True, True, False ]
+                        (List.map (canCover shape) [ Point 500 500, Point (500 + r) 500, Point (501 + r) 500 ])
+            , test "Liberty-area is clipped at the board edge" <|
+                \_ ->
+                    let
+                        shape =
+                            libertyGeometry [ Spot stoneRadius 500 ] [ Spot stoneRadius 500 ]
+                    in
+                    Expect.equal [ True, False, False ]
+                        (List.map (canCover shape) [ Point 0 (500 + toFloat d), Point 0 500, Point -1 (500 + toFloat d) ])
+            , fuzz2
+                (Fuzz.listOfLength 8 (Fuzz.map2 Spot (Fuzz.intRange 38 962) (Fuzz.intRange 38 962)))
+                (Fuzz.map2 Point (Fuzz.floatRange 0 1000) (Fuzz.floatRange 0 1000))
+                "The highlighted area is always a subset of the global swept area"
+              <|
+                \spots point ->
+                    Expect.equal True
+                        (not (canCover (libertyGeometry spots (List.take 2 spots)) point)
+                            || canCover (geometry spots) point
+                        )
+            ]
         , fuzz2
             (Fuzz.listOfLength 12 (Fuzz.map2 Spot (Fuzz.intRange 38 962) (Fuzz.intRange 38 962)))
             (Fuzz.map2 Point (Fuzz.floatRange 38 962) (Fuzz.floatRange 38 962))
