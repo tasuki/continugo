@@ -1,4 +1,4 @@
-const CACHE_NAME = 'v8';
+const CACHE_NAME = 'v9';
 const ASSETS_TO_CACHE = [
     '/',
     '/manifest.json',

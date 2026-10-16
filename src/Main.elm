@@ -56,6 +56,7 @@ type alias Model =
     , stagedMove : Maybe Stone
     , lastPointer : Maybe Spot
     , showHelp : Bool
+    , showScoring : Bool
     , navKey : Nav.Key
     }
 
@@ -73,6 +74,7 @@ emptyModel navKey =
     , stagedMove = Nothing
     , lastPointer = Nothing
     , showHelp = False
+    , showScoring = False
     , navKey = navKey
     }
 
@@ -99,6 +101,7 @@ type Msg
     | Prev
     | Next
     | Help
+    | ToggleScoring
     | New
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
@@ -234,7 +237,10 @@ ifNoMultiTouch documentCoords model newModelCmd =
 
 withBoardCoords : DocumentCoords -> Model -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
 withBoardCoords documentCoords model msg =
-    ifNotFinished model
+    if isScoring model then
+        ( model, Cmd.none )
+
+    else
         ( model
         , Task.attempt msg <|
             Task.map (DC.toBoardSpot documentCoords) <|
@@ -364,6 +370,18 @@ update msg model =
             , Cmd.none
             )
 
+        ToggleScoring ->
+            ( { model
+                | showScoring = not model.showScoring
+                , ghostStone = Nothing
+                , stagedMove = Nothing
+                , highlightedGroup = []
+                , dragFrom = DF.DragNone
+                , lastPointer = Nothing
+              }
+            , Cmd.none
+            )
+
         UrlChanged url ->
             changeRouteTo url model
 
@@ -404,9 +422,12 @@ changeRouteTo url model =
                         |> Maybe.withDefault Black
             }
 
+        empty =
+            emptyModel model.navKey
+
         newModel =
             Maybe.map createModel maybeRecord
-                |> Maybe.withDefault (emptyModel model.navKey)
+                |> Maybe.withDefault { empty | showScoring = model.showScoring }
     in
     ( newModel, Cmd.none )
 
@@ -437,6 +458,11 @@ pushUrl navKey record =
 -- VIEW
 
 
+isScoring : Model -> Bool
+isScoring model =
+    model.showScoring || isFinished model.record
+
+
 viewSvg : Model -> List (Svg Msg)
 viewSvg model =
     [ Svg.defs []
@@ -447,12 +473,12 @@ viewSvg model =
     , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
     , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
         List.map hideLinesKeyed (stoneList model.stones)
-    , if isFinished model.record then
+    , if isScoring model then
         lazy Territory.view model.stones
 
       else
         lazy DeadZones.view model.stones
-    , if isFinished model.record then
+    , if isScoring model then
         Svg.g [] []
 
       else
@@ -498,7 +524,7 @@ view model =
 
         score : H.Html msg
         score =
-            if isFinished model.record then
+            if isScoring model then
                 let
                     territory =
                         Territory.areas model.stones
@@ -528,7 +554,7 @@ view model =
                     , HE.on "touchcancel" <| DC.decodeChangedTouch Finished
                     ]
                     [ H.div
-                        [ HA.id "board" ]
+                        [ HA.id "board", HA.classList [ ( "scoring", isScoring model ) ] ]
                         [ Svg.svg
                             [ SA.viewBox <| intsToStr [ 0, 0, Board.coordRange, Board.coordRange ] ]
                             (viewSvg model)
@@ -542,6 +568,23 @@ view model =
             [ menuLink New "!" "new"
             , menuLink Help "?" "help"
             , menuLink PlayPass "*" "pass"
+            , H.div [ HA.class "item" ]
+                [ H.button
+                    [ HA.id "score-toggle"
+                    , HA.classList [ ( "icon", True ), ( "active", isScoring model ) ]
+                    , HA.attribute "aria-label" "Toggle score estimator"
+                    , HA.attribute "aria-pressed"
+                        (if isScoring model then
+                            "true"
+
+                         else
+                            "false"
+                        )
+                    , HA.disabled (isFinished model.record)
+                    , HE.onClick ToggleScoring
+                    ]
+                    [ H.text "Σ", H.span [ HA.class "tooltip" ] [ H.text " score estimator" ] ]
+                ]
             , menuLink Prev "‹" "undo"
             , menuLink Next "︎︎›︎" "redo"
             ]

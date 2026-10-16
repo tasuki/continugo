@@ -33,6 +33,7 @@ Long have we suffered under the tyranny of the grid of intersections. Down with 
 - Pull from your own stone to place a stone as far as possible while it stays connected.
 - If a spot clearly has enough space for a stone but the stone is not appearing, that means playing there would be a suicide.
 - While suicide itself is not allowed, you can **capture another group of your own stones** by removing their last liberty. It feels this could be useful at times.
+- Press **Σ** to toggle the score estimator without passing or changing the game record. Toggle it off to resume playing. The board turns grey while counting, with darker Black territory and lighter White territory.
 - Capture dead groups before passing: scoring uses the stones still on the board, with no automatic dead-stone removal.
 
 ### Code/bugs/feedback
