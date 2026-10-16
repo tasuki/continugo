@@ -21,7 +21,7 @@ Long have we suffered under the tyranny of the grid of intersections. Down with 
 6. A **liberty is an adjacent spot where a stone can fit**.
 7. When a stone or a group of connected stones loses all liberties, it is captured.
 8. Ko: one may not capture just one stone if that stone was played on the previous turn and captured just one stone. No positional superko fuck off.
-9. Scoring: after two consecutive passes, whoever has more stones on the board wins. (Yes, area scoring with group tax!)
+9. Scoring: after two consecutive passes, whoever controls more board area wins. Every point belongs to the nearest stone's colour (Voronoi area scoring), including occupied space and deadzones. There is no extra score for stones or captures, and no komi. The final count tints Black's area darker and White's area lighter. Areas and the winning margin are shown in stone-sized units: one unit is the area of a stone's disc (π × radius²), rounded to one decimal place.
 
 ### How to actually play
 
@@ -33,6 +33,7 @@ Long have we suffered under the tyranny of the grid of intersections. Down with 
 - Pull from your own stone to place a stone as far as possible while it stays connected.
 - If a spot clearly has enough space for a stone but the stone is not appearing, that means playing there would be a suicide.
 - While suicide itself is not allowed, you can **capture another group of your own stones** by removing their last liberty. It feels this could be useful at times.
+- Capture dead groups before passing: scoring uses the stones still on the board, with no automatic dead-stone removal.
 
 ### Code/bugs/feedback
 

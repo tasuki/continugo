@@ -28,6 +28,8 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 #lines { stroke: #0009; stroke-width: 1.5; }
 #stars { fill: #0009; }
 #dead-zone-fill { fill: #3333; }
+#territory .territory-black { fill: #222; fill-opacity: 0.3; }
+#territory .territory-white { fill: #FFF; fill-opacity: 0.55; }
 
 #hide-lines circle { fill: #CB5; animation: 5s fadeInOpacity; }
 @keyframes fadeInOpacity { 0% { opacity: 0; } 100% { opacity: 1; } }
@@ -53,9 +55,17 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 }
 #highlights circle { stroke: #900; fill: transparent; stroke-width: 4; }
 
-#score { position: absolute; left: 0; top: 0; width: 100vmin; height: 100vmin;
-    background: #000A; color: #FFF; text-align: center; line-height: 100vmin;
-    font-size: 80px; }
+#score { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    max-width: calc(100% - 32px); padding: 8px 16px; border-radius: 8px;
+    background: #FFFB; color: #222; text-align: center; white-space: nowrap;
+    box-shadow: 0 2px 8px #0003; pointer-events: none;
+    font-size: clamp(12px, 2.2vmin, 20px); }
+#score .score-result { font-size: 1.8em; font-weight: 700; }
+#score .score-areas { margin-top: 2px; }
+@media screen and (max-aspect-ratio: 1/1) {
+    #board-container { overflow: visible; }
+    #score { top: calc(100% + 12px); bottom: auto; }
+}
 
 #help { margin: 60px auto 0 auto; padding: 0 10px 10px 10px; max-width: 600px; }
 @media screen and (min-aspect-ratio: 1/1) {

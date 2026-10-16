@@ -24,6 +24,7 @@ import Svg.Attributes as SA
 import Svg.Keyed
 import Svg.Lazy exposing (..)
 import Task
+import Territory
 import Url exposing (Url)
 
 
@@ -446,8 +447,16 @@ viewSvg model =
     , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
     , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
         List.map hideLinesKeyed (stoneList model.stones)
-    , lazy DeadZones.view model.stones
-    , lazy2 DeadZones.viewLiberties model.stones model.highlightedGroup
+    , if isFinished model.record then
+        lazy Territory.view model.stones
+
+      else
+        lazy DeadZones.view model.stones
+    , if isFinished model.record then
+        Svg.g [] []
+
+      else
+        lazy2 DeadZones.viewLiberties model.stones model.highlightedGroup
     , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
         List.map viewGhostLink (Maybe.map getStoneLinks model.ghostStone |> Maybe.withDefault [])
     , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|
@@ -490,7 +499,15 @@ view model =
         score : H.Html msg
         score =
             if isFinished model.record then
-                H.div [ HA.id "score" ] [ H.text <| resultString model.stones ]
+                let
+                    territory =
+                        Territory.areas model.stones
+                in
+                H.div [ HA.id "score" ]
+                    [ H.div [ HA.class "score-result" ] [ H.text (Territory.resultString territory) ]
+                    , H.div [ HA.class "score-areas" ]
+                        [ H.text ("Black " ++ Territory.formatArea territory.black ++ " · White " ++ Territory.formatArea territory.white) ]
+                    ]
 
             else
                 H.div [] []

@@ -210,37 +210,6 @@ removedStones old new =
     List.filterMap maybeMissingStone (stoneList old)
 
 
-countBlackWinsBy : Stones -> Int
-countBlackWinsBy stones =
-    let
-        sl : List Stone
-        sl =
-            stoneList stones
-
-        count : Player -> Int
-        count player =
-            List.filter (\s -> s.player == player) sl
-                |> List.length
-    in
-    count Black - count White
-
-
-resultString : Stones -> String
-resultString stones =
-    let
-        cnt =
-            countBlackWinsBy stones
-    in
-    if cnt > 0 then
-        "B+" ++ String.fromInt cnt
-
-    else if cnt < 0 then
-        "W+" ++ String.fromInt -cnt
-
-    else
-        "jigo"
-
-
 
 -- Moves
 
