@@ -27,6 +27,7 @@ Long have we suffered under the tyranny of the grid of intersections. Down with 
 
 - Currently, only taking turns on a single device is implemented.
 - The url holds the game record - you can bookmark the current position, share it to play by email, use the browser back button to undo, etc.
+- Darker board areas (deadzones) cannot be covered by any stone that physically fits on the board. Lighter openings show the full area a stone could cover, not just possible stone centres. This does not account for suicide.
 - Hover over (or touch) stones to see their liberties.
 - Mouse down and move (or touch-move) to stage a move, then click the staged move to confirm it.
 - Pull from your own stone to place a stone as far as possible while it stays connected.

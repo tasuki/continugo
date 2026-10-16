@@ -4,6 +4,7 @@ import Board
 import Browser
 import Browser.Dom as BD
 import Browser.Navigation as Nav
+import DeadZones
 import Dict
 import DocumentCoords as DC exposing (DocumentCoords)
 import DragFrom as DF exposing (DragFrom)
@@ -448,6 +449,7 @@ viewSvg model =
     , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
     , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
         List.map hideLinesKeyed (stoneList model.stones)
+    , lazy DeadZones.view model.stones
     , lazy3 Svg.node "g" [ SA.id "liberties" ] <|
         (model.highlightedLiberties |> List.map viewLiberty)
     , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|

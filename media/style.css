@@ -27,6 +27,7 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 #board { width: 100vmin; height: 100vmin; background-color: #CB5; position: relative; }
 #lines { stroke: #0009; stroke-width: 1.5; }
 #stars { fill: #0009; }
+#dead-zone-fill { fill: #A94; }
 
 #hide-lines circle { fill: #CB5; animation: 5s fadeInOpacity; }
 @keyframes fadeInOpacity { 0% { opacity: 0; } 100% { opacity: 1; } }
