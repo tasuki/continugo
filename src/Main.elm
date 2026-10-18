@@ -15,6 +15,7 @@ import Html.Attributes as HA
 import Html.Events as HE
 import List.Extra
 import Maybe.Extra
+import MovePreview
 import Play
 import Process
 import Regex
@@ -191,6 +192,8 @@ handlePlay model playSpot =
                         , justPlayed = Just played.spot
                         , justRemoved = removedStones model.stones stones
                         , highlightedGroup = []
+                        , ghostStone = Nothing
+                        , stagedMove = Nothing
                     }
             in
             ( newModel
@@ -416,6 +419,10 @@ changeRouteTo url model =
                 | record = record
                 , stones = Play.playStones (List.reverse record) Dict.empty
                 , highlightedGroup = []
+                , ghostStone = Nothing
+                , stagedMove = Nothing
+                , dragFrom = DF.DragNone
+                , lastPointer = Nothing
                 , onMove =
                     List.head record
                         |> Maybe.map (.player >> otherPlayer)
@@ -434,7 +441,7 @@ changeRouteTo url model =
 
 updatePosition : Model -> ( Model, Cmd Msg )
 updatePosition model =
-    ( model
+    ( { model | ghostStone = Nothing, stagedMove = Nothing, highlightedGroup = [] }
     , pushUrl model.navKey model.record
     )
 
@@ -465,6 +472,33 @@ isScoring model =
 
 viewSvg : Model -> List (Svg Msg)
 viewSvg model =
+    let
+        preview =
+            if isScoring model then
+                Nothing
+
+            else
+                MovePreview.fromMoves model.stones model.ghostStone model.stagedMove
+
+        previewStones =
+            Maybe.map .stones preview |> Maybe.withDefault model.stones
+
+        previewStone =
+            Maybe.map .stone preview
+
+        highlightedGroup =
+            Maybe.map .group preview |> Maybe.withDefault model.highlightedGroup
+
+        survivingLink ( a, b ) =
+            Dict.member ( a.x, a.y ) previewStones && Dict.member ( b.x, b.y ) previewStones
+
+        stoneClass stone =
+            if Dict.member (stoneKey stone) previewStones then
+                classJustPlayed model.justPlayed stone
+
+            else
+                "pending-capture"
+    in
     [ Svg.defs []
         [ Svg.filter [ SA.id "blur-filter" ]
             [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
@@ -477,27 +511,44 @@ viewSvg model =
         lazy Territory.view model.stones
 
       else
-        lazy DeadZones.view model.stones
+        lazy DeadZones.view previewStones
     , if isScoring model then
         Svg.g [] []
 
       else
-        lazy2 DeadZones.viewLiberties model.stones model.highlightedGroup
+        lazy2 DeadZones.viewLiberties previewStones highlightedGroup
     , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
-        List.map viewGhostLink (Maybe.map getStoneLinks model.ghostStone |> Maybe.withDefault [])
+        List.map viewGhostLink (Maybe.map getStoneLinks previewStone |> Maybe.withDefault [])
     , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|
-        List.filterMap identity [ Maybe.map viewGhostStone model.ghostStone ]
+        List.filterMap identity [ Maybe.map viewGhostStone previewStone ]
     , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
-        List.map viewKeyedLink (getUniqueLinks model.stones)
+        List.map viewKeyedLink (List.filter survivingLink (getUniqueLinks model.stones))
     , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
-        (stoneList model.stones |> List.map (\s -> viewKeyedStone (classJustPlayed model.justPlayed s) s))
+        (stoneList model.stones |> List.map (\s -> viewKeyedStone (stoneClass s) s))
     , lazy3 Svg.node "g" [ SA.id "staged-stone" ] <|
-        List.filterMap identity [ Maybe.map viewStagedStone model.stagedMove ]
+        List.filterMap identity [ Maybe.map2 (\_ -> viewStagedStone) model.stagedMove previewStone ]
+    , lazy3 Svg.node "g" [ SA.id "capture-preview", SA.pointerEvents "none" ] <|
+        List.map viewCapturePreview (Maybe.map .captured preview |> Maybe.withDefault [])
     , lazy3 Svg.node "g" [ SA.id "removed-stones" ] <|
         (model.justRemoved |> List.map (viewStone "removed"))
     , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
-        (model.highlightedGroup |> List.map viewHighlight)
+        (highlightedGroup
+            |> List.filter (\spot -> Just spot /= Maybe.map .spot previewStone)
+            |> List.map viewHighlight
+        )
     ]
+
+
+viewCapturePreview : Stone -> Svg msg
+viewCapturePreview { spot } =
+    let
+        offset =
+            Board.stoneRadius // 2
+    in
+    Svg.g []
+        [ viewLink ( Spot (spot.x - offset) (spot.y - offset), Spot (spot.x + offset) (spot.y + offset) )
+        , viewLink ( Spot (spot.x - offset) (spot.y + offset), Spot (spot.x + offset) (spot.y - offset) )
+        ]
 
 
 menuLink : msg -> String -> String -> H.Html msg

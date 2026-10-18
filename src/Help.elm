@@ -29,6 +29,7 @@ Long have we suffered under the tyranny of the grid of intersections. Down with 
 - The url holds the game record - you can bookmark the current position, share it to play by email, use the browser back button to undo, etc.
 - Darker board areas (deadzones) cannot be covered by any stone that physically fits on the board. Lighter openings show the full area a stone could cover, not just possible stone centres. This does not account for suicide.
 - Hover over (or touch) stones to highlight their group's liberty-area: the full area a stone could cover while fitting next to the group.
+- Hovered and staged moves preview the resulting deadzones, connections, and the new group's liberty-area. Stones that would be captured (including your own) are dimmed and crossed out. The position and game record do not change until you confirm.
 - Mouse down and move (or touch-move) to stage a move, then click the staged move to confirm it.
 - Pull from your own stone to place a stone as far as possible while it stays connected.
 - If a spot clearly has enough space for a stone but the stone is not appearing, that means playing there would be a suicide.

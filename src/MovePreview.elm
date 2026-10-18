@@ -1,0 +1,38 @@
+module MovePreview exposing (Preview, fromMoves)
+
+import Dict
+import Go exposing (Spot, Stone, Stones, removedStones, stoneKey)
+import Maybe.Extra
+import Play
+
+
+type alias Preview =
+    { stones : Stones
+    , stone : Stone
+    , group : List Spot
+    , captured : List Stone
+    }
+
+
+{-| A staged move takes precedence over hovering. Replay the exact candidate,
+not a nearby move, so captures and connections match what would be confirmed.
+-}
+fromMoves : Stones -> Maybe Stone -> Maybe Stone -> Maybe Preview
+fromMoves stones hovered staged =
+    Maybe.Extra.or staged hovered
+        |> Maybe.andThen
+            (\candidate ->
+                Play.playIfLegal stones candidate
+                    |> Maybe.andThen
+                        (\result ->
+                            Dict.get (stoneKey candidate) result
+                                |> Maybe.map
+                                    (\stone ->
+                                        { stones = result
+                                        , stone = stone
+                                        , group = List.map .spot (Play.group result stone)
+                                        , captured = removedStones stones result
+                                        }
+                                    )
+                        )
+            )
