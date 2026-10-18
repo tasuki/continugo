@@ -1,4 +1,4 @@
-module MovePreview exposing (Preview, fromMoves)
+module MovePreview exposing (Preview, fromMoves, fromResult)
 
 import Dict
 import Go exposing (Spot, Stone, Stones, removedStones, stoneKey)
@@ -26,13 +26,18 @@ fromMoves stones hovered staged =
                     |> Maybe.andThen
                         (\result ->
                             Dict.get (stoneKey candidate) result
-                                |> Maybe.map
-                                    (\stone ->
-                                        { stones = result
-                                        , stone = stone
-                                        , group = List.map .spot (Play.group result stone)
-                                        , captured = removedStones stones result
-                                        }
-                                    )
+                                |> Maybe.map (\stone -> fromResult stones ( result, stone ))
                         )
             )
+
+
+{-| Reuse a successful legality check instead of replaying the move to preview it.
+The stone must be the surviving, enhanced stone from the resulting position.
+-}
+fromResult : Stones -> ( Stones, Stone ) -> Preview
+fromResult stones ( result, stone ) =
+    { stones = result
+    , stone = stone
+    , group = List.map .spot (Play.group result stone)
+    , captured = removedStones stones result
+    }

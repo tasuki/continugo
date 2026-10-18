@@ -40,17 +40,29 @@ type alias Spot =
 
 distance : Spot -> Spot -> Float
 distance s1 s2 =
-    sqrt <| toFloat ((s1.x - s2.x) ^ 2 + (s1.y - s2.y) ^ 2)
+    sqrt (toFloat (distanceSquared s1 s2))
+
+
+distanceSquared : Spot -> Spot -> Int
+distanceSquared s1 s2 =
+    let
+        dx =
+            s1.x - s2.x
+
+        dy =
+            s1.y - s2.y
+    in
+    dx * dx + dy * dy
 
 
 isWithinStone : Spot -> Spot -> Bool
 isWithinStone s1 s2 =
-    distance s1 s2 < toFloat stoneRadius
+    distanceSquared s1 s2 < stoneRadius * stoneRadius
 
 
 overlaps : Spot -> Spot -> Bool
 overlaps s1 s2 =
-    distance s1 s2 < toFloat diameter
+    distanceSquared s1 s2 < diameter * diameter
 
 
 overlapsAny : Spot -> List Spot -> Bool
@@ -60,7 +72,7 @@ overlapsAny spot =
 
 adjacent : Spot -> Spot -> Bool
 adjacent s1 s2 =
-    distance s1 s2 < adjacentDistance
+    distanceSquared s1 s2 < 2 * diameter * diameter
 
 
 boardMin : Int
@@ -187,7 +199,7 @@ stoneKey { spot } =
 
 stoneList : Stones -> List Stone
 stoneList stones =
-    Dict.toList stones |> List.map (\( _, s ) -> s)
+    Dict.values stones
 
 
 addStones : (Stone -> Stone) -> List Spot -> Stones -> Stones

@@ -26,6 +26,8 @@ sudo npm install -g elm@latest-0.19.1 elm-test elm-format serve
 
 To develop, run `make develop`, see http://localhost:9071/
 
+For hover/capture profiling results and reproducible benchmarks, see [benchmarks](benchmarks/README.md).
+
 ## TODO
 
 - [ ] Test whether the "adjacent distance" of 1.4142 isn't too high

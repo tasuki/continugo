@@ -113,6 +113,7 @@ previewCase tc =
                     in
                     Expect.all
                         [ \_ -> Expect.equal expected (Just preview.stones)
+                        , \_ -> Expect.equal preview (MovePreview.fromResult stones ( preview.stones, preview.stone ))
                         , \_ -> Expect.equal (removedStones stones preview.stones) preview.captured
                         , \_ -> Expect.equal True capturedOpenings
                         , \_ -> Expect.equal (Just preview.stone) (Dict.get (stoneKey preview.stone) preview.stones)

@@ -35,6 +35,9 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 #territory .territory-black { fill: #222; fill-opacity: 0.3; }
 #territory .territory-white { fill: #FFF; fill-opacity: 0.55; }
 
+/* Keep the expensive, unchanged Gaussian blur in its own composited layer.
+   Hovering otherwise repaints it along with the changing SVG masks. */
+#hide-lines { will-change: transform; }
 #hide-lines circle { fill: #CB5; animation: 5s fadeInOpacity; }
 @keyframes fadeInOpacity { 0% { opacity: 0; } 100% { opacity: 1; } }
 

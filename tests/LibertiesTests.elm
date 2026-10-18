@@ -1,6 +1,7 @@
 module LibertiesTests exposing (..)
 
 import Expect
+import Fuzz
 import Go exposing (..)
 import Liberties exposing (..)
 import Test exposing (..)
@@ -79,6 +80,84 @@ findLibertiesTest =
             [ test "Has 0 liberties" <|
                 \_ -> Expect.equal 0 (List.length <| libs ())
             ]
+        ]
+
+
+hasLibertiesTest : Test
+hasLibertiesTest =
+    let
+        bruteForce spot nearby =
+            List.any
+                (\offset ->
+                    let
+                        candidate =
+                            normalize spot offset
+                    in
+                    isWithinBoard candidate
+                        && List.all (\other -> distance candidate other >= toFloat diameter) nearby
+                )
+                zeroLibCandidates
+
+        spotFuzzer =
+            Fuzz.map2 Spot (Fuzz.intRange boardMin boardMax) (Fuzz.intRange boardMin boardMax)
+
+        offsetsFuzzer =
+            Fuzz.listOfLengthBetween 0
+                18
+                (Fuzz.map2 Spot (Fuzz.intRange -180 180) (Fuzz.intRange -180 180))
+    in
+    describe "Exact interval liberty search"
+        [ fuzz2 spotFuzzer offsetsFuzzer "Matches the exhaustive integer-ring search" <|
+            \spot offsets ->
+                let
+                    nearby =
+                        List.map (normalize spot) offsets
+                in
+                Expect.equal (bruteForce spot nearby)
+                    (hasLiberties (createStone Black spot) nearby)
+        , fuzz2 (Fuzz.intRange 0 3) offsetsFuzzer "Matches brute force at all four board corners" <|
+            \corner offsets ->
+                let
+                    spot =
+                        Spot
+                            (if modBy 2 corner == 0 then
+                                boardMin
+
+                             else
+                                boardMax
+                            )
+                            (if corner < 2 then
+                                boardMin
+
+                             else
+                                boardMax
+                            )
+
+                    nearby =
+                        List.map (normalize spot) offsets
+                in
+                Expect.equal (bruteForce spot nearby)
+                    (hasLiberties (createStone Black spot) nearby)
+        , test "An isolated touching liberty is not lost to interval rounding" <|
+            \_ ->
+                let
+                    spot =
+                        Spot boardMin boardMin
+
+                    nearby =
+                        [ Spot (boardMin + 2 * diameter) boardMin
+                        , Spot boardMin (boardMin + diameter)
+                        , Spot (boardMin + diameter) (boardMin + diameter)
+                        ]
+                in
+                Expect.equal True (hasLiberties (createStone Black spot) nearby)
+        , test "Squared-distance predicates keep strict touching and adjacency rules" <|
+            \_ ->
+                Expect.equal ( False, True, False )
+                    ( overlaps (Spot 0 0) (Spot diameter 0)
+                    , adjacent (Spot 0 0) (Spot (diameter - 1) diameter)
+                    , adjacent (Spot 0 0) (Spot diameter diameter)
+                    )
         ]
 
 

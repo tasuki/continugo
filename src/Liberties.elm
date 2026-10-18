@@ -76,14 +76,96 @@ findLiberties { spot } nearbySpots =
         |> uniqueLiberties
 
 
+libertyProbes : List Spot
+libertyProbes =
+    [ Spot -diameter 0, Spot 0 -diameter, Spot 0 diameter, Spot diameter 0 ]
+
+
 hasLiberties : Stone -> List Spot -> Bool
 hasLiberties { spot } nearbySpots =
-    let
-        isLib : Spot -> Bool
-        isLib zeroLC =
-            isLiberty nearbySpots (normalize spot zeroLC)
-    in
-    List.any isLib zeroLibCandidates
+    -- Try the four closest candidates first: open groups usually stop here.
+    -- For enclosed groups, search whole integer intervals rather than testing
+    -- all ~18,000 points in the adjacency ring individually.
+    List.any (normalize spot >> isLiberty nearbySpots) libertyProbes
+        || hasLibertyInRows spot
+            nearbySpots
+            (max boardMin (spot.y - floor adjacentDistance))
+            (min boardMax (spot.y + floor adjacentDistance))
+
+
+hasLibertyInRows : Spot -> List Spot -> Int -> Int -> Bool
+hasLibertyInRows spot nearbySpots y lastY =
+    if y > lastY then
+        False
+
+    else
+        let
+            dy =
+                y - spot.y
+
+            -- Adjacency is strict; overlap is strict too. All coordinates are
+            -- integers, so subtracting one preserves both boundary rules.
+            outerSquared =
+                2 * diameter * diameter - 1 - dy * dy
+
+            innerSquared =
+                diameter * diameter - dy * dy
+
+            outer =
+                floor (sqrt (toFloat outerSquared))
+
+            inner =
+                ceiling (sqrt (toFloat (max 0 innerSquared)))
+
+            blockedInterval other =
+                let
+                    deltaY =
+                        y - other.y
+
+                    squared =
+                        diameter * diameter - 1 - deltaY * deltaY
+                in
+                if squared < 0 then
+                    Nothing
+
+                else
+                    let
+                        halfWidth =
+                            floor (sqrt (toFloat squared))
+                    in
+                    Just ( other.x - halfWidth, other.x + halfWidth )
+
+            blocked =
+                List.filterMap blockedInterval nearbySpots |> List.sortBy Tuple.first
+
+            openInterval left right =
+                intervalHasGap (max boardMin left) (min boardMax right) blocked
+        in
+        (outerSquared
+            >= 0
+            && (openInterval (spot.x - outer) (spot.x - inner)
+                    || openInterval (spot.x + inner) (spot.x + outer)
+               )
+        )
+            || hasLibertyInRows spot nearbySpots (y + 1) lastY
+
+
+intervalHasGap : Int -> Int -> List ( Int, Int ) -> Bool
+intervalHasGap left right blocked =
+    if left > right then
+        False
+
+    else
+        case blocked of
+            [] ->
+                True
+
+            ( start, end ) :: rest ->
+                if start > left then
+                    True
+
+                else
+                    intervalHasGap (max left (end + 1)) right rest
 
 
 

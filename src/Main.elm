@@ -49,12 +49,12 @@ type alias Model =
     { record : List Play
     , onMove : Player
     , stones : Stones
-    , ghostStone : Maybe Stone
+    , ghostStone : Maybe MovePreview.Preview
     , highlightedGroup : List Spot
     , justPlayed : Maybe Spot
     , justRemoved : List Stone
     , dragFrom : DragFrom
-    , stagedMove : Maybe Stone
+    , stagedMove : Maybe MovePreview.Preview
     , lastPointer : Maybe Spot
     , showHelp : Bool
     , showScoring : Bool
@@ -163,10 +163,13 @@ handleDrag model draggedFrom draggedTo =
         candidateStone =
             DF.findDragged model.stones model.onMove draggedFrom draggedTo
 
-        ghostStone : Maybe Stone
+        ghostStone : Maybe MovePreview.Preview
         ghostStone =
-            Play.playIfLegal model.stones candidateStone
-                |> Maybe.andThen (Dict.get (stoneKey candidateStone))
+            if Maybe.map (.stone >> .spot) model.ghostStone == Just candidateStone.spot then
+                model.ghostStone
+
+            else
+                MovePreview.fromMoves model.stones (Just candidateStone) Nothing
     in
     { model
         | ghostStone = ghostStone
@@ -208,16 +211,31 @@ handlePlay model playSpot =
             ( model, Cmd.none )
 
 
-playStone : Spot -> Model -> Maybe Stone
+playStone : Spot -> Model -> Maybe MovePreview.Preview
 playStone coords model =
-    Play.playNearby model.onMove model.stones coords
-        |> Maybe.map Tuple.second
+    case Play.playNearby model.onMove model.stones coords of
+        Nothing ->
+            Nothing
+
+        Just result ->
+            case model.ghostStone of
+                Just previous ->
+                    if previous.stone.spot == (Tuple.second result).spot then
+                        -- Preserve the Maybe wrapper too: Svg.Lazy compares
+                        -- argument references, not structural equality.
+                        model.ghostStone
+
+                    else
+                        Just (MovePreview.fromResult model.stones result)
+
+                Nothing ->
+                    Just (MovePreview.fromResult model.stones result)
 
 
-filterStaged : Spot -> Model -> Maybe Stone
+filterStaged : Spot -> Model -> Maybe MovePreview.Preview
 filterStaged coords model =
     model.stagedMove
-        |> Maybe.Extra.filter (\s -> isWithinStone coords s.spot)
+        |> Maybe.Extra.filter (\preview -> isWithinStone coords preview.stone.spot)
 
 
 ifNotFinished : Model -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
@@ -264,16 +282,17 @@ handleMoved coords model =
         _ ->
             -- handle hovering
             let
-                gettingCloser : ( Stone, Spot ) -> Bool
+                gettingCloser : ( MovePreview.Preview, Spot ) -> Bool
                 gettingCloser ( staged, lastPointer ) =
-                    distance staged.spot lastPointer > distance staged.spot coords
+                    distanceSquared staged.stone.spot lastPointer > distanceSquared staged.stone.spot coords
             in
-            Maybe.map2 Tuple.pair model.stagedMove model.lastPointer
-                |> Maybe.Extra.filter gettingCloser
-                -- if getting closer, keep the staged move
-                |> Maybe.map (\_ -> model)
-                -- if getting farther or n/a, clear the staged move
-                |> Maybe.withDefault (handleHover { model | stagedMove = Nothing } coords)
+            case Maybe.map2 Tuple.pair model.stagedMove model.lastPointer |> Maybe.Extra.filter gettingCloser of
+                Just _ ->
+                    -- Keep the staged move without eagerly computing a hover.
+                    model
+
+                Nothing ->
+                    handleHover { model | stagedMove = Nothing } coords
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -325,7 +344,7 @@ update msg model =
                 in
                 case filterStaged coords model of
                     Just staged ->
-                        handlePlay cleared staged.spot
+                        handlePlay cleared staged.stone.spot
 
                     Nothing ->
                         handlePlay cleared coords
@@ -470,73 +489,93 @@ isScoring model =
     model.showScoring || isFinished model.record
 
 
-viewSvg : Model -> List (Svg Msg)
+viewSvg : Model -> Svg Msg
 viewSvg model =
+    lazy7 viewPosition
+        model.stones
+        (Maybe.Extra.or model.stagedMove model.ghostStone)
+        model.highlightedGroup
+        model.justPlayed
+        model.justRemoved
+        (isScoring model)
+        (Maybe.Extra.isJust model.stagedMove)
+
+
+{-| Pointer coordinates and drag bookkeeping do not change the position. Keep
+this whole subtree lazy so those updates cannot rebuild previews or SVG masks.
+-}
+viewPosition : Stones -> Maybe MovePreview.Preview -> List Spot -> Maybe Spot -> List Stone -> Bool -> Bool -> Svg Msg
+viewPosition stones candidate group justPlayed justRemoved scoring staged =
     let
         preview =
-            if isScoring model then
+            if scoring then
                 Nothing
 
             else
-                MovePreview.fromMoves model.stones model.ghostStone model.stagedMove
+                candidate
 
         previewStones =
-            Maybe.map .stones preview |> Maybe.withDefault model.stones
+            Maybe.map .stones preview |> Maybe.withDefault stones
 
         previewStone =
             Maybe.map .stone preview
 
         highlightedGroup =
-            Maybe.map .group preview |> Maybe.withDefault model.highlightedGroup
+            Maybe.map .group preview |> Maybe.withDefault group
 
         survivingLink ( a, b ) =
             Dict.member ( a.x, a.y ) previewStones && Dict.member ( b.x, b.y ) previewStones
 
         stoneClass stone =
             if Dict.member (stoneKey stone) previewStones then
-                classJustPlayed model.justPlayed stone
+                classJustPlayed justPlayed stone
 
             else
                 "pending-capture"
     in
-    [ Svg.defs []
-        [ Svg.filter [ SA.id "blur-filter" ]
-            [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
+    Svg.svg [ SA.viewBox ("0 0 " ++ String.fromInt Board.coordRange ++ " " ++ String.fromInt Board.coordRange) ]
+        [ Svg.defs []
+            [ Svg.filter [ SA.id "blur-filter" ]
+                [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
+            ]
+        , lazy3 Svg.node "g" [ SA.id "lines" ] <| Board.viewLines
+        , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
+        , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
+            List.map hideLinesKeyed (stoneList stones)
+        , if scoring then
+            lazy Territory.view stones
+
+          else
+            lazy DeadZones.view previewStones
+        , if scoring then
+            Svg.g [] []
+
+          else
+            lazy2 DeadZones.viewLiberties previewStones highlightedGroup
+        , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
+            List.map viewGhostLink (Maybe.map getStoneLinks previewStone |> Maybe.withDefault [])
+        , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|
+            List.filterMap identity [ Maybe.map viewGhostStone previewStone ]
+        , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
+            List.map viewKeyedLink (List.filter survivingLink (getUniqueLinks stones))
+        , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
+            (stoneList stones |> List.map (\s -> viewKeyedStone (stoneClass s) s))
+        , lazy3 Svg.node "g" [ SA.id "staged-stone" ] <|
+            if staged then
+                List.filterMap identity [ Maybe.map viewStagedStone previewStone ]
+
+            else
+                []
+        , lazy3 Svg.node "g" [ SA.id "capture-preview", SA.pointerEvents "none" ] <|
+            List.map viewCapturePreview (Maybe.map .captured preview |> Maybe.withDefault [])
+        , lazy3 Svg.node "g" [ SA.id "removed-stones" ] <|
+            (justRemoved |> List.map (viewStone "removed"))
+        , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
+            (highlightedGroup
+                |> List.filter (\spot -> Just spot /= Maybe.map .spot previewStone)
+                |> List.map viewHighlight
+            )
         ]
-    , lazy3 Svg.node "g" [ SA.id "lines" ] <| Board.viewLines
-    , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
-    , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
-        List.map hideLinesKeyed (stoneList model.stones)
-    , if isScoring model then
-        lazy Territory.view model.stones
-
-      else
-        lazy DeadZones.view previewStones
-    , if isScoring model then
-        Svg.g [] []
-
-      else
-        lazy2 DeadZones.viewLiberties previewStones highlightedGroup
-    , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
-        List.map viewGhostLink (Maybe.map getStoneLinks previewStone |> Maybe.withDefault [])
-    , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|
-        List.filterMap identity [ Maybe.map viewGhostStone previewStone ]
-    , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
-        List.map viewKeyedLink (List.filter survivingLink (getUniqueLinks model.stones))
-    , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
-        (stoneList model.stones |> List.map (\s -> viewKeyedStone (stoneClass s) s))
-    , lazy3 Svg.node "g" [ SA.id "staged-stone" ] <|
-        List.filterMap identity [ Maybe.map2 (\_ -> viewStagedStone) model.stagedMove previewStone ]
-    , lazy3 Svg.node "g" [ SA.id "capture-preview", SA.pointerEvents "none" ] <|
-        List.map viewCapturePreview (Maybe.map .captured preview |> Maybe.withDefault [])
-    , lazy3 Svg.node "g" [ SA.id "removed-stones" ] <|
-        (model.justRemoved |> List.map (viewStone "removed"))
-    , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
-        (highlightedGroup
-            |> List.filter (\spot -> Just spot /= Maybe.map .spot previewStone)
-            |> List.map viewHighlight
-        )
-    ]
 
 
 viewCapturePreview : Stone -> Svg msg
@@ -562,9 +601,6 @@ menuLink action iconText tooltip =
 view : Model -> Browser.Document Msg
 view model =
     let
-        intsToStr ints =
-            List.map String.fromInt ints |> String.join " "
-
         title =
             case List.length model.record of
                 0 ->
@@ -606,9 +642,7 @@ view model =
                     ]
                     [ H.div
                         [ HA.id "board", HA.classList [ ( "scoring", isScoring model ) ] ]
-                        [ Svg.svg
-                            [ SA.viewBox <| intsToStr [ 0, 0, Board.coordRange, Board.coordRange ] ]
-                            (viewSvg model)
+                        [ viewSvg model
                         , score
                         ]
                     ]

@@ -219,7 +219,15 @@ regionGeometry : Maybe (List Spot) -> List Spot -> Geometry
 regionGeometry group spots =
     let
         centers =
-            List.map toPoint spots
+            case reach of
+                Nothing ->
+                    List.map toPoint spots
+
+                Just members ->
+                    -- Only blockers that can intersect the group's possible
+                    -- centres affect its liberty-area (or its swept boundary).
+                    List.map toPoint spots
+                        |> List.filter (\c -> List.any (\member -> distance c member <= deadRadius + adjacentDistance + epsilon) members)
 
         reach =
             Maybe.map (List.map toPoint) group
@@ -246,7 +254,7 @@ regionGeometry group spots =
                         |> List.filter (\( a, b ) -> validCenter nearbyStones reach (onCircle c ((a + b) / 2)))
                         |> List.map (\( a, b ) -> Arc c.center c.radius a b)
             in
-            ( arcs, List.filter (validCenter centers reach) crossings )
+            ( arcs, List.filter (validCenter nearbyStones reach) crossings )
 
         edgeBoundary edge =
             let
