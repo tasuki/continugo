@@ -15,6 +15,6 @@ jobs:
             - uses: actions/setup-node@v4
               with:
                 node-version: 18
-            - run: npm install -g elm@latest-0.19.1 elm-test
+            - run: npm install -g elm@latest-0.19.1 elm-test@latest-0.19.1
             - run: elm make src/Main.elm
             - run: elm-test
