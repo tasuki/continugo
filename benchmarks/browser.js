@@ -64,6 +64,58 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const record = 'B[oifh];W[fgoc];B[odpz];W[fhfm];B[ihdL];W[lfem];B[ekpj];W[fsqe];B[dWnk];W[eSmd];B[dGll];W[dsqt];B[fHkR];W[iogz];B[jAfl];W[kPgM];B[gMfX];W[gUez];B[jnhQ];W[hIit];B[lLfD];W[mRgQ];B[mLdR];W[jPcR];B[iHbT];W[hqcz];B[kJbI];W[mbcC];B[nrbT];W[hLaM];B[lZaM];W[jKjx];B[lfiC];W[lCko];B[mVjo];W[nAkG];B[oQjC];W[pCkQ];B[cQim];W[qrmH];B[pYii];W[qNju];B[regx];W[oshO];B[codi];W[dhfM];B[hNlD];W[pvgk]';
   const metrics = async () => Object.fromEntries((await c('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
   try {
+    // Scoring dims the whole board, with a centered result in either orientation.
+    for (const [width, height] of [[1200, 800], [390, 844]]) {
+      await c('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      await navigate('after', record);
+      // Every tooltip stays on one line and left-aligned, including long labels.
+      const menuItems = await evaluate("document.querySelectorAll('#menu .icon').length");
+      for (let i = 0; i < menuItems; i++) {
+        const point = await evaluate(`(() => {
+          const r = document.querySelectorAll('#menu .icon')[${i}].getBoundingClientRect();
+          return { x: r.x + 15, y: r.y + 15 };
+        })()`);
+        await c('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+        await evaluate('frame()');
+        assert.equal(await evaluate(`(() => {
+          const tooltip = document.querySelectorAll('#menu .tooltip')[${i}];
+          const style = getComputedStyle(tooltip);
+          return style.display !== 'none' && style.textAlign === 'left'
+            && tooltip.getBoundingClientRect().height <= parseFloat(style.lineHeight);
+        })()`), true);
+      }
+      await c('Input.dispatchMouseEvent', { type: 'mouseMoved', x: width - 1, y: height - 1 });
+      await evaluate("document.querySelector('#score-toggle').click();frame()");
+      const score = await evaluate(`(() => {
+        const board = document.querySelector('#board').getBoundingClientRect();
+        const overlay = document.querySelector('#score');
+        const rect = overlay.getBoundingClientRect();
+        const result = overlay.querySelector('.score-result').getBoundingClientRect();
+        return {
+          coversBoard: ['x','y','width','height'].every(k => Math.abs(board[k]-rect[k]) < 1),
+          centered: Math.abs(result.x+result.width/2-board.x-board.width/2) < 1
+            && Math.abs(result.y+result.height/2-board.y-board.height/2) < board.height*0.1,
+          background: getComputedStyle(overlay).backgroundColor,
+          color: getComputedStyle(overlay).color,
+          black: getComputedStyle(document.querySelector('.territory-black')).fill,
+          white: getComputedStyle(document.querySelector('.territory-white')).fill
+        };
+      })()`);
+      assert.equal(score.coversBoard, true);
+      assert.equal(score.centered, true);
+      assert.equal(score.background, 'rgba(0, 0, 0, 0.533)');
+      assert.equal(score.color, 'rgb(255, 255, 255)');
+      assert.notEqual(score.black, score.white);
+      assert.equal(await evaluate('location.search'), '?record=' + record);
+      await evaluate("document.querySelector('#score-toggle').click();frame()");
+      assert.equal(await evaluate("document.querySelectorAll('#score, #territory').length"), 0);
+      await evaluate(`(async () => {
+        const pass = [...document.querySelectorAll('#menu .icon')].find(e => e.textContent.startsWith('*'));
+        pass.click(); await frame(); pass.click(); await frame();
+      })()`);
+      assert.equal(await evaluate("document.querySelectorAll('#score .score-result, #territory').length"), 2);
+    }
+    await c('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 1, mobile: false });
     for (const build of (urls.before ? ['before', 'after'] : ['after'])) {
       await navigate(build, record);
       await evaluate('move(839,240)');
@@ -98,8 +150,117 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await evaluate("move(800,800,'mousedown')");
     await evaluate("move(800,800,'mouseup')");
     await wait("document.querySelectorAll('#stones circle').length===1");
+    // Analysis is a separate, persistent scratch layer: no moves or turns.
+    await evaluate(`
+      window.tap = async (x,y) => { await move(x,y,'mousedown'); await move(x,y,'mouseup'); };
+      window.pull = async (x,y,toX,toY) => { await move(x,y,'mousedown'); await move(toX,toY); await move(toX,toY,'mouseup'); };
+    `);
+    await evaluate('tap(200,800)'); // Add a white stone, so both colours can be pulled.
+    const positionUrl = await evaluate('location.search');
+    const checkAnalysisDeadzones = async () => {
+      const centers = selector => evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(selector)}),c=>[+c.getAttribute('cx'),+c.getAttribute('cy')]).sort()`);
+      assert.deepEqual(await centers('#stone-swept-area > g:first-child > g > circle'), await centers('#stones circle, #analysis-circles circle'));
+    };
+    await evaluate("document.querySelector('#analysis-toggle').click();frame()");
+    const realStoneDeadzones = await evaluate("document.querySelector('#dead-zones').innerHTML");
+    await evaluate('move(500,500)');
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles .preview').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle:not(.preview)').length"), 0);
+    await checkAnalysisDeadzones();
+    assert.equal(await evaluate('location.search'), positionUrl);
+    await evaluate("document.querySelector('#board').dispatchEvent(new MouseEvent('mouseleave'));frame()");
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles .preview').length"), 0);
+    assert.equal(await evaluate("document.querySelector('#dead-zones').innerHTML"), realStoneDeadzones);
+    await evaluate('(async()=>{await tap(500,500);await tap(600,500);})()');
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 2);
+    const proposedX = await evaluate("document.querySelector('#analysis-circles circle').getAttribute('cx')");
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-links line').length"), 1);
+    await evaluate('(async()=>{await pull(600,500,900,500);await pull(800,800,500,800);await pull(200,800,500,800);})()');
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 5);
+    await checkAnalysisDeadzones();
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 2);
+    assert.equal(await evaluate('location.search'), positionUrl);
+    await evaluate("[...document.querySelectorAll('#menu .icon')].find(e=>e.textContent.startsWith('*')).click();frame()");
+    assert.equal(await evaluate('location.search'), positionUrl); // Passing is inert in analysis.
+    await evaluate('tap(707,500)');
+    await sleep(400);
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 4);
+    await checkAnalysisDeadzones();
+    await evaluate('(async()=>{await tap(500,500);await tap(500,500);})()');
+    assert.equal(await evaluate("document.querySelector('#analysis-toggle').getAttribute('aria-pressed')"), 'false');
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-layer').length"), 0);
+    assert.equal(await evaluate("document.querySelector('#staged-stone circle').getAttribute('cx')"), proposedX);
+    assert.equal(await evaluate("document.querySelectorAll('#stone-swept-area > g:first-child > g > circle').length"), 3);
+    assert.equal(await evaluate('location.search'), positionUrl);
+    await sleep(400); // The first tap's removal timer must not play or delete anything.
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 2);
+    await evaluate("document.querySelector('#analysis-toggle').click();frame()");
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 4);
+    await evaluate('(async()=>{await tap(500,500);await tap(500,500);await tap(500,500);})()');
+    await wait("document.querySelectorAll('#stones circle').length===3");
+    assert.notEqual(await evaluate('location.search'), positionUrl);
+    await evaluate("document.querySelector('#analysis-toggle').click();frame()");
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 3);
+    await evaluate("document.querySelector('#score-toggle').click();frame()");
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-layer').length"), 0);
+    await evaluate("document.querySelector('#analysis-toggle').click();frame()");
+    assert.equal(await evaluate("document.querySelectorAll('#territory').length"), 0);
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 3);
+
+    // Ordinary placement snapping applies to hover previews and circle placement.
+    await evaluate('move(450,500)');
+    await checkAnalysisDeadzones();
+    assert.equal(await evaluate("+document.querySelector('#analysis-circles .preview').getAttribute('cx')"), Number(proposedX) - 76);
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-links line').length > 0"), true);
+    await evaluate('move(500,500)');
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles .preview').length"), 0);
+    await evaluate('tap(450,500)');
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 4);
+    assert.equal(await evaluate("+document.querySelector('#analysis-circles circle:last-child').getAttribute('cx')"), Number(proposedX) - 76);
+    assert.notEqual(await evaluate("getComputedStyle(document.querySelector('#board')).cursor"), 'crosshair');
+
+    // A circle can fit physically even when proposing it would be suicide.
+    const suicide = 'B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS];B[aMaM];W[]';
+    await navigate('after', suicide);
+    await evaluate(`
+      window.tap = async (x,y) => { await move(x,y,'mousedown'); await move(x,y,'mouseup'); };
+      document.querySelector('#analysis-toggle').click();
+    `);
+    await evaluate('(async()=>{await frame();await tap(138,44);await tap(138,44);await tap(138,44);})()');
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles .invalid').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('#staged-stone circle').length"), 0);
+    assert.equal(await evaluate('location.search'), '?record=' + suicide);
+
+    // Real touch events exercise suppression of synthetic mouse events/double-tap zoom.
+    await c('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 1, mobile: true });
+    await c('Emulation.setTouchEmulationEnabled', { enabled: true });
+    await navigate('after');
+    await evaluate("document.querySelector('#analysis-toggle').click();frame()");
+    const touch = async (type, x = 500, y = 500) => {
+      const point = await evaluate(`(()=>{const b=document.querySelector('#board').getBoundingClientRect();return {x:b.x+${x}*b.width/1000,y:b.y+${y}*b.height/1000};})()`);
+      await c('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [point] });
+      await evaluate('frame()');
+    };
+    const touchTap = async () => { await touch('touchStart'); await touch('touchEnd'); };
+    await touchTap();
+    await sleep(400);
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 1);
+    await touchTap();
+    await sleep(400);
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 0);
+    await touchTap();
+    await touch('touchStart'); await touch('touchMove', 900, 500); await touch('touchEnd', 900, 500);
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 2);
+    await touch('touchStart'); await touch('touchMove', 500, 900); await touch('touchCancel');
+    assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 2);
+    await touchTap(); await touchTap();
+    assert.equal(await evaluate("document.querySelectorAll('#staged-stone circle').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 0);
+    await touchTap();
+    await wait("document.querySelectorAll('#stones circle').length===1");
+    assert.equal(await evaluate('visualViewport.scale'), 1);
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    console.log('Browser checks passed: hover, capture cancellation, unchanged position/URL, staging, scoring, committing.');
+    console.log('Browser checks passed: play previews/staging/scoring, analysis geometry and both-colour dragging, delayed removal, exact proposals, suicide rejection, persistence, touch and cancellation.');
   } finally {
     await call('Target.closeTarget', { targetId });
     ws.close();

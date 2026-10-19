@@ -37,6 +37,15 @@ Long have we suffered under the tyranny of the grid of intersections. Down with 
 - Press **Σ** to toggle the score estimator without passing or changing the game record. Toggle it off to resume playing. The board turns grey while counting, with darker Black territory and lighter White territory.
 - Capture dead groups before passing: scoring uses the stones still on the board, with no automatic dead-stone removal.
 
+### Analysis mode
+
+- Toggle **○** below **Σ** to enter or leave analysis. Your circles survive toggling; analysis does not change the turn or game record.
+- Hover over empty space to preview a hollow circle and its potential connections. Click/tap to add it, snapping to the nearest fitting position just like a regular move. Circles must fit without overlapping stones or other circles. Dashed lines show potential connections to stones of either colour and other circles; circles do not capture or belong to either player.
+- Visible circles, including the hover/drag preview, affect deadzones just like occupied stones. Hiding the circles restores the normal deadzones; captures and scoring still use only real stones.
+- Drag from any stone or circle to create another circle as far away as possible while still connected, just as when pulling from your own stone during play. Circles cannot be moved: remove one and draw it again instead.
+- Single-click/tap a circle to remove it (after a short delay). Double-click/tap it to leave analysis and stage that exact position as the current player's move, then click/tap again to confirm. Illegal proposals flash red and stay in analysis.
+- Other circles are hidden while proposing or playing, and reappear when you return to analysis. Circles overlapped by newly played stones are discarded. The pass action does nothing in analysis.
+
 ### Code/bugs/feedback
 
 How else could go work if not played on the grid?

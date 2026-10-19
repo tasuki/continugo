@@ -58,17 +58,30 @@ desiredCentre from to =
 
 findDragged : Stones -> Player -> Stone -> Spot -> Stone
 findDragged stones onMove draggedFrom draggedTo =
+    findDraggedSpot (List.map .spot (stoneList stones)) draggedFrom.spot draggedTo
+        |> Maybe.withDefault (desiredCentre draggedFrom.spot draggedTo)
+        |> createStone onMove
+
+
+{-| Geometry only: analysis circles obstruct placement just like real stones.
+Unlike a stone, a circle has no player or move-legality constraints.
+-}
+findDraggedSpot : List Spot -> Spot -> Spot -> Maybe Spot
+findDraggedSpot spotList from draggedTo =
     let
         desiredSpot : Spot
         desiredSpot =
-            desiredCentre draggedFrom.spot draggedTo
+            desiredCentre from draggedTo
 
-        spotList : List Spot
-        spotList =
-            stoneList stones |> List.map .spot
+        findNearest : Spot -> Maybe ( Spot, Float ) -> Maybe ( Spot, Float )
+        findNearest zeroCandidate current =
+            let
+                currentDistance =
+                    Maybe.map Tuple.second current |> Maybe.withDefault 1000000
+            in
+            findCandidate zeroCandidate current currentDistance
 
-        findNearest : Spot -> ( Spot, Float ) -> ( Spot, Float )
-        findNearest zeroCandidate ( currentSpot, currentDistance ) =
+        findCandidate zeroCandidate current currentDistance =
             let
                 candidate =
                     Liberties.normalize desiredSpot zeroCandidate
@@ -79,17 +92,14 @@ findDragged stones onMove draggedFrom draggedTo =
             if
                 (candidateDistance < currentDistance)
                     && isWithinBoard candidate
-                    && adjacent candidate draggedFrom.spot
+                    && adjacent candidate from
                     -- the not overlapsAny here is the hot path
                     && (not <| overlapsAny candidate spotList)
             then
-                ( candidate, candidateDistance )
+                Just ( candidate, candidateDistance )
 
             else
-                ( currentSpot, currentDistance )
+                current
     in
-    createStone onMove <|
-        Tuple.first <|
-            List.foldl findNearest
-                ( desiredSpot, 1000000 )
-                Liberties.zeroNpCandidates
+    List.foldl findNearest Nothing Liberties.zeroNpCandidates
+        |> Maybe.map Tuple.first

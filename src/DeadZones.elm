@@ -1,4 +1,4 @@
-module DeadZones exposing (Geometry, Point, canCover, geometry, libertyGeometry, view, viewLiberties)
+module DeadZones exposing (Geometry, Point, canCover, geometry, libertyGeometry, view, viewLiberties, viewSpots)
 
 {-| A visual, continuous-space model, independent of turns and suicide rules.
 
@@ -335,10 +335,14 @@ circle r fill p =
 
 view : Stones -> Svg msg
 view stones =
-    let
-        spots =
-            List.map .spot (stoneList stones)
+    viewSpots (List.map .spot (stoneList stones))
 
+
+{-| Occupancy geometry is colour-independent, including neutral analysis circles.
+-}
+viewSpots : List Spot -> Svg msg
+viewSpots spots =
+    let
         positionKey =
             List.map spotKeyStr spots |> String.join ""
     in

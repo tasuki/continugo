@@ -1,5 +1,6 @@
 module Main exposing (..)
 
+import Analysis
 import Board
 import Browser
 import Browser.Dom as BD
@@ -13,6 +14,7 @@ import Help
 import Html as H
 import Html.Attributes as HA
 import Html.Events as HE
+import Json.Decode as Decode
 import List.Extra
 import Maybe.Extra
 import MovePreview
@@ -58,6 +60,8 @@ type alias Model =
     , lastPointer : Maybe Spot
     , showHelp : Bool
     , showScoring : Bool
+    , showAnalysis : Bool
+    , analysis : Analysis.Model
     , navKey : Nav.Key
     }
 
@@ -76,6 +80,8 @@ emptyModel navKey =
     , lastPointer = Nothing
     , showHelp = False
     , showScoring = False
+    , showAnalysis = False
+    , analysis = Analysis.empty
     , navKey = navKey
     }
 
@@ -94,6 +100,7 @@ type Msg
     | Moved DocumentCoords
     | Finished DocumentCoords
     | ClearTouch
+    | ClearAnalysisHover
     | StartedBoard (Result BD.Error Spot)
     | MovedBoard (Result BD.Error Spot)
     | FinishedBoard (Result BD.Error Spot)
@@ -103,6 +110,8 @@ type Msg
     | Next
     | Help
     | ToggleScoring
+    | ToggleAnalysis
+    | RemoveAnalysisCircle Int
     | New
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
@@ -176,6 +185,35 @@ handleDrag model draggedFrom draggedTo =
         , highlightedGroup = []
         , justPlayed = Nothing
     }
+
+
+handleAnalysisFinished : Spot -> Model -> ( Model, Cmd Msg )
+handleAnalysisFinished coords model =
+    let
+        ( analysis, effect ) =
+            Analysis.finish model.stones coords model.analysis
+
+        updated =
+            { model | analysis = analysis }
+    in
+    case effect of
+        Analysis.NoEffect ->
+            ( updated, Cmd.none )
+
+        Analysis.RemoveAfter serial ->
+            ( updated, Process.sleep 300 |> Task.perform (\_ -> RemoveAnalysisCircle serial) )
+
+        Analysis.Propose spot ->
+            case MovePreview.fromMoves model.stones (Just (createStone model.onMove spot)) Nothing of
+                Just preview ->
+                    if isFinished model.record then
+                        ( { updated | analysis = { analysis | invalid = Just spot } }, Cmd.none )
+
+                    else
+                        ( { updated | showAnalysis = False, stagedMove = Just preview, lastPointer = Just spot }, Cmd.none )
+
+                Nothing ->
+                    ( { updated | analysis = { analysis | invalid = Just spot } }, Cmd.none )
 
 
 handlePlay : Model -> Spot -> ( Model, Cmd Msg )
@@ -309,31 +347,51 @@ update msg model =
             ifNoMultiTouch documentCoords model <|
                 withBoardCoords documentCoords model FinishedBoard
 
+        ClearAnalysisHover ->
+            ( { model | analysis = Analysis.clearHover model.analysis }, Cmd.none )
+
         ClearTouch ->
             ( { model
                 | dragFrom = DF.DragNone
                 , ghostStone = Nothing
+                , analysis = Analysis.cancel model.analysis
               }
             , Cmd.none
             )
 
         StartedBoard (Ok coords) ->
-            ( { model
-                | dragFrom = DF.getDragFrom model.stones model.onMove coords
-                , stagedMove = filterStaged coords model
-              }
-            , Cmd.none
-            )
+            if model.showAnalysis then
+                ( { model
+                    | analysis = Analysis.start model.stones coords model.analysis
+                    , dragFrom = DF.DragSpot coords
+                  }
+                , Cmd.none
+                )
+
+            else
+                ( { model
+                    | dragFrom = DF.getDragFrom model.stones model.onMove coords
+                    , stagedMove = filterStaged coords model
+                  }
+                , Cmd.none
+                )
 
         MovedBoard (Ok coords) ->
             let
                 setLastPointer m =
                     { m | lastPointer = Just coords }
             in
-            ( handleMoved coords model |> setLastPointer, Cmd.none )
+            if model.showAnalysis then
+                ( { model | analysis = Analysis.move model.stones coords model.analysis } |> setLastPointer, Cmd.none )
+
+            else
+                ( handleMoved coords model |> setLastPointer, Cmd.none )
 
         FinishedBoard (Ok coords) ->
-            if model.dragFrom == DF.DragSpot coords then
+            if model.showAnalysis then
+                handleAnalysisFinished coords { model | dragFrom = DF.DragNone }
+
+            else if model.dragFrom == DF.DragSpot coords then
                 let
                     cleared =
                         { model
@@ -362,12 +420,16 @@ update msg model =
                 record =
                     { player = model.onMove, move = Pass } :: model.record
             in
-            ifNotFinished model <|
-                updatePosition
-                    { model
-                        | record = record
-                        , onMove = otherPlayer model.onMove
-                    }
+            if model.showAnalysis then
+                ( model, Cmd.none )
+
+            else
+                ifNotFinished model <|
+                    updatePosition
+                        { model
+                            | record = record
+                            , onMove = otherPlayer model.onMove
+                        }
 
         RemoveStones ->
             ( { model | justRemoved = [] }
@@ -385,7 +447,14 @@ update msg model =
             )
 
         New ->
-            updatePosition (emptyModel model.navKey)
+            let
+                fresh =
+                    emptyModel model.navKey
+
+                analysis =
+                    fresh.analysis
+            in
+            updatePosition { fresh | analysis = { analysis | serial = model.analysis.serial } }
 
         Help ->
             ( { model | showHelp = not model.showHelp }
@@ -395,6 +464,8 @@ update msg model =
         ToggleScoring ->
             ( { model
                 | showScoring = not model.showScoring
+                , showAnalysis = False
+                , analysis = Analysis.cancel model.analysis
                 , ghostStone = Nothing
                 , stagedMove = Nothing
                 , highlightedGroup = []
@@ -403,6 +474,24 @@ update msg model =
               }
             , Cmd.none
             )
+
+        ToggleAnalysis ->
+            ( { model
+                | showAnalysis = not model.showAnalysis
+                , showScoring = False
+                , analysis = Analysis.reconcile model.stones model.analysis
+                , ghostStone = Nothing
+                , stagedMove = Nothing
+                , highlightedGroup = []
+                , justPlayed = Nothing
+                , dragFrom = DF.DragNone
+                , lastPointer = Nothing
+              }
+            , Cmd.none
+            )
+
+        RemoveAnalysisCircle serial ->
+            ( { model | analysis = Analysis.expire serial model.analysis }, Cmd.none )
 
         UrlChanged url ->
             changeRouteTo url model
@@ -434,9 +523,14 @@ changeRouteTo url model =
 
         createModel : List Play -> Model
         createModel record =
+            let
+                stones =
+                    Play.playStones (List.reverse record) Dict.empty
+            in
             { model
                 | record = record
-                , stones = Play.playStones (List.reverse record) Dict.empty
+                , stones = stones
+                , analysis = Analysis.reconcile stones model.analysis
                 , highlightedGroup = []
                 , ghostStone = Nothing
                 , stagedMove = Nothing
@@ -453,7 +547,12 @@ changeRouteTo url model =
 
         newModel =
             Maybe.map createModel maybeRecord
-                |> Maybe.withDefault { empty | showScoring = model.showScoring }
+                |> Maybe.withDefault
+                    { empty
+                        | showScoring = model.showScoring
+                        , showAnalysis = model.showAnalysis
+                        , analysis = Analysis.reconcile Dict.empty model.analysis
+                    }
     in
     ( newModel, Cmd.none )
 
@@ -486,26 +585,39 @@ pushUrl navKey record =
 
 isScoring : Model -> Bool
 isScoring model =
-    model.showScoring || isFinished model.record
+    not model.showAnalysis && (model.showScoring || isFinished model.record)
 
 
 viewSvg : Model -> Svg Msg
 viewSvg model =
-    lazy7 viewPosition
-        model.stones
-        (Maybe.Extra.or model.stagedMove model.ghostStone)
-        model.highlightedGroup
-        model.justPlayed
-        model.justRemoved
-        (isScoring model)
-        (Maybe.Extra.isJust model.stagedMove)
+    Svg.svg [ SA.viewBox ("0 0 " ++ String.fromInt Board.coordRange ++ " " ++ String.fromInt Board.coordRange) ]
+        [ lazy8 viewPosition
+            model.stones
+            (Maybe.Extra.or model.stagedMove model.ghostStone)
+            model.highlightedGroup
+            model.justPlayed
+            model.justRemoved
+            (isScoring model)
+            (Maybe.Extra.isJust model.stagedMove)
+            (if model.showAnalysis then
+                model.analysis
+
+             else
+                Analysis.empty
+            )
+        , if model.showAnalysis then
+            lazy2 Analysis.view model.stones model.analysis
+
+          else
+            Svg.g [] []
+        ]
 
 
 {-| Pointer coordinates and drag bookkeeping do not change the position. Keep
 this whole subtree lazy so those updates cannot rebuild previews or SVG masks.
 -}
-viewPosition : Stones -> Maybe MovePreview.Preview -> List Spot -> Maybe Spot -> List Stone -> Bool -> Bool -> Svg Msg
-viewPosition stones candidate group justPlayed justRemoved scoring staged =
+viewPosition : Stones -> Maybe MovePreview.Preview -> List Spot -> Maybe Spot -> List Stone -> Bool -> Bool -> Analysis.Model -> Svg Msg
+viewPosition stones candidate group justPlayed justRemoved scoring staged analysis =
     let
         preview =
             if scoring then
@@ -533,7 +645,7 @@ viewPosition stones candidate group justPlayed justRemoved scoring staged =
             else
                 "pending-capture"
     in
-    Svg.svg [ SA.viewBox ("0 0 " ++ String.fromInt Board.coordRange ++ " " ++ String.fromInt Board.coordRange) ]
+    Svg.g []
         [ Svg.defs []
             [ Svg.filter [ SA.id "blur-filter" ]
                 [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
@@ -546,7 +658,7 @@ viewPosition stones candidate group justPlayed justRemoved scoring staged =
             lazy Territory.view stones
 
           else
-            lazy DeadZones.view previewStones
+            lazy3 Analysis.viewDeadZones previewStones analysis.circles analysis.preview
         , if scoring then
             Svg.g [] []
 
@@ -635,13 +747,16 @@ view model =
                     , HE.on "mousedown" <| DC.decodeMouse Started
                     , HE.on "mousemove" <| DC.decodeMouse Moved
                     , HE.on "mouseup" <| DC.decodeMouse Finished
-                    , HE.on "touchstart" <| DC.decodeTouch Started
+                    , HE.preventDefaultOn "touchstart" <| DC.decodeSingleTouch ClearTouch Started
                     , HE.preventDefaultOn "touchmove" <| DC.decodeSingleTouch ClearTouch Moved
                     , HE.on "touchend" <| DC.decodeChangedTouch Finished
-                    , HE.on "touchcancel" <| DC.decodeChangedTouch Finished
+                    , HE.on "touchcancel" <| Decode.succeed ClearTouch
                     ]
                     [ H.div
-                        [ HA.id "board", HA.classList [ ( "scoring", isScoring model ) ] ]
+                        [ HA.id "board"
+                        , HA.classList [ ( "scoring", isScoring model ), ( "analysis", model.showAnalysis ) ]
+                        , HE.onMouseLeave ClearAnalysisHover
+                        ]
                         [ viewSvg model
                         , score
                         ]
@@ -668,7 +783,23 @@ view model =
                     , HA.disabled (isFinished model.record)
                     , HE.onClick ToggleScoring
                     ]
-                    [ H.text "Σ", H.span [ HA.class "tooltip" ] [ H.text " score estimator" ] ]
+                    [ H.text "%", H.span [ HA.class "tooltip" ] [ H.text " score" ] ]
+                ]
+            , H.div [ HA.class "item" ]
+                [ H.button
+                    [ HA.id "analysis-toggle"
+                    , HA.classList [ ( "icon", True ), ( "active", model.showAnalysis ) ]
+                    , HA.attribute "aria-label" "Toggle analysis mode"
+                    , HA.attribute "aria-pressed"
+                        (if model.showAnalysis then
+                            "true"
+
+                         else
+                            "false"
+                        )
+                    , HE.onClick ToggleAnalysis
+                    ]
+                    [ H.text "o", H.span [ HA.class "tooltip" ] [ H.text " analysis" ] ]
                 ]
             , menuLink Prev "‹" "undo"
             , menuLink Next "︎︎›︎" "redo"
