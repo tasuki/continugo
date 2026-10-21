@@ -2,9 +2,12 @@ module DeadZonesTests exposing (tests)
 
 import Board exposing (stoneRadius)
 import DeadZones exposing (Point, canCover, geometry, libertyGeometry)
+import Dict
 import Expect
 import Fuzz
 import Go exposing (Spot, adjacentDistance, diameter)
+import Play
+import Sgf
 import Test exposing (..)
 
 
@@ -118,6 +121,66 @@ tests =
             [ test "An empty group has no highlighted area" <|
                 \_ ->
                     Expect.equal False (canCover (libertyGeometry [] []) (Point 500 500))
+            , test "The reported black eye is not a liberty of the diagonally placed white group" <|
+                \_ ->
+                    let
+                        record =
+                            "B[ckaM];B[aMck];B[dIck];B[ckdI];B[aMdI];B[dIaM];W[rbaU];B[pmbt];W[sjcl];B[pNdt];W[rfdY];B[pXfw];W[sbfQ];B[sAhO];B[qBhv];W[aMfg];W[ckfg];W[fgaM];W[fgck];W[dIdI];W[dIfg]"
+
+                        stones =
+                            Play.playStones (Sgf.decode record) Dict.empty
+
+                        members key =
+                            Dict.get key stones
+                                |> Maybe.map (Play.group stones >> List.map .spot)
+                                |> Maybe.withDefault []
+
+                        spots =
+                            List.map .spot (Go.stoneList stones)
+
+                        white =
+                            libertyGeometry spots (members ( 190, 190 ))
+
+                        black =
+                            libertyGeometry spots (members ( 114, 38 ))
+
+                        eye =
+                            [ Point 114 114, Point 140 114, Point 114 140 ]
+                    in
+                    Expect.equal ( False, [ False, False, False ], [ True, True, True ] )
+                        ( Go.adjacent (Spot 114 114) (Spot 190 190)
+                        , List.map (canCover white) eye
+                        , List.map (canCover black) eye
+                        )
+            , test "An isolated centre exactly d*sqrt(2) away is not a liberty" <|
+                \_ ->
+                    let
+                        diagonal =
+                            Spot (500 + d) (500 + d)
+
+                        spots =
+                            [ Spot (500 - d) 500, Spot (500 + d) 500, Spot 500 (500 - d), Spot 500 (500 + d), diagonal ]
+
+                        shape =
+                            libertyGeometry spots [ diagonal ]
+                    in
+                    Expect.equal ( True, [ False, False, False ] )
+                        ( canCover (geometry spots) (Point 500 500)
+                        , List.map (canCover shape) [ Point 500 500, Point (500 + r) 500, Point 500 (500 + r) ]
+                        )
+            , test "Another genuinely adjacent member can still contribute the isolated liberty" <|
+                \_ ->
+                    let
+                        diagonal =
+                            Spot (500 + d) (500 + d)
+
+                        neighbour =
+                            Spot (500 + d) 500
+
+                        spots =
+                            [ Spot (500 - d) 500, neighbour, Spot 500 (500 - d), Spot 500 (500 + d), diagonal ]
+                    in
+                    Expect.equal True (canCover (libertyGeometry spots [ diagonal, neighbour ]) (Point 500 500))
             , test "A lone stone has a continuous ring reaching one radius beyond adjacency" <|
                 \_ ->
                     let

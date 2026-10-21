@@ -83,7 +83,7 @@ placeable centers p =
 inReach : Maybe (List Point) -> Point -> Bool
 inReach reach p =
     reach
-        |> Maybe.map (List.any (\c -> distance c p <= adjacentDistance + epsilon))
+        |> Maybe.map (List.any (\c -> distance c p < adjacentDistance - epsilon))
         |> Maybe.withDefault True
 
 
@@ -194,7 +194,9 @@ intervals values =
             List.sort values
     in
     List.map2 Tuple.pair sorted (List.drop 1 sorted)
-        |> List.filter (\( a, b ) -> b > a)
+        -- Coincident crossings can differ by roundoff. They must not create
+        -- tiny arcs whose round caps turn a single excluded point into a disc.
+        |> List.filter (\( a, b ) -> b - a > epsilon)
 
 
 geometry : List Spot -> Geometry
@@ -251,7 +253,21 @@ regionGeometry group spots =
                 arcs =
                     (0 :: pi :: (2 * pi) :: List.map (angleOf c.center) crossings)
                         |> intervals
-                        |> List.filter (\( a, b ) -> validCenter nearbyStones reach (onCircle c ((a + b) / 2)))
+                        |> List.filter
+                            (\( a, b ) ->
+                                let
+                                    midpoint =
+                                        onCircle c ((a + b) / 2)
+                                in
+                                if c.radius == adjacentDistance then
+                                    -- A nonzero reach arc bounds centres strictly
+                                    -- inside adjacency. Keep that limiting sweep,
+                                    -- but do not admit isolated boundary points.
+                                    placeable nearbyStones midpoint
+
+                                else
+                                    validCenter nearbyStones reach midpoint
+                            )
                         |> List.map (\( a, b ) -> Arc c.center c.radius a b)
             in
             ( arcs, List.filter (validCenter nearbyStones reach) crossings )
