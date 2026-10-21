@@ -1,12 +1,3 @@
-module Help exposing (..)
-
-import Html
-import Markdown
-
-
-help : Html.Html msg
-help =
-    Markdown.toHtml [] """
 ## ContinuGo
 
 Long have we suffered under the tyranny of the grid of intersections. Down with the grid!
@@ -48,4 +39,3 @@ How else could go work if not played on the grid?
 It feels like I discovered this rather than invented it...
 
 [Code available on GitHub](https://github.com/tasuki/continugo), [bug reports and feature requests also go there please](https://github.com/tasuki/continugo/issues).
-"""

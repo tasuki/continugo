@@ -10,12 +10,13 @@ import Dict
 import DocumentCoords as DC exposing (DocumentCoords)
 import DragFrom as DF exposing (DragFrom)
 import Go exposing (..)
-import Help
+import HelpContent
 import Html as H
 import Html.Attributes as HA
 import Html.Events as HE
 import Json.Decode as Decode
 import List.Extra
+import Markdown
 import Maybe.Extra
 import MovePreview
 import Play
@@ -739,7 +740,7 @@ view model =
 
         content =
             if model.showHelp then
-                H.div [ HA.id "help" ] [ Help.help ]
+                H.div [ HA.id "help" ] [ Markdown.toHtml [] HelpContent.markdown ]
 
             else
                 H.div

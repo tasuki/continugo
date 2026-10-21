@@ -16,5 +16,6 @@ jobs:
               with:
                 node-version: 18
             - run: npm install -g elm@latest-0.19.1 elm-test@latest-0.19.1
+            - run: make help
             - run: elm make src/Main.elm
             - run: elm-test
