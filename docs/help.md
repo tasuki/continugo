@@ -4,15 +4,14 @@ Long have we suffered under the tyranny of the grid of intersections. Down with 
 
 ### Rules
 
-1. You know [how to play go](https://online-go.com/learn-to-play-go/). Here are the exceptions and clarifications.
-2. Go is played on an empty square, called a board. Lines may be drawn on it who cares about those.
+1. You know [how to play go](https://online-go.com/learn-to-play-go/). The following are the differences.
+2. ContinuGo is played on a square board. Lines may be drawn on it who cares about those.
 3. Stones may not overlap.
-4. A point on the board where a stone can fit is called a spot.
-5. Spots whose centres are **closer than the stone diameter times the square root of two are considered adjacent**. Adjacent spots occupied by friendly stones are connected, and shown as such by a connecting line.
-6. A **liberty is an adjacent spot where a stone can fit**.
-7. When a stone or a group of connected stones loses all liberties, it is captured.
-8. Ko: one may not capture just one stone if that stone was played on the previous turn and captured just one stone. No positional superko fuck off.
-9. Scoring: After two consecutive passes, whoever controls more board area wins. Every point belongs to the nearest stone's colour.
+4. Stones whose centres are **closer than the stone diameter times the square root of two are considered adjacent**. Adjacent stones of the same colour are connected, and shown as such by a connecting line.
+6. A **liberty is an adjacent empty point where a stone can fit**.
+7. Scoring: After two consecutive passes, every point belongs to the nearest stone's colour. Whoever controls more board area wins.
+
+The [full rules are also available](rules.md), though I doubt you want to read 'em.
 
 ### How to actually play
 
@@ -24,6 +23,7 @@ Long have we suffered under the tyranny of the grid of intersections. Down with 
 - If a spot clearly has enough space for a stone but the stone is not appearing, playing there would be a suicide.
 - While suicide is not allowed, you can **capture another group of your own stones** by removing their last liberty.
 - **Capture dead groups before passing**: scoring uses the stones still on the board, with no automatic dead-stone removal.
+- Other than artificially created positions, I've not seen a ko. If you see an actual ko, do let me know!
 
 ### Analysis mode
 
