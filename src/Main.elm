@@ -630,9 +630,31 @@ isScoring model =
     not model.showAnalysis && (model.showScoring || isFinished model.record)
 
 
+{-| Keep the unchanged blur in a separate SVG. Promoting individual SVG groups
+can leave stale mask tiles after pinch zoom; the background needs no masks.
+-}
+viewBackground : Stones -> Svg Msg
+viewBackground stones =
+    Svg.svg [ SA.id "board-background", SA.viewBox boardViewBox ]
+        [ Svg.defs []
+            [ Svg.filter [ SA.id "blur-filter" ]
+                [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
+            ]
+        , lazy3 Svg.node "g" [ SA.id "lines" ] <| Board.viewLines
+        , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
+        , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
+            List.map hideLinesKeyed (stoneList stones)
+        ]
+
+
+boardViewBox : String
+boardViewBox =
+    "0 0 " ++ String.fromInt Board.coordRange ++ " " ++ String.fromInt Board.coordRange
+
+
 viewSvg : Model -> Svg Msg
 viewSvg model =
-    Svg.svg [ SA.viewBox ("0 0 " ++ String.fromInt Board.coordRange ++ " " ++ String.fromInt Board.coordRange) ]
+    Svg.svg [ SA.id "board-position", SA.viewBox boardViewBox ]
         [ lazy8 viewPosition
             model.stones
             (Maybe.Extra.or model.stagedMove model.ghostStone)
@@ -688,15 +710,7 @@ viewPosition stones candidate group justPlayed justRemoved scoring staged analys
                 "pending-capture"
     in
     Svg.g []
-        [ Svg.defs []
-            [ Svg.filter [ SA.id "blur-filter" ]
-                [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
-            ]
-        , lazy3 Svg.node "g" [ SA.id "lines" ] <| Board.viewLines
-        , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
-        , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
-            List.map hideLinesKeyed (stoneList stones)
-        , if scoring then
+        [ if scoring then
             lazy Territory.view stones
 
           else
@@ -791,7 +805,8 @@ view model =
                         , HA.classList [ ( "scoring", isScoring model ), ( "analysis", model.showAnalysis ) ]
                         , HE.on "pointerleave" <| Decode.succeed ClearAnalysisHover
                         ]
-                        [ viewSvg model
+                        [ lazy viewBackground model.stones
+                        , viewSvg model
                         , score
                         ]
                     ]

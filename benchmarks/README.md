@@ -20,9 +20,15 @@
   adjacency radius plus one diameter of the group can affect it. Intersection
   validation also reuses the circle's already-filtered nearby blockers.
 - Browser profiling then found that repainting the unchanged Gaussian-blurred
-  background dominated the remaining work. `#hide-lines { will-change: transform }`
-  lets Chrome retain it in a separate composited layer instead of repainting the
-  blur alongside every moving mask. This keeps the existing visual effect.
+  background dominated the remaining work. The background and changing position
+  now have separate, fixed-size SVG viewports. Chrome can retain the background
+  without repainting the blur alongside every moving mask.
+- Mobile pinch zoom magnifies mask textures as well as the board. Liberty masks
+  and their painted rectangle are now bounded to the group's reach plus one
+  stone radius. Deadzones paint the inverse sweep directly rather than nesting
+  two full-board masks. Compositing hints apply only to the whole SVG viewports:
+  promoting individual masked groups left rectangular stale tiles after zoom
+  and repaint. The changing masks now share one stable viewport with the stones.
 - Service-worker cache bumped so deployed clients can receive the new JS/CSS.
 
 ## Measurements
@@ -46,6 +52,10 @@ capture preview and an empty location, after the initial fade animation:
 | Capture/empty hover: scripting | 183 ms | 8.9 ms |
 | Capture/empty hover: total main-thread task time | 189 ms | 13.2 ms |
 | Unchanged hover: scripting | 27.2 ms | 1.14 ms |
+
+A later mobile-emulation trace (390×844, DPR 3, 3× pinch zoom, 90 moving
+previews) reduced summed raster-worker time from about 31 to 4.9 ms/event with
+the bounded masks, direct inverse sweep, and separate SVG viewports.
 
 These are CPU-work measurements, not guaranteed frame latency or device-wide
 speedups. The browser after-build includes release minification. Chrome's
@@ -90,7 +100,11 @@ Defaults: app at `http://localhost:9071/`, CDP at `http://localhost:19272`.
 Override with `AFTER_URL` and `CDP_URL`. Set `BEFORE_URL` to an independently
 served old build (including its old stylesheet) for the comparison. The script
 bypasses browser/service-worker caches and checks hover/capture cancellation,
-unchanged stones and record URL, staging, scoring and committing a move.
+unchanged stones and record URL, staging, scoring and committing a move. Touch
+checks also cover preview tracking and staging at 3× zoom/DPR 3, and verify that
+a lone preview no longer allocates full-board liberty masks. Real two-finger zoom
+and pixel comparisons after SVG invalidation at 1.5×, 3×, and 5× check for stale
+mask tiles, rather than just checking that the DOM contains the right circles.
 
 Correctness: `elm-test --fuzz 1000` passes 83 tests, including interval-search
 comparisons against exhaustive search for randomized blockers and board corners,

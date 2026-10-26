@@ -134,7 +134,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       await evaluate('(async()=>{for(let i=0;i<20;i++){await move(839,240);await move(850,850);}})()');
       const end = await metrics();
       console.log(`${build}: capture-hover script ${((end.ScriptDuration-start.ScriptDuration)*1000/40).toFixed(2)} ms/event; total main-thread ${((end.TaskDuration-start.TaskDuration)*1000/40).toFixed(2)} ms/event`);
-      await evaluate(`window.mutations=0; new MutationObserver(ms=>{mutations+=ms.length}).observe(document.querySelector('#board svg'),{attributes:true,childList:true,subtree:true});`);
+      await evaluate(`window.mutations=0; new MutationObserver(ms=>{mutations+=ms.length}).observe(document.querySelector('#board-position'),{attributes:true,childList:true,subtree:true});`);
       const steadyStart = await metrics();
       await evaluate('(async()=>{for(let i=0;i<20;i++)await move(850,850);})()');
       const steadyEnd = await metrics();
@@ -146,6 +146,13 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await evaluate('move(500,500)');
     assert.equal(await evaluate("document.querySelectorAll('#ghost-stone circle').length"), 1);
     assert.equal(await evaluate("document.querySelectorAll('#liberty-area-fill').length"), 1);
+    // A lone preview must not allocate full-board liberty mask textures.
+    assert.equal(await evaluate(`(() => {
+      const fill = document.querySelector('#liberty-area-fill');
+      const mask = document.querySelector('#liberty-swept-area');
+      return +fill.getAttribute('width') < 400 && +fill.getAttribute('height') < 400
+        && ['x','y','width','height'].every(k => fill.getAttribute(k) === mask.getAttribute(k));
+    })()`), true);
     await evaluate("move(500,500,'mousedown')");
     await evaluate('move(650,500)');
     await evaluate("move(650,500,'mouseup')");
@@ -167,7 +174,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     const positionUrl = await evaluate('location.search');
     const checkAnalysisDeadzones = async () => {
       const centers = selector => evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(selector)}),c=>[+c.getAttribute('cx'),+c.getAttribute('cy')]).sort()`);
-      assert.deepEqual(await centers('#stone-swept-area > g:first-child > g > circle'), await centers('#stones circle, #analysis-circles circle'));
+      assert.deepEqual(await centers('#stone-swept-area > g > g > circle'), await centers('#stones circle, #analysis-circles circle'));
     };
     await evaluate("document.querySelector('#analysis-toggle').click();frame()");
     const realStoneDeadzones = await evaluate("document.querySelector('#dead-zones').innerHTML");
@@ -198,7 +205,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert.equal(await evaluate("document.querySelector('#analysis-toggle').getAttribute('aria-pressed')"), 'false');
     assert.equal(await evaluate("document.querySelectorAll('#analysis-layer').length"), 0);
     assert.equal(await evaluate("document.querySelector('#staged-stone circle').getAttribute('cx')"), proposedX);
-    assert.equal(await evaluate("document.querySelectorAll('#stone-swept-area > g:first-child > g > circle').length"), 3);
+    assert.equal(await evaluate("document.querySelectorAll('#stone-swept-area > g > g > circle').length"), 3);
     assert.equal(await evaluate('location.search'), positionUrl);
     await sleep(400); // The first tap's removal timer must not play or delete anything.
     assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 2);
@@ -267,6 +274,62 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await touchTap();
     await wait("document.querySelectorAll('#stones circle').length===1");
     assert.equal(await evaluate('visualViewport.scale'), 1);
+    // Pinch zoom changes raster scale, not board coordinates or touch staging.
+    await c('Emulation.setDeviceMetricsOverride', { width: 390, height: 390, deviceScaleFactor: 3, mobile: true });
+    await c('Emulation.setPageScaleFactor', { pageScaleFactor: 3 });
+    await touch('touchStart', 180, 180);
+    for (const x of [200, 220, 240]) {
+      await touch('touchMove', x, 240);
+      assert.equal(await evaluate("+document.querySelector('#ghost-stone circle').getAttribute('cx')"), x);
+      assert.equal(await evaluate("+document.querySelector('#ghost-stone circle').getAttribute('cy')"), 240);
+    }
+    await touch('touchEnd', 240, 240);
+    assert.equal(await evaluate("+document.querySelector('#staged-stone circle').getAttribute('cx')"), 240);
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 1);
+    assert.equal(await evaluate('visualViewport.scale'), 3);
+
+    // Exercise real two-finger zoom, including its visual-viewport offset.
+    await c('Emulation.setPageScaleFactor', { pageScaleFactor: 1 });
+    await navigate('after', record);
+    await sleep(5500);
+    const fingers = distance => [{ x: 195 - distance, y: 195, id: 1 }, { x: 195 + distance, y: 195, id: 2 }];
+    await c('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: fingers(30) });
+    for (let distance = 35; distance <= 90; distance += 5) {
+      await c('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: fingers(distance) });
+      await sleep(20);
+    }
+    await c('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    assert.ok(await evaluate('visualViewport.scale > 1'));
+
+    // Invalidating a zoomed SVG must not leave rectangular stale mask tiles.
+    for (const scale of [1.5, 3, 5]) {
+      await c('Emulation.setPageScaleFactor', { pageScaleFactor: scale });
+      await evaluate('move(500,500)');
+      const before = (await c('Page.captureScreenshot', { format: 'png' })).data;
+      await evaluate("document.querySelector('#board-position').style.display='none';frame()");
+      await evaluate("document.querySelector('#board-position').style.display='';frame()");
+      await sleep(150);
+      const after = (await c('Page.captureScreenshot', { format: 'png' })).data;
+      const changed = await evaluate(`(async () => {
+        const pixels = async data => {
+          const image = new Image();
+          image.src = 'data:image/png;base64,' + data;
+          await image.decode();
+          const canvas = document.createElement('canvas');
+          canvas.width = image.width; canvas.height = image.height;
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          context.drawImage(image, 0, 0);
+          return context.getImageData(0, 0, canvas.width, canvas.height).data;
+        };
+        const a = await pixels(${JSON.stringify(before)}), b = await pixels(${JSON.stringify(after)});
+        let changed = 0;
+        for (let i = 0; i < a.length; i += 4) {
+          if ([0,1,2].some(c => Math.abs(a[i+c]-b[i+c]) > 16)) changed++;
+        }
+        return changed / (a.length / 4);
+      })()`);
+      assert.ok(changed < 0.001, `${scale}× zoom: ${(100*changed).toFixed(2)}% of pixels changed after repaint`);
+    }
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('Browser checks passed: play previews/staging/scoring, analysis geometry and both-colour dragging, delayed removal, exact proposals, suicide rejection, persistence, touch and cancellation.');
   } finally {

@@ -27,6 +27,9 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 
 #board-container { display: flex; align-items: center; justify-content: center; height: 100%; overflow: hidden; touch-action: pinch-zoom; }
 #board { width: 100vmin; height: 100vmin; background-color: #CB5; position: relative; }
+/* Composite whole SVG viewports, not masked groups with changing bounds. */
+#board > svg { position: absolute; inset: 0; width: 100%; height: 100%; will-change: transform; }
+#board-background { pointer-events: none; }
 #board.scoring { background-color: #B8B8B8; }
 #board.scoring #hide-lines circle { fill: #B8B8B8; animation: none; }
 #lines { stroke: #0009; stroke-width: 1.5; }
@@ -35,9 +38,6 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 #territory .territory-black { fill: #222; fill-opacity: 0.3; }
 #territory .territory-white { fill: #FFF; fill-opacity: 0.55; }
 
-/* Keep the expensive, unchanged Gaussian blur in its own composited layer.
-   Hovering otherwise repaints it along with the changing SVG masks. */
-#hide-lines { will-change: transform; }
 #hide-lines circle { fill: #CB5; animation: 5s fadeInOpacity; }
 @keyframes fadeInOpacity { 0% { opacity: 0; } 100% { opacity: 1; } }
 

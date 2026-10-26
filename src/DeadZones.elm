@@ -370,14 +370,56 @@ viewSpots spots =
         [ ( positionKey, viewGeometry (geometry spots) ) ]
 
 
-maskAttributes : String -> List (Svg.Attribute msg)
-maskAttributes name =
-    [ SA.id name, SA.maskUnits "userSpaceOnUse", SA.x "0", SA.y "0", SA.width (String.fromInt coordRange), SA.height (String.fromInt coordRange) ]
-
-
-sweptMasks : String -> Geometry -> List (Svg msg)
-sweptMasks name shape =
+{-| Liberty masks only need the group's reach, expanded by a stone radius.
+Full-board mask textures become particularly expensive at mobile pinch zoom.
+-}
+regionBounds : Geometry -> List (Svg.Attribute msg)
+regionBounds shape =
     let
+        centers =
+            Maybe.withDefault [] shape.reach
+
+        extent =
+            adjacentDistance + radius
+
+        lower field =
+            List.map (\p -> field p - extent) centers |> List.minimum |> Maybe.withDefault 0 |> max 0
+
+        upper field =
+            List.map (\p -> field p + extent) centers |> List.maximum |> Maybe.withDefault (toFloat coordRange) |> min (toFloat coordRange)
+    in
+    [ SA.x (String.fromFloat (lower .x))
+    , SA.y (String.fromFloat (lower .y))
+    , SA.width (String.fromFloat (upper .x - lower .x))
+    , SA.height (String.fromFloat (upper .y - lower .y))
+    ]
+
+
+maskAttributes : String -> Geometry -> List (Svg.Attribute msg)
+maskAttributes name shape =
+    SA.id name :: SA.maskUnits "userSpaceOnUse" :: regionBounds shape
+
+
+{-| Paint the deadzone's inverse sweep directly, avoiding a second full-board
+mask texture. Liberty areas use the positive sweep with a reach mask.
+-}
+sweptMasks : Bool -> String -> Geometry -> List (Svg msg)
+sweptMasks inverted name shape =
+    let
+        foreground =
+            if inverted then
+                "black"
+
+            else
+                "white"
+
+        background =
+            if inverted then
+                "white"
+
+            else
+                "black"
+
         arcPath arc =
             "M " ++ pointString (onCircle arc arc.start) ++ " A " ++ String.fromFloat arc.radius ++ " " ++ String.fromFloat arc.radius ++ " 0 0 1 " ++ pointString (onCircle arc arc.end)
 
@@ -401,24 +443,25 @@ sweptMasks name shape =
                     []
 
                 Just centers ->
-                    [ Svg.mask (maskAttributes reachMask) (List.map (circle adjacentDistance "white") centers) ]
+                    [ Svg.mask (maskAttributes reachMask shape) (List.map (circle adjacentDistance "white") centers) ]
     in
     reachDefinition
-        ++ [ Svg.mask (maskAttributes name)
-                [ Svg.g reachAttributes
-                    [ Svg.rect [ SA.x (String.fromFloat low), SA.y (String.fromFloat low), SA.width (String.fromFloat (high - low)), SA.height (String.fromFloat (high - low)), SA.fill "white" ] []
-                    , Svg.g [] (List.map (circle deadRadius "black") shape.centers)
+        ++ [ Svg.mask (maskAttributes name shape)
+                [ boardRect [ SA.fill background ]
+                , Svg.g reachAttributes
+                    [ Svg.rect [ SA.x (String.fromFloat low), SA.y (String.fromFloat low), SA.width (String.fromFloat (high - low)), SA.height (String.fromFloat (high - low)), SA.fill foreground ] []
+                    , Svg.g [] (List.map (circle deadRadius background) shape.centers)
                     ]
                 , Svg.path
                     [ SA.d (String.join " " (List.map arcPath shape.arcs ++ List.map linePath shape.lines))
                     , SA.fill "none"
-                    , SA.stroke "white"
+                    , SA.stroke foreground
                     , SA.strokeWidth (String.fromInt diameter)
                     , SA.strokeLinecap "round"
                     , SA.strokeLinejoin "round"
                     ]
                     []
-                , Svg.g [] (List.map (circle radius "white") shape.points)
+                , Svg.g [] (List.map (circle radius foreground) shape.points)
                 ]
            ]
 
@@ -426,15 +469,8 @@ sweptMasks name shape =
 viewGeometry : Geometry -> Svg msg
 viewGeometry shape =
     Svg.g []
-        [ Svg.defs []
-            (sweptMasks "stone-swept-area" shape
-                ++ [ Svg.mask (maskAttributes "dead-zone-area")
-                        [ boardRect [ SA.fill "white" ]
-                        , boardRect [ SA.fill "black", SA.mask "url(#stone-swept-area)" ]
-                        ]
-                   ]
-            )
-        , boardRect [ SA.id "dead-zone-fill", SA.mask "url(#dead-zone-area)" ]
+        [ Svg.defs [] (sweptMasks True "stone-swept-area" shape)
+        , boardRect [ SA.id "dead-zone-fill", SA.mask "url(#stone-swept-area)" ]
         ]
 
 
@@ -453,10 +489,14 @@ viewLiberties stones group =
             []
 
          else
+            let
+                shape =
+                    libertyGeometry spots group
+            in
             [ ( positionKey
               , Svg.g []
-                    [ Svg.defs [] (sweptMasks "liberty-swept-area" (libertyGeometry spots group))
-                    , boardRect [ SA.id "liberty-area-fill", SA.mask "url(#liberty-swept-area)" ]
+                    [ Svg.defs [] (sweptMasks False "liberty-swept-area" shape)
+                    , Svg.rect (SA.id "liberty-area-fill" :: SA.mask "url(#liberty-swept-area)" :: regionBounds shape) []
                     ]
               )
             ]
