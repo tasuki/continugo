@@ -51,10 +51,18 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await wait("!!document.querySelector('#board svg')");
     await evaluate(`
       window.frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
+      window.pointerPressed = false;
       window.move = async (x, y, type = 'mousemove') => {
         const b = document.querySelector('#board').getBoundingClientRect();
-        document.querySelector('#board-container').dispatchEvent(new MouseEvent(type, {
-          bubbles: true, clientX: b.x + x*b.width/1000, clientY: b.y + y*b.height/1000
+        if (type === 'mousedown') pointerPressed = true;
+        if (type === 'mouseup') pointerPressed = false;
+        // Keep the same scenarios usable against older mouse-event builds.
+        const EventClass = ${build === 'before' ? 'MouseEvent' : 'PointerEvent'};
+        const eventType = ${build === 'before' ? 'type' : "type.replace('mouse', 'pointer')"};
+        document.querySelector('#board-container').dispatchEvent(new EventClass(eventType, {
+          bubbles: true, clientX: b.x + x*b.width/1000, clientY: b.y + y*b.height/1000,
+          pointerId: 1, pointerType: 'mouse', isPrimary: true,
+          button: type === 'mousemove' ? -1 : 0, buttons: pointerPressed ? 1 : 0
         }));
         await frame();
       };
@@ -168,7 +176,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle:not(.preview)').length"), 0);
     await checkAnalysisDeadzones();
     assert.equal(await evaluate('location.search'), positionUrl);
-    await evaluate("document.querySelector('#board').dispatchEvent(new MouseEvent('mouseleave'));frame()");
+    await evaluate("document.querySelector('#board').dispatchEvent(new PointerEvent('pointerleave'));frame()");
     assert.equal(await evaluate("document.querySelectorAll('#analysis-circles .preview').length"), 0);
     assert.equal(await evaluate("document.querySelector('#dead-zones').innerHTML"), realStoneDeadzones);
     await evaluate('(async()=>{await tap(500,500);await tap(600,500);})()');
@@ -231,7 +239,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert.equal(await evaluate("document.querySelectorAll('#staged-stone circle').length"), 0);
     assert.equal(await evaluate('location.search'), '?record=' + suicide);
 
-    // Real touch events exercise suppression of synthetic mouse events/double-tap zoom.
+    // Real touch events must not double-handle taps through synthetic mouse events.
     await c('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 1, mobile: true });
     await c('Emulation.setTouchEmulationEnabled', { enabled: true });
     await navigate('after');

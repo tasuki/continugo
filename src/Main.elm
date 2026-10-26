@@ -20,6 +20,7 @@ import Markdown
 import Maybe.Extra
 import MovePreview
 import Play
+import PointerInput
 import Process
 import Regex
 import Sgf
@@ -57,6 +58,7 @@ type alias Model =
     , justPlayed : Maybe Spot
     , justRemoved : List Stone
     , dragFrom : DragFrom
+    , pointer : PointerInput.State
     , stagedMove : Maybe MovePreview.Preview
     , lastPointer : Maybe Spot
     , showHelp : Bool
@@ -77,6 +79,7 @@ emptyModel navKey =
     , justPlayed = Nothing
     , justRemoved = []
     , dragFrom = DF.DragNone
+    , pointer = PointerInput.empty
     , stagedMove = Nothing
     , lastPointer = Nothing
     , showHelp = False
@@ -97,14 +100,9 @@ init _ url navKey =
 
 
 type Msg
-    = Started DocumentCoords
-    | Moved DocumentCoords
-    | Finished DocumentCoords
-    | ClearTouch
+    = PointerEvent PointerInput.Event
+    | PointerAtBoard Int PointerInput.Action (Result BD.Error Spot)
     | ClearAnalysisHover
-    | StartedBoard (Result BD.Error Spot)
-    | MovedBoard (Result BD.Error Spot)
-    | FinishedBoard (Result BD.Error Spot)
     | PlayPass
     | RemoveStones
     | Prev
@@ -286,23 +284,14 @@ ifNotFinished model newModelCmd =
         newModelCmd
 
 
-ifNoMultiTouch : DocumentCoords -> Model -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
-ifNoMultiTouch documentCoords model newModelCmd =
-    if documentCoords.source == DC.Touch && model.dragFrom == DF.DragNone then
-        ( model, Cmd.none )
-
-    else
-        newModelCmd
-
-
-withBoardCoords : DocumentCoords -> Model -> (Result BD.Error Spot -> Msg) -> ( Model, Cmd Msg )
-withBoardCoords documentCoords model msg =
+withBoardCoords : PointerInput.Action -> Model -> DocumentCoords -> ( Model, Cmd Msg )
+withBoardCoords action model documentCoords =
     if isScoring model then
         ( model, Cmd.none )
 
     else
         ( model
-        , Task.attempt msg <|
+        , Task.attempt (PointerAtBoard model.pointer.revision action) <|
             Task.map (DC.toBoardSpot documentCoords) <|
                 BD.getElement "board"
         )
@@ -334,33 +323,41 @@ handleMoved coords model =
                     handleHover { model | stagedMove = Nothing } coords
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case msg of
-        Started documentCoords ->
-            withBoardCoords documentCoords model StartedBoard
+cancelBoardGesture : Model -> Model
+cancelBoardGesture model =
+    { model
+        | dragFrom = DF.DragNone
+        , ghostStone = Nothing
+        , highlightedGroup = []
+        , lastPointer = Nothing
+        , analysis = Analysis.cancel model.analysis
+    }
 
-        Moved documentCoords ->
-            ifNoMultiTouch documentCoords model <|
-                withBoardCoords documentCoords model MovedBoard
 
-        Finished documentCoords ->
-            ifNoMultiTouch documentCoords model <|
-                withBoardCoords documentCoords model FinishedBoard
+handlePointerAction : PointerInput.Action -> Model -> ( Model, Cmd Msg )
+handlePointerAction action model =
+    let
+        atBoard =
+            withBoardCoords action model
+    in
+    case action of
+        PointerInput.StartAt coords ->
+            atBoard coords
 
-        ClearAnalysisHover ->
-            ( { model | analysis = Analysis.clearHover model.analysis }, Cmd.none )
+        PointerInput.MoveAt coords ->
+            atBoard coords
 
-        ClearTouch ->
-            ( { model
-                | dragFrom = DF.DragNone
-                , ghostStone = Nothing
-                , analysis = Analysis.cancel model.analysis
-              }
-            , Cmd.none
-            )
+        PointerInput.FinishAt coords ->
+            atBoard coords
 
-        StartedBoard (Ok coords) ->
+        PointerInput.CancelGesture ->
+            ( cancelBoardGesture model, Cmd.none )
+
+
+handleBoardPointer : PointerInput.Action -> Spot -> Model -> ( Model, Cmd Msg )
+handleBoardPointer action coords model =
+    case action of
+        PointerInput.StartAt _ ->
             if model.showAnalysis then
                 ( { model
                     | analysis = Analysis.start model.stones coords model.analysis
@@ -377,7 +374,7 @@ update msg model =
                 , Cmd.none
                 )
 
-        MovedBoard (Ok coords) ->
+        PointerInput.MoveAt _ ->
             let
                 setLastPointer m =
                     { m | lastPointer = Just coords }
@@ -388,7 +385,7 @@ update msg model =
             else
                 ( handleMoved coords model |> setLastPointer, Cmd.none )
 
-        FinishedBoard (Ok coords) ->
+        PointerInput.FinishAt _ ->
             if model.showAnalysis then
                 handleAnalysisFinished coords { model | dragFrom = DF.DragNone }
 
@@ -415,6 +412,38 @@ update msg model =
                   }
                 , Cmd.none
                 )
+
+        PointerInput.CancelGesture ->
+            ( cancelBoardGesture model, Cmd.none )
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        PointerEvent event ->
+            let
+                ( pointer, action ) =
+                    PointerInput.update event model.pointer
+
+                updated =
+                    { model | pointer = pointer }
+            in
+            case action of
+                Just next ->
+                    handlePointerAction next updated
+
+                Nothing ->
+                    ( updated, Cmd.none )
+
+        PointerAtBoard revision action (Ok coords) ->
+            if revision == model.pointer.revision then
+                handleBoardPointer action coords model
+
+            else
+                ( model, Cmd.none )
+
+        ClearAnalysisHover ->
+            ( { model | analysis = Analysis.clearHover model.analysis }, Cmd.none )
 
         PlayPass ->
             let
@@ -455,16 +484,25 @@ update msg model =
                 analysis =
                     fresh.analysis
             in
-            updatePosition { fresh | analysis = { analysis | serial = model.analysis.serial } }
+            updatePosition
+                { fresh
+                    | analysis = { analysis | serial = model.analysis.serial }
+                    , pointer = PointerInput.cancel model.pointer
+                }
 
         Help ->
-            ( { model | showHelp = not model.showHelp }
+            ( { model
+                | showHelp = not model.showHelp
+                , pointer = PointerInput.cancel model.pointer
+              }
+                |> cancelBoardGesture
             , Cmd.none
             )
 
         ToggleScoring ->
             ( { model
                 | showScoring = not model.showScoring
+                , pointer = PointerInput.cancel model.pointer
                 , showAnalysis = False
                 , analysis = Analysis.cancel model.analysis
                 , ghostStone = Nothing
@@ -479,6 +517,7 @@ update msg model =
         ToggleAnalysis ->
             ( { model
                 | showAnalysis = not model.showAnalysis
+                , pointer = PointerInput.cancel model.pointer
                 , showScoring = False
                 , analysis = Analysis.reconcile model.stones model.analysis
                 , ghostStone = Nothing
@@ -531,6 +570,7 @@ changeRouteTo url model =
             { model
                 | record = record
                 , stones = stones
+                , pointer = PointerInput.cancel model.pointer
                 , analysis = Analysis.reconcile stones model.analysis
                 , highlightedGroup = []
                 , ghostStone = Nothing
@@ -551,6 +591,7 @@ changeRouteTo url model =
                 |> Maybe.withDefault
                     { empty
                         | showScoring = model.showScoring
+                        , pointer = PointerInput.cancel model.pointer
                         , showAnalysis = model.showAnalysis
                         , analysis = Analysis.reconcile Dict.empty model.analysis
                     }
@@ -744,19 +785,11 @@ view model =
 
             else
                 H.div
-                    [ HA.id "board-container"
-                    , HE.on "mousedown" <| DC.decodeMouse Started
-                    , HE.on "mousemove" <| DC.decodeMouse Moved
-                    , HE.on "mouseup" <| DC.decodeMouse Finished
-                    , HE.preventDefaultOn "touchstart" <| DC.decodeSingleTouch ClearTouch Started
-                    , HE.preventDefaultOn "touchmove" <| DC.decodeSingleTouch ClearTouch Moved
-                    , HE.on "touchend" <| DC.decodeChangedTouch Finished
-                    , HE.on "touchcancel" <| Decode.succeed ClearTouch
-                    ]
+                    (HA.id "board-container" :: PointerInput.events PointerEvent)
                     [ H.div
                         [ HA.id "board"
                         , HA.classList [ ( "scoring", isScoring model ), ( "analysis", model.showAnalysis ) ]
-                        , HE.onMouseLeave ClearAnalysisHover
+                        , HE.on "pointerleave" <| Decode.succeed ClearAnalysisHover
                         ]
                         [ viewSvg model
                         , score
