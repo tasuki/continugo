@@ -66,13 +66,13 @@ cheap, so it was not the priority.
 
 ## Reproduce
 
-Run these commands from the repository root.
+Run these commands from the repository root after `mise install`.
 
 Pure benchmark (median of five measured batches after one warmup):
 
 ```sh
-(cd frontend && elm make benchmarks/Benchmark.elm --optimize --output=/tmp/continugo-benchmark.js)
-node frontend/benchmarks/run.js /tmp/continugo-benchmark.js
+(cd frontend && mise exec -- elm make benchmarks/Benchmark.elm --optimize --output=/tmp/continugo-benchmark.js)
+mise exec -- node frontend/benchmarks/run.js /tmp/continugo-benchmark.js
 ```
 
 The same harness runs against the old sources:
@@ -81,21 +81,21 @@ The same harness runs against the old sources:
 mkdir -p /tmp/continugo-before
 git archive 006370a src elm.json | tar -x -C /tmp/continugo-before
 cp -r frontend/benchmarks /tmp/continugo-before/
-(cd /tmp/continugo-before && elm make benchmarks/Benchmark.elm --optimize --output=/tmp/continugo-before.js)
-node frontend/benchmarks/run.js /tmp/continugo-before.js
+mise exec -- sh -c 'cd /tmp/continugo-before && elm make benchmarks/Benchmark.elm --optimize --output=/tmp/continugo-before.js'
+mise exec -- node frontend/benchmarks/run.js /tmp/continugo-before.js
 ```
 
-Browser benchmark and interaction checks (Node 22+, or Node 20 with
-`--experimental-websocket`; no npm dependencies):
+Browser benchmark and interaction checks (requires a separately installed Chrome;
+no additional npm dependencies):
 
 ```sh
-make release
-python3 -m http.server 9071 --directory frontend/public
+mise -C frontend release
+mise -C frontend serve
 # In another terminal:
 google-chrome --headless --disable-gpu --remote-debugging-port=19272 \
   --user-data-dir=/tmp/continugo-benchmark-chrome about:blank
 # In another terminal:
-node frontend/benchmarks/browser.js
+mise exec -- node frontend/benchmarks/browser.js
 ```
 
 Defaults: app at `http://localhost:9071/`, CDP at `http://localhost:19272`.
@@ -108,7 +108,7 @@ a lone preview no longer allocates full-board liberty masks. Real two-finger zoo
 and pixel comparisons after SVG invalidation at 1.5×, 3×, and 5× check for stale
 mask tiles, rather than just checking that the DOM contains the right circles.
 
-Correctness: `cd frontend && elm-test --fuzz 1000` passes 83 tests, including interval-search
+Correctness: `mise -C frontend test --fuzz 1000` passes 112 tests, including interval-search
 comparisons against exhaustive search for randomized blockers and board corners,
 strict distance boundaries, isolated touching liberties, and existing
 capture/suicide/preview/deadzone cases.

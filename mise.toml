@@ -1,0 +1,20 @@
+monorepo_root = true
+
+[monorepo]
+config_roots = ["frontend"]
+
+[tools]
+node = "24.22.1"
+"github:elm/compiler" = { version = "0.19.1", bin = "elm" }
+"npm:elm-test" = "0.19.1-revision17"
+"npm:elm-format" = "0.8.8"
+"npm:serve" = "14.2.6"
+"npm:uglify-js" = "3.19.3"
+"aqua:watchexec/watchexec" = "2.8.0"
+
+[tasks]
+dev = { depends = ["//frontend:dev"] }
+build = { depends = ["//frontend:build"] }
+release = { depends = ["//frontend:release"] }
+test = { depends = ["//frontend:test"] }
+format = { depends = ["//frontend:format"] }

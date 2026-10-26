@@ -1,4 +1,4 @@
-// From frontend/: elm make benchmarks/Benchmark.elm --optimize --output=/tmp/continugo-benchmark.js
+// From frontend/: mise exec -- elm make benchmarks/Benchmark.elm --optimize --output=/tmp/continugo-benchmark.js
 const { performance } = require('node:perf_hooks');
 const { Elm } = require(process.argv[2] || '/tmp/continugo-benchmark.js');
 const app = Elm.Benchmark.init({ flags: null });

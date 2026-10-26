@@ -8,16 +8,12 @@ on:
 
 jobs:
     ci:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
 
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
+            - uses: actions/checkout@v7.0.1
+            - uses: jdx/mise-action@v5.2.3
               with:
-                node-version: 18
-            - run: npm install -g elm@latest-0.19.1 elm-test@latest-0.19.1
-            - run: make help
-            - run: elm make src/Main.elm --output=public/continugo.js
-              working-directory: frontend
-            - run: elm-test
-              working-directory: frontend
+                version: 2026.7.14
+            - run: mise run build
+            - run: mise run test

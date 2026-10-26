@@ -21,11 +21,12 @@ The idea might be bad, but it is not even original.
 
 [![CI](https://github.com/tasuki/continugo/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/tasuki/continugo/actions/workflows/ci.yml)
 
-On Debian 12 Bookworm:
+Install [mise](https://mise.jdx.dev/), then:
 
-```
-sudo apt install npm uglifyjs
-sudo npm install -g elm@latest-0.19.1 elm-test elm-format serve
+```sh
+mise trust && mise install
 ```
 
-To develop, run `make develop`, see http://localhost:9071/
+From the repository root, run `mise run dev` and see http://localhost:9071/.
+
+Run tests with `mise run test`.
