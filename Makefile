@@ -1,10 +1,7 @@
-release: help verifier
+release: help
 	elm make src/Main.elm --optimize --output=continugo.js \
 		&& uglifyjs continugo.js --compress 'pure_funcs=[F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9],pure_getters,keep_fargs=false,unsafe_comps,unsafe' \
 		| uglifyjs --mangle --output continugo.js
-
-verifier:
-	elm make src/MainVerifier.elm --optimize --output=verifier.js
 
 help: src/HelpContent.elm
 
@@ -17,4 +14,4 @@ develop: help serve
 serve:
 	serve -p 9071 --single &
 
-.PHONY: release verifier help develop serve
+.PHONY: release help develop serve
