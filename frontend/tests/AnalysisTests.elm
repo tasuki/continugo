@@ -5,10 +5,10 @@ import DeadZones exposing (Point, canCover, geometry)
 import Dict
 import DragFrom
 import Expect
+import Fixtures.Play as PlayFixtures
 import Fuzz
-import Go exposing (..)
-import Play
-import PlayTests
+import Rules.Play as Play
+import Rules.Position exposing (..)
 import Test exposing (..)
 
 
@@ -305,10 +305,10 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones PlayTests.suicideRecord Dict.empty
+                        Play.playStones PlayFixtures.suicideRecord Dict.empty
 
                     candidate =
-                        PlayTests.stoneFromStr "B[cIaS]"
+                        PlayFixtures.stoneFromSgf "B[cIaS]"
                 in
                 Expect.equal ( Nothing, [ candidate.spot ] )
                     ( Play.playIfLegal stones candidate

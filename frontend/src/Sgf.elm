@@ -1,8 +1,8 @@
 module Sgf exposing (decode, decodePlay, encode)
 
-import Go exposing (..)
 import List.Extra
 import Regex
+import Rules.Position exposing (..)
 
 
 

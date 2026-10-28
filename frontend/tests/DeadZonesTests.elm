@@ -1,12 +1,12 @@
 module DeadZonesTests exposing (tests)
 
-import Board exposing (stoneRadius)
 import DeadZones exposing (Point, canCover, geometry, libertyGeometry)
 import Dict
 import Expect
 import Fuzz
-import Go exposing (Spot, adjacentDistance, diameter)
-import Play
+import Rules.Board exposing (stoneRadius)
+import Rules.Play as Play
+import Rules.Position as Position exposing (Spot, adjacentDistance, diameter)
 import Sgf
 import Test exposing (..)
 
@@ -136,7 +136,7 @@ tests =
                                 |> Maybe.withDefault []
 
                         spots =
-                            List.map .spot (Go.stoneList stones)
+                            List.map .spot (Position.stoneList stones)
 
                         white =
                             libertyGeometry spots (members ( 190, 190 ))
@@ -148,7 +148,7 @@ tests =
                             [ Point 114 114, Point 140 114, Point 114 140 ]
                     in
                     Expect.equal ( False, [ False, False, False ], [ True, True, True ] )
-                        ( Go.adjacent (Spot 114 114) (Spot 190 190)
+                        ( Position.adjacent (Spot 114 114) (Spot 190 190)
                         , List.map (canCover white) eye
                         , List.map (canCover black) eye
                         )

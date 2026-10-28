@@ -2,10 +2,11 @@ port module Benchmark exposing (main)
 
 import DeadZones
 import Dict
-import Go exposing (..)
-import Liberties
+import Placement
 import Platform
-import Play
+import Rules.Liberties as Liberties
+import Rules.Play as Play
+import Rules.Position exposing (..)
 import Sgf
 
 
@@ -58,7 +59,7 @@ benchmark scenario iterations =
                                 |> Maybe.withDefault 0
 
                         "hover" ->
-                            Play.playNearby Black stones (Spot (850 + modBy 30 i) 850)
+                            Placement.playNearby Black stones (Spot (850 + modBy 30 i) 850)
                                 |> Maybe.map (Tuple.first >> Dict.size)
                                 |> Maybe.withDefault 0
 

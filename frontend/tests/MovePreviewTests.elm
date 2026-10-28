@@ -3,10 +3,10 @@ module MovePreviewTests exposing (tests)
 import DeadZones exposing (Point, canCover, geometry, libertyGeometry)
 import Dict
 import Expect
-import Go exposing (..)
+import Fixtures.Play as PlayFixtures
 import MovePreview
-import Play
-import PlayTests
+import Rules.Play as Play
+import Rules.Position exposing (..)
 import Test exposing (..)
 
 
@@ -83,11 +83,11 @@ tests =
                 Expect.equal Nothing
                     (MovePreview.fromMoves stones (Just (createStone White (Spot 510 500))) Nothing)
         , describe "Previewing captures and suicide uses the actual move rules"
-            (List.map previewCase PlayTests.cases)
+            (List.map previewCase PlayFixtures.cases)
         ]
 
 
-previewCase : PlayTests.Case -> Test
+previewCase : PlayFixtures.Case -> Test
 previewCase tc =
     test tc.name <|
         \_ ->

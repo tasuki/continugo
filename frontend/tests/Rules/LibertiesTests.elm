@@ -1,9 +1,9 @@
-module LibertiesTests exposing (..)
+module Rules.LibertiesTests exposing (..)
 
 import Expect
 import Fuzz
-import Go exposing (..)
-import Liberties exposing (..)
+import Rules.Liberties exposing (..)
+import Rules.Position exposing (..)
 import Test exposing (..)
 
 
@@ -91,12 +91,12 @@ hasLibertiesTest =
                 (\offset ->
                     let
                         candidate =
-                            normalize spot offset
+                            translate spot offset
                     in
                     isWithinBoard candidate
                         && List.all (\other -> distance candidate other >= toFloat diameter) nearby
                 )
-                zeroLibCandidates
+                candidateOffsets
 
         spotFuzzer =
             Fuzz.map2 Spot (Fuzz.intRange boardMin boardMax) (Fuzz.intRange boardMin boardMax)
@@ -111,7 +111,7 @@ hasLibertiesTest =
             \spot offsets ->
                 let
                     nearby =
-                        List.map (normalize spot) offsets
+                        List.map (translate spot) offsets
                 in
                 Expect.equal (bruteForce spot nearby)
                     (hasLiberties (createStone Black spot) nearby)
@@ -134,7 +134,7 @@ hasLibertiesTest =
                             )
 
                     nearby =
-                        List.map (normalize spot) offsets
+                        List.map (translate spot) offsets
                 in
                 Expect.equal (bruteForce spot nearby)
                     (hasLiberties (createStone Black spot) nearby)
@@ -157,31 +157,5 @@ hasLibertiesTest =
                     ( overlaps (Spot 0 0) (Spot diameter 0)
                     , adjacent (Spot 0 0) (Spot (diameter - 1) diameter)
                     , adjacent (Spot 0 0) (Spot diameter diameter)
-                    )
-        ]
-
-
-findNearestPlayableTest =
-    describe "findNearestPlayable"
-        [ test "Basic: 200, hover 250 => 276" <|
-            \_ ->
-                Expect.equal (Just <| Spot 276 200)
-                    (findNearestPlayable (Spot 250 200) [ Spot 200 200 ])
-        , test "Basic: 200, hover 270 => 276" <|
-            \_ ->
-                Expect.equal (Just <| Spot 276 200)
-                    (findNearestPlayable (Spot 270 200) [ Spot 200 200 ])
-        , test "Basic: 200, hover 230 => Nothing (cause 46 > stoneR)" <|
-            \_ ->
-                Expect.equal Nothing
-                    (findNearestPlayable (Spot 230 200) [ Spot 200 200 ])
-        , test "Between two stones" <|
-            \_ ->
-                Expect.equal (Just <| Spot 240 265)
-                    (findNearestPlayable
-                        (Spot 237 240)
-                        [ Spot 200 200
-                        , Spot 280 200
-                        ]
                     )
         ]

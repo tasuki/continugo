@@ -1,8 +1,8 @@
 module DragFrom exposing (..)
 
-import Go exposing (..)
-import Liberties
 import List.Extra
+import Placement
+import Rules.Position exposing (..)
 
 
 type DragFrom
@@ -84,7 +84,7 @@ findDraggedSpot spotList from draggedTo =
         findCandidate zeroCandidate current currentDistance =
             let
                 candidate =
-                    Liberties.normalize desiredSpot zeroCandidate
+                    translate desiredSpot zeroCandidate
 
                 candidateDistance =
                     distance candidate draggedTo
@@ -101,5 +101,5 @@ findDraggedSpot spotList from draggedTo =
             else
                 current
     in
-    List.foldl findNearest Nothing Liberties.zeroNpCandidates
+    List.foldl findNearest Nothing Placement.candidateOffsets
         |> Maybe.map Tuple.first

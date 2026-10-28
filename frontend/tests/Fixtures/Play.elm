@@ -1,15 +1,11 @@
-module PlayTests exposing (..)
+module Fixtures.Play exposing (Case, cases, connectedSuicideRecord, longGameRecord, stoneFromSgf, suicideRecord)
 
-import Dict
-import Expect
-import Go exposing (..)
-import Play exposing (..)
+import Rules.Position exposing (..)
 import Sgf
-import Test exposing (..)
 
 
-stoneFromStr : String -> Stone
-stoneFromStr str =
+stoneFromSgf : String -> Stone
+stoneFromSgf str =
     Sgf.decode str
         |> List.head
         |> Maybe.andThen
@@ -53,7 +49,7 @@ type alias Case =
     { name : String
     , record : List Play
     , playStone : Stone
-    , newStones : Maybe Int
+    , stoneCountChange : Maybe Int
     }
 
 
@@ -61,57 +57,37 @@ cases : List Case
 cases =
     [ { name = "Add a move"
       , record = Sgf.decode ""
-      , playStone = stoneFromStr "B[boob]"
-      , newStones = Just 1
+      , playStone = stoneFromSgf "B[boob]"
+      , stoneCountChange = Just 1
       }
     , { name = "Don't add an illegal move"
       , record = Sgf.decode ""
-      , playStone = stoneFromStr "B[butt]"
-      , newStones = Nothing
+      , playStone = stoneFromSgf "B[butt]"
+      , stoneCountChange = Nothing
       }
     , { name = "Capture a group of four stones"
       , record = longGameRecord
-      , playStone = stoneFromStr "B[qheG]"
-      , newStones = Just -3
+      , playStone = stoneFromSgf "B[qheG]"
+      , stoneCountChange = Just -3
       }
     , { name = "Disallow suicide"
       , record = suicideRecord
-      , playStone = stoneFromStr "B[cIaS]"
-      , newStones = Nothing
+      , playStone = stoneFromSgf "B[cIaS]"
+      , stoneCountChange = Nothing
       }
     , { name = "Allow suicide when taking"
       , record = suicideRecord
-      , playStone = stoneFromStr "W[cIaS]"
-      , newStones = Just -4
+      , playStone = stoneFromSgf "W[cIaS]"
+      , stoneCountChange = Just -4
       }
     , { name = "Allow capturing a one-eyed group with a stone inside"
       , record = connectedSuicideRecord
-      , playStone = stoneFromStr "W[aMaM]"
-      , newStones = Just -3
+      , playStone = stoneFromSgf "W[aMaM]"
+      , stoneCountChange = Just -3
       }
     , { name = "Allow one-eyed group to survive a little longer by taking"
       , record = connectedSuicideRecord
-      , playStone = stoneFromStr "B[aMaM]"
-      , newStones = Just 0
+      , playStone = stoneFromSgf "B[aMaM]"
+      , stoneCountChange = Just 0
       }
     ]
-
-
-playCase : Case -> Test
-playCase tc =
-    let
-        stones =
-            playStones tc.record Dict.empty
-
-        newStones =
-            playNearby tc.playStone.player stones tc.playStone.spot
-                |> Maybe.map (\( s, _ ) -> Dict.size s - Dict.size stones)
-    in
-    test tc.name <|
-        \_ ->
-            Expect.equal tc.newStones newStones
-
-
-playTest : Test
-playTest =
-    cases |> List.map playCase |> describe "play"

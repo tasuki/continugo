@@ -1,15 +1,15 @@
 module DocumentCoords exposing (DocumentCoords, toBoardSpot)
 
-import Board
 import Browser.Dom as BD
-import Go
+import Rules.Board as Board
+import Rules.Position as Position
 
 
 type alias DocumentCoords =
     { x : Float, y : Float }
 
 
-toBoardSpot : DocumentCoords -> BD.Element -> Go.Spot
+toBoardSpot : DocumentCoords -> BD.Element -> Position.Spot
 toBoardSpot documentCoords element =
     { x =
         round <|

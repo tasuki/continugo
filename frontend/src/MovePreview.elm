@@ -1,9 +1,9 @@
 module MovePreview exposing (Preview, fromMoves, fromResult)
 
 import Dict
-import Go exposing (Spot, Stone, Stones, removedStones, stoneKey)
 import Maybe.Extra
-import Play
+import Rules.Play as Play
+import Rules.Position exposing (Spot, Stone, Stones, removedStones, stoneKey)
 
 
 type alias Preview =

@@ -1,34 +1,13 @@
-module Board exposing (..)
+module BoardView exposing (viewLines, viewStars)
 
+import Rules.Board exposing (boardSize, coordRange)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 
 
-coordRange : Int
-coordRange =
-    -- number of coordinates on actual board
-    -- sorry this is actually still discrete
-    1000
-
-
-boardSize : Int
-boardSize =
-    -- the number of "intersections"
-    -- what was an intersection again?
-    13
-
-
 preciseRadius : Float
 preciseRadius =
-    -- for drawing the lines
     toFloat coordRange / (toFloat boardSize * 2)
-
-
-stoneRadius : Int
-stoneRadius =
-    -- 9x9: 55.55, 13x13: 38.46, 19x19: 26.31
-    -- this doesn't work as a float for a multitude of reasons
-    floor preciseRadius
 
 
 offset : Float -> Float

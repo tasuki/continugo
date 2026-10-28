@@ -1,11 +1,12 @@
 module Analysis exposing (..)
 
-import Board
 import DeadZones
 import DragFrom
-import Go exposing (..)
-import Liberties
 import List.Extra
+import Placement
+import Rules.Board as Board
+import Rules.Position exposing (..)
+import StoneView exposing (spotBorderNearestTo, viewLink)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 
@@ -131,7 +132,7 @@ move stones coords model =
                         Nothing
 
                     else
-                        Liberties.findNearestPlayable coords blockers
+                        Placement.nearestFreeSpot coords blockers
             in
             if preview == model.preview then
                 model
@@ -154,7 +155,7 @@ move stones coords model =
                                 DragFrom.findDraggedSpot (occupied stones model) from coords
 
                             Nothing ->
-                                Liberties.findNearestPlayable coords (occupied stones model)
+                                Placement.nearestFreeSpot coords (occupied stones model)
             in
             { model | gesture = Just { gesture | dragged = dragged }, preview = preview }
 
@@ -193,7 +194,7 @@ finish stones coords previous =
                             ( { cleared | serial = serial, pending = Just ( serial, origin ) }, RemoveAfter serial )
 
                     Nothing ->
-                        case Liberties.findNearestPlayable coords (occupied stones model) of
+                        case Placement.nearestFreeSpot coords (occupied stones model) of
                             Just spot ->
                                 ( { cleared | circles = model.circles ++ [ spot ] }, NoEffect )
 

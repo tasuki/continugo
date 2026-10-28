@@ -2,12 +2,12 @@
 
 ## Findings and changes
 
-- `Liberties.hasLiberties` exhausted roughly 18,000 integer candidates for every
+- `Rules.Liberties.hasLiberties` exhausted roughly 18,000 integer candidates for every
   trapped stone. It now tests four cheap probes, then searches integer row
   intervals with the occupied discs subtracted. Strict overlap/adjacency and
   inclusive board boundaries are preserved, including single-point openings.
   The production build no longer constructs/sorts the exhaustive candidate ring.
-- `Play.takeAll` revisited connected groups through multiple nearby stones and
+- `Rules.Play.takeAll` revisited connected groups through multiple nearby stones and
   repeatedly removed the same stones. It now remembers discovered group members;
   group traversal uses coordinate sets instead of comparing entire stone records.
 - Hover/drag legality was calculated once in update and replayed again during
@@ -34,7 +34,7 @@
 ## Measurements
 
 One local run, optimized Elm, before = `006370a`. Times vary with hardware/JIT.
-The benchmark uses the existing four-stone capture record from `PlayTests`.
+The benchmark uses the existing four-stone capture record from `Fixtures.Play`.
 
 | Pure operation | Before | After |
 | --- | ---: | ---: |
@@ -75,12 +75,16 @@ Pure benchmark (median of five measured batches after one warmup):
 mise exec -- node frontend/benchmarks/run.js /tmp/continugo-benchmark.js
 ```
 
-The same harness runs against the old sources:
+For old sources, adapt the copied harness before compiling: replace
+`Rules.Position` with `Go`, `Rules.Play as Play` with `Play`, and
+`Rules.Liberties as Liberties` with `Liberties`. Remove `import Placement` and
+replace `Placement.playNearby` with `Play.playNearby`.
 
 ```sh
 mkdir -p /tmp/continugo-before
 git archive 006370a src elm.json | tar -x -C /tmp/continugo-before
 cp -r frontend/benchmarks /tmp/continugo-before/
+# Adapt /tmp/continugo-before/benchmarks/Benchmark.elm as described above.
 mise exec -- sh -c 'cd /tmp/continugo-before && elm make benchmarks/Benchmark.elm --optimize --output=/tmp/continugo-before.js'
 mise exec -- node frontend/benchmarks/run.js /tmp/continugo-before.js
 ```
@@ -108,7 +112,7 @@ a lone preview no longer allocates full-board liberty masks. Real two-finger zoo
 and pixel comparisons after SVG invalidation at 1.5×, 3×, and 5× check for stale
 mask tiles, rather than just checking that the DOM contains the right circles.
 
-Correctness: `mise -C frontend test --fuzz 1000` passes 112 tests, including interval-search
-comparisons against exhaustive search for randomized blockers and board corners,
-strict distance boundaries, isolated touching liberties, and existing
-capture/suicide/preview/deadzone cases.
+Correctness: `mise -C frontend test --fuzz 1000` covers interval-search comparisons
+against exhaustive search for randomized blockers and board corners, strict distance
+boundaries, isolated touching liberties, captures, suicide, game progression,
+scoring, placement adjustment, previews, and deadzones.

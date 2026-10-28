@@ -1,8 +1,8 @@
-module Play exposing (group, playIfLegal, playNearby, playStones)
+module Rules.Play exposing (group, playIfLegal, playStones)
 
 import Dict
-import Go exposing (..)
-import Liberties
+import Rules.Liberties as Liberties
+import Rules.Position exposing (..)
 import Set exposing (Set)
 
 
@@ -171,32 +171,6 @@ playStones toPlay stones =
             playIfLegal acc stone |> Maybe.withDefault acc
     in
     List.foldl playStone stones (stonesFromPlays toPlay)
-
-
-playNearby : Player -> Stones -> Spot -> Maybe ( Stones, Stone )
-playNearby onMove stones spot =
-    -- if spot unplayable, determines nearby spot to play
-    let
-        nearby : List Stone
-        nearby =
-            nearbyStones stones spot
-
-        maybeStone : Maybe Stone
-        maybeStone =
-            Liberties.findNearestPlayable spot (List.map .spot nearby)
-                |> Maybe.map (createStone onMove)
-
-        maybeStones : Maybe Stones
-        maybeStones =
-            Maybe.andThen (playIfLegal stones) maybeStone
-
-        freshenStone : ( Stones, Stone ) -> Maybe ( Stones, Stone )
-        freshenStone ( freshStones, stone ) =
-            Dict.get ( stone.spot.x, stone.spot.y ) freshStones
-                |> Maybe.map (Tuple.pair freshStones)
-    in
-    Maybe.map2 Tuple.pair maybeStones maybeStone
-        |> Maybe.andThen freshenStone
 
 
 

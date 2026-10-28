@@ -1,7 +1,7 @@
 module SgfTests exposing (..)
 
 import Expect
-import Go exposing (..)
+import Rules.Position exposing (..)
 import Sgf
 import Test exposing (..)
 

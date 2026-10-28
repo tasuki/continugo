@@ -1,7 +1,6 @@
-module Liberties exposing (..)
+module Rules.Liberties exposing (candidateOffsets, findLiberties, hasLiberties)
 
-import Board exposing (stoneRadius)
-import Go exposing (..)
+import Rules.Position exposing (..)
 
 
 
@@ -11,11 +10,6 @@ import Go exposing (..)
 zero : Spot
 zero =
     Spot 0 0
-
-
-normalize : Spot -> Spot -> Spot
-normalize spot zeroSuspect =
-    Spot (spot.x + zeroSuspect.x) (spot.y + zeroSuspect.y)
 
 
 
@@ -46,8 +40,8 @@ uniqueLiberties =
 -- finding liberties
 
 
-zeroLibCandidates : List Spot
-zeroLibCandidates =
+candidateOffsets : List Spot
+candidateOffsets =
     -- precompute ring of candidates around zero: 18k spots
     let
         range =
@@ -71,7 +65,7 @@ isLiberty nearbySpots suspect =
 
 findLiberties : Stone -> List Spot -> List Spot
 findLiberties { spot } nearbySpots =
-    List.map (normalize spot) zeroLibCandidates
+    List.map (translate spot) candidateOffsets
         |> List.filter (isLiberty nearbySpots)
         |> uniqueLiberties
 
@@ -86,7 +80,7 @@ hasLiberties { spot } nearbySpots =
     -- Try the four closest candidates first: open groups usually stop here.
     -- For enclosed groups, search whole integer intervals rather than testing
     -- all ~18,000 points in the adjacency ring individually.
-    List.any (normalize spot >> isLiberty nearbySpots) libertyProbes
+    List.any (translate spot >> isLiberty nearbySpots) libertyProbes
         || hasLibertyInRows spot
             nearbySpots
             (max boardMin (spot.y - floor adjacentDistance))
@@ -166,42 +160,3 @@ intervalHasGap left right blocked =
 
                 else
                     intervalHasGap (max left (end + 1)) right rest
-
-
-
--- nearest playable
-
-
-zeroNpCandidates : List Spot
-zeroNpCandidates =
-    -- precompute circle of candidates around zero: 4.5k spots
-    let
-        range =
-            List.range -stoneRadius stoneRadius
-    in
-    List.concatMap (\x -> List.map (Spot x) range) range
-        |> List.filter (\s -> distance s zero < toFloat stoneRadius)
-        |> List.sortBy (distance zero)
-
-
-nearestPlayable : Spot -> List Spot -> List Spot -> Maybe Spot
-nearestPlayable origin nearbySpots zeroSuspects =
-    case zeroSuspects of
-        [] ->
-            Nothing
-
-        zeroSuspect :: tail ->
-            let
-                suspect =
-                    normalize origin zeroSuspect
-            in
-            if isWithinBoard suspect && not (overlapsAny suspect nearbySpots) then
-                Just suspect
-
-            else
-                nearestPlayable origin nearbySpots tail
-
-
-findNearestPlayable : Spot -> List Spot -> Maybe Spot
-findNearestPlayable origin nearbySpots =
-    nearestPlayable origin nearbySpots zeroNpCandidates

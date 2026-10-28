@@ -1,7 +1,7 @@
 module Main exposing (..)
 
 import Analysis
-import Board
+import BoardView
 import Browser
 import Browser.Dom as BD
 import Browser.Navigation as Nav
@@ -9,7 +9,6 @@ import DeadZones
 import Dict
 import DocumentCoords as DC exposing (DocumentCoords)
 import DragFrom as DF exposing (DragFrom)
-import Go exposing (..)
 import HelpContent
 import Html as H
 import Html.Attributes as HA
@@ -19,17 +18,23 @@ import List.Extra
 import Markdown
 import Maybe.Extra
 import MovePreview
-import Play
+import Placement
 import PointerInput
 import Process
 import Regex
+import Rules.Board exposing (coordRange, stoneRadius)
+import Rules.Game as Game
+import Rules.Play as Play
+import Rules.Position exposing (..)
+import Rules.Territory as Territory
 import Sgf
+import StoneView exposing (..)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 import Svg.Keyed
 import Svg.Lazy exposing (..)
 import Task
-import Territory
+import TerritoryView
 import Url exposing (Url)
 
 
@@ -50,9 +55,7 @@ main =
 
 
 type alias Model =
-    { record : List Play
-    , onMove : Player
-    , stones : Stones
+    { game : Game.Game
     , ghostStone : Maybe MovePreview.Preview
     , highlightedGroup : List Spot
     , justPlayed : Maybe Spot
@@ -71,9 +74,7 @@ type alias Model =
 
 emptyModel : Nav.Key -> Model
 emptyModel navKey =
-    { record = []
-    , onMove = Black
-    , stones = Dict.empty
+    { game = Game.empty
     , ghostStone = Nothing
     , highlightedGroup = []
     , justPlayed = Nothing
@@ -121,7 +122,7 @@ handleHover model hoverSpot =
     let
         maybeOverStone : Maybe Stone
         maybeOverStone =
-            stoneList model.stones
+            stoneList model.game.stones
                 |> List.Extra.find (\s -> isWithinStone hoverSpot s.spot)
 
         memberOfHighlighted : Stone -> Bool
@@ -147,7 +148,7 @@ handleHover model hoverSpot =
             -- hovering over a stone: show liberties
             let
                 group =
-                    Play.group model.stones over
+                    Play.group model.game.stones over
             in
             { model
                 | highlightedGroup = List.map .spot group
@@ -169,7 +170,7 @@ handleDrag model draggedFrom draggedTo =
     let
         candidateStone : Stone
         candidateStone =
-            DF.findDragged model.stones model.onMove draggedFrom draggedTo
+            DF.findDragged model.game.stones model.game.onMove draggedFrom draggedTo
 
         ghostStone : Maybe MovePreview.Preview
         ghostStone =
@@ -177,7 +178,7 @@ handleDrag model draggedFrom draggedTo =
                 model.ghostStone
 
             else
-                MovePreview.fromMoves model.stones (Just candidateStone) Nothing
+                MovePreview.fromMoves model.game.stones (Just candidateStone) Nothing
     in
     { model
         | ghostStone = ghostStone
@@ -190,7 +191,7 @@ handleAnalysisFinished : Spot -> Model -> ( Model, Cmd Msg )
 handleAnalysisFinished coords model =
     let
         ( analysis, effect ) =
-            Analysis.finish model.stones coords model.analysis
+            Analysis.finish model.game.stones coords model.analysis
 
         updated =
             { model | analysis = analysis }
@@ -203,9 +204,9 @@ handleAnalysisFinished coords model =
             ( updated, Process.sleep 300 |> Task.perform (\_ -> RemoveAnalysisCircle serial) )
 
         Analysis.Propose spot ->
-            case MovePreview.fromMoves model.stones (Just (createStone model.onMove spot)) Nothing of
+            case MovePreview.fromMoves model.game.stones (Just (createStone model.game.onMove spot)) Nothing of
                 Just preview ->
-                    if isFinished model.record then
+                    if Game.isFinished model.game then
                         ( { updated | analysis = { analysis | invalid = Just spot } }, Cmd.none )
 
                     else
@@ -217,20 +218,17 @@ handleAnalysisFinished coords model =
 
 handlePlay : Model -> Spot -> ( Model, Cmd Msg )
 handlePlay model playSpot =
-    case Play.playNearby model.onMove model.stones playSpot of
-        Just ( stones, played ) ->
-            -- play!
+    case
+        Placement.nearbySpot model.game.stones playSpot
+            |> Maybe.andThen (\spot -> Game.play spot model.game |> Maybe.map (Tuple.pair spot))
+    of
+        Just ( spot, game ) ->
             let
-                play =
-                    { player = played.player, move = Place played }
-
                 newModel =
                     { model
-                        | record = play :: model.record
-                        , stones = stones
-                        , onMove = otherPlayer model.onMove
-                        , justPlayed = Just played.spot
-                        , justRemoved = removedStones model.stones stones
+                        | game = game
+                        , justPlayed = Just spot
+                        , justRemoved = removedStones model.game.stones game.stones
                         , highlightedGroup = []
                         , ghostStone = Nothing
                         , stagedMove = Nothing
@@ -238,7 +236,7 @@ handlePlay model playSpot =
             in
             ( newModel
             , Cmd.batch
-                [ pushUrl newModel.navKey newModel.record
+                [ pushUrl newModel.navKey newModel.game.record
                 , Process.sleep 500 |> Task.perform (\_ -> RemoveStones)
                 ]
             )
@@ -250,7 +248,7 @@ handlePlay model playSpot =
 
 playStone : Spot -> Model -> Maybe MovePreview.Preview
 playStone coords model =
-    case Play.playNearby model.onMove model.stones coords of
+    case Placement.playNearby model.game.onMove model.game.stones coords of
         Nothing ->
             Nothing
 
@@ -263,25 +261,16 @@ playStone coords model =
                         model.ghostStone
 
                     else
-                        Just (MovePreview.fromResult model.stones result)
+                        Just (MovePreview.fromResult model.game.stones result)
 
                 Nothing ->
-                    Just (MovePreview.fromResult model.stones result)
+                    Just (MovePreview.fromResult model.game.stones result)
 
 
 filterStaged : Spot -> Model -> Maybe MovePreview.Preview
 filterStaged coords model =
     model.stagedMove
         |> Maybe.Extra.filter (\preview -> isWithinStone coords preview.stone.spot)
-
-
-ifNotFinished : Model -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
-ifNotFinished model newModelCmd =
-    if isFinished model.record then
-        ( model, Cmd.none )
-
-    else
-        newModelCmd
 
 
 withBoardCoords : PointerInput.Action -> Model -> DocumentCoords -> ( Model, Cmd Msg )
@@ -360,7 +349,7 @@ handleBoardPointer action coords model =
         PointerInput.StartAt _ ->
             if model.showAnalysis then
                 ( { model
-                    | analysis = Analysis.start model.stones coords model.analysis
+                    | analysis = Analysis.start model.game.stones coords model.analysis
                     , dragFrom = DF.DragSpot coords
                   }
                 , Cmd.none
@@ -368,7 +357,7 @@ handleBoardPointer action coords model =
 
             else
                 ( { model
-                    | dragFrom = DF.getDragFrom model.stones model.onMove coords
+                    | dragFrom = DF.getDragFrom model.game.stones model.game.onMove coords
                     , stagedMove = filterStaged coords model
                   }
                 , Cmd.none
@@ -380,7 +369,7 @@ handleBoardPointer action coords model =
                     { m | lastPointer = Just coords }
             in
             if model.showAnalysis then
-                ( { model | analysis = Analysis.move model.stones coords model.analysis } |> setLastPointer, Cmd.none )
+                ( { model | analysis = Analysis.move model.game.stones coords model.analysis } |> setLastPointer, Cmd.none )
 
             else
                 ( handleMoved coords model |> setLastPointer, Cmd.none )
@@ -446,20 +435,16 @@ update msg model =
             ( { model | analysis = Analysis.clearHover model.analysis }, Cmd.none )
 
         PlayPass ->
-            let
-                record =
-                    { player = model.onMove, move = Pass } :: model.record
-            in
             if model.showAnalysis then
                 ( model, Cmd.none )
 
             else
-                ifNotFinished model <|
-                    updatePosition
-                        { model
-                            | record = record
-                            , onMove = otherPlayer model.onMove
-                        }
+                case Game.pass model.game of
+                    Just game ->
+                        updatePosition { model | game = game }
+
+                    Nothing ->
+                        ( model, Cmd.none )
 
         RemoveStones ->
             ( { model | justRemoved = [] }
@@ -519,7 +504,7 @@ update msg model =
                 | showAnalysis = not model.showAnalysis
                 , pointer = PointerInput.cancel model.pointer
                 , showScoring = False
-                , analysis = Analysis.reconcile model.stones model.analysis
+                , analysis = Analysis.reconcile model.game.stones model.analysis
                 , ghostStone = Nothing
                 , stagedMove = Nothing
                 , highlightedGroup = []
@@ -564,23 +549,18 @@ changeRouteTo url model =
         createModel : List Play -> Model
         createModel record =
             let
-                stones =
-                    Play.playStones (List.reverse record) Dict.empty
+                game =
+                    Game.fromRecord record
             in
             { model
-                | record = record
-                , stones = stones
+                | game = game
                 , pointer = PointerInput.cancel model.pointer
-                , analysis = Analysis.reconcile stones model.analysis
+                , analysis = Analysis.reconcile game.stones model.analysis
                 , highlightedGroup = []
                 , ghostStone = Nothing
                 , stagedMove = Nothing
                 , dragFrom = DF.DragNone
                 , lastPointer = Nothing
-                , onMove =
-                    List.head record
-                        |> Maybe.map (.player >> otherPlayer)
-                        |> Maybe.withDefault Black
             }
 
         empty =
@@ -602,7 +582,7 @@ changeRouteTo url model =
 updatePosition : Model -> ( Model, Cmd Msg )
 updatePosition model =
     ( { model | ghostStone = Nothing, stagedMove = Nothing, highlightedGroup = [] }
-    , pushUrl model.navKey model.record
+    , pushUrl model.navKey model.game.record
     )
 
 
@@ -627,7 +607,7 @@ pushUrl navKey record =
 
 isScoring : Model -> Bool
 isScoring model =
-    not model.showAnalysis && (model.showScoring || isFinished model.record)
+    not model.showAnalysis && (model.showScoring || Game.isFinished model.game)
 
 
 {-| Keep the unchanged blur in a separate SVG. Promoting individual SVG groups
@@ -640,8 +620,8 @@ viewBackground stones =
             [ Svg.filter [ SA.id "blur-filter" ]
                 [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
             ]
-        , lazy3 Svg.node "g" [ SA.id "lines" ] <| Board.viewLines
-        , lazy3 Svg.node "g" [ SA.id "stars" ] <| Board.viewStars
+        , lazy3 Svg.node "g" [ SA.id "lines" ] <| BoardView.viewLines
+        , lazy3 Svg.node "g" [ SA.id "stars" ] <| BoardView.viewStars
         , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
             List.map hideLinesKeyed (stoneList stones)
         ]
@@ -649,14 +629,14 @@ viewBackground stones =
 
 boardViewBox : String
 boardViewBox =
-    "0 0 " ++ String.fromInt Board.coordRange ++ " " ++ String.fromInt Board.coordRange
+    "0 0 " ++ String.fromInt coordRange ++ " " ++ String.fromInt coordRange
 
 
 viewSvg : Model -> Svg Msg
 viewSvg model =
     Svg.svg [ SA.id "board-position", SA.viewBox boardViewBox ]
         [ lazy8 viewPosition
-            model.stones
+            model.game.stones
             (Maybe.Extra.or model.stagedMove model.ghostStone)
             model.highlightedGroup
             model.justPlayed
@@ -670,7 +650,7 @@ viewSvg model =
                 Analysis.empty
             )
         , if model.showAnalysis then
-            lazy2 Analysis.view model.stones model.analysis
+            lazy2 Analysis.view model.game.stones model.analysis
 
           else
             Svg.g [] []
@@ -711,7 +691,7 @@ viewPosition stones candidate group justPlayed justRemoved scoring staged analys
     in
     Svg.g []
         [ if scoring then
-            lazy Territory.view stones
+            lazy TerritoryView.view stones
 
           else
             lazy3 Analysis.viewDeadZones previewStones analysis.circles analysis.preview
@@ -750,7 +730,7 @@ viewCapturePreview : Stone -> Svg msg
 viewCapturePreview { spot } =
     let
         offset =
-            Board.stoneRadius // 2
+            stoneRadius // 2
     in
     Svg.g []
         [ viewLink ( Spot (spot.x - offset) (spot.y - offset), Spot (spot.x + offset) (spot.y + offset) )
@@ -770,7 +750,7 @@ view : Model -> Browser.Document Msg
 view model =
     let
         title =
-            case List.length model.record of
+            case List.length model.game.record of
                 0 ->
                     "ContinuGo: freed from the tyranny of the grid"
 
@@ -782,12 +762,12 @@ view model =
             if isScoring model then
                 let
                     territory =
-                        Territory.areas model.stones
+                        Territory.areas model.game.stones
                 in
                 H.div [ HA.id "score" ]
-                    [ H.div [ HA.class "score-result" ] [ H.text (Territory.resultString territory) ]
+                    [ H.div [ HA.class "score-result" ] [ H.text (TerritoryView.resultString territory) ]
                     , H.div [ HA.class "score-areas" ]
-                        [ H.text ("Black " ++ Territory.formatArea territory.black ++ " · White " ++ Territory.formatArea territory.white) ]
+                        [ H.text ("Black " ++ TerritoryView.formatArea territory.black ++ " · White " ++ TerritoryView.formatArea territory.white) ]
                     ]
 
             else
@@ -805,7 +785,7 @@ view model =
                         , HA.classList [ ( "scoring", isScoring model ), ( "analysis", model.showAnalysis ) ]
                         , HE.on "pointerleave" <| Decode.succeed ClearAnalysisHover
                         ]
-                        [ lazy viewBackground model.stones
+                        [ lazy viewBackground model.game.stones
                         , viewSvg model
                         , score
                         ]
@@ -829,7 +809,7 @@ view model =
                          else
                             "false"
                         )
-                    , HA.disabled (isFinished model.record)
+                    , HA.disabled (Game.isFinished model.game)
                     , HE.onClick ToggleScoring
                     ]
                     [ H.text "%", H.span [ HA.class "tooltip" ] [ H.text " score" ] ]

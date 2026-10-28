@@ -1,11 +1,11 @@
-module TerritoryTests exposing (tests)
+module Rules.TerritoryTests exposing (tests)
 
-import Board exposing (coordRange, stoneRadius)
 import Dict
 import Expect
 import Fuzz
-import Go exposing (Player(..), Spot, Stone, Stones, createStone, stoneKey)
-import Territory
+import Rules.Board exposing (coordRange)
+import Rules.Position exposing (Player(..), Spot, Stone, Stones, createStone, stoneKey)
+import Rules.Territory as Territory exposing (Outcome(..))
 import Test exposing (..)
 
 
@@ -47,14 +47,14 @@ tests =
     describe "Voronoi area scoring"
         [ test "An empty board has no owned area and is a draw" <|
             \_ ->
-                Expect.equal ( Territory.Areas 0 0, "jigo" )
-                    ( Territory.areas Dict.empty, Territory.resultString (Territory.areas Dict.empty) )
+                Expect.equal ( Territory.Areas 0 0, Draw )
+                    ( Territory.areas Dict.empty, Territory.result (Territory.areas Dict.empty) )
         , test "A single stone owns the entire board, even when near a corner" <|
             \_ ->
                 Expect.all
                     [ \_ -> expectAreas boardArea 0 (stones [ black 38 38 ])
                     , \_ -> expectAreas 0 boardArea (stones [ white 962 962 ])
-                    , \_ -> Expect.equal "B+220.4" (Territory.resultString (Territory.areas (stones [ black 500 500 ])))
+                    , \_ -> Expect.equal (Win Black boardArea) (Territory.result (Territory.areas (stones [ black 500 500 ])))
                     ]
                     ()
         , test "Two symmetric stones divide the board equally" <|
@@ -65,10 +65,10 @@ tests =
                 in
                 Expect.all
                     [ \_ -> expectAreas (boardArea / 2) (boardArea / 2) position
-                    , \_ -> Expect.equal "jigo" (Territory.resultString (Territory.areas position))
+                    , \_ -> Expect.equal Draw (Territory.result (Territory.areas position))
                     ]
                     ()
-        , test "An off-centre bisector gives the correct shares and stone-area margin" <|
+        , test "An off-centre bisector gives the correct shares and area margin" <|
             \_ ->
                 let
                     position =
@@ -76,7 +76,7 @@ tests =
                 in
                 Expect.all
                     [ \_ -> expectAreas (boardArea * 0.2) (boardArea * 0.8) position
-                    , \_ -> Expect.equal "W+132.3" (Territory.resultString (Territory.areas position))
+                    , \_ -> Expect.equal (Win White (boardArea * 0.6)) (Territory.result (Territory.areas position))
                     ]
                     ()
         , test "A diagonal bisector clips the board correctly" <|
@@ -118,18 +118,16 @@ tests =
                     restored =
                         Dict.insert ( 900, 500 ) (white 900 500) captured
                 in
-                Expect.equal [ "jigo", "B+220.4", "jigo" ]
-                    (List.map (Territory.areas >> Territory.resultString) [ original, captured, restored ])
+                Expect.equal [ Draw, Win Black boardArea, Draw ]
+                    (List.map (Territory.areas >> Territory.result) [ original, captured, restored ])
         , test "A small real lead is not rounded into a draw" <|
             \_ ->
-                Expect.equal "B+<0.1"
-                    (Territory.resultString (Territory.Areas 500001 499999))
-        , test "One scoring unit is the area of a stone disc, not its bounding square" <|
+                Expect.equal (Win Black 2)
+                    (Territory.result (Territory.Areas 500001 499999))
+        , test "Floating-point noise in a tied diagram is ignored" <|
             \_ ->
-                Expect.equal "1" (Territory.formatArea (pi * toFloat stoneRadius ^ 2))
-        , test "Area counts are rounded to one decimal place" <|
-            \_ ->
-                Expect.equal "3.2" (Territory.formatArea (3.24 * pi * toFloat stoneRadius ^ 2))
+                Expect.equal Draw
+                    (Territory.result (Territory.Areas 500000.000001 499999.999999))
         , fuzz (Fuzz.listOfLength 12 (Fuzz.map2 Spot (Fuzz.intRange 38 962) (Fuzz.intRange 38 962))) "All Voronoi cells partition the entire board" <|
             \spots ->
                 let
