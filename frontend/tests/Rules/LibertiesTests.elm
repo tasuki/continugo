@@ -86,6 +86,24 @@ sampleLibertiesTest =
 hasLibertiesTest : Test
 hasLibertiesTest =
     let
+        exhaustiveOffsets =
+            let
+                range =
+                    List.range -(2 * diameter) (2 * diameter)
+
+                origin =
+                    Spot 0 0
+            in
+            List.concatMap (\x -> List.map (Spot x) range) range
+                |> List.filter (\offset -> adjacent origin offset && not (overlaps origin offset))
+
+        probeBlockers =
+            let
+                offset =
+                    2 * diameter - 1
+            in
+            [ Spot -offset 0, Spot offset 0, Spot 0 -offset, Spot 0 offset ]
+
         bruteForce spot nearby =
             List.any
                 (\offset ->
@@ -94,9 +112,9 @@ hasLibertiesTest =
                             translate spot offset
                     in
                     isWithinBoard candidate
-                        && List.all (\other -> distance candidate other >= toFloat diameter) nearby
+                        && List.all (\other -> distanceSquared candidate other >= diameter * diameter) nearby
                 )
-                candidateOffsets
+                exhaustiveOffsets
 
         spotFuzzer =
             Fuzz.map2 Spot (Fuzz.intRange boardMin boardMax) (Fuzz.intRange boardMin boardMax)
@@ -135,6 +153,14 @@ hasLibertiesTest =
 
                     nearby =
                         List.map (translate spot) offsets
+                in
+                Expect.equal (bruteForce spot nearby)
+                    (hasLiberties (createStone Black spot) nearby)
+        , fuzz2 spotFuzzer offsetsFuzzer "Matches brute force with all quick probes blocked" <|
+            \spot offsets ->
+                let
+                    nearby =
+                        List.map (translate spot) (probeBlockers ++ offsets)
                 in
                 Expect.equal (bruteForce spot nearby)
                     (hasLiberties (createStone Black spot) nearby)

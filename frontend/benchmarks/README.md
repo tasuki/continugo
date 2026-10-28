@@ -6,7 +6,9 @@
   trapped stone. It now tests four cheap probes, then searches integer row
   intervals with the occupied discs subtracted. Strict overlap/adjacency and
   inclusive board boundaries are preserved, including single-point openings.
-  The production build no longer constructs/sorts the exhaustive candidate ring.
+  Half-widths are precomputed by integer boundary walks, so capture/suicide checks
+  no longer depend on floating-point square roots. The production build no longer
+  constructs/sorts the exhaustive candidate ring.
 - `Rules.Play.captureGroupsWithoutLiberties` revisited connected groups through multiple nearby stones and
   repeatedly removed the same stones. It now remembers discovered group members;
   group traversal uses coordinate sets instead of comparing entire stone records.

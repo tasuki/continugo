@@ -1,5 +1,6 @@
 module Rules.Liberties exposing (candidateOffsets, hasLiberties, sampleLiberties)
 
+import Array exposing (Array)
 import Rules.Position exposing (..)
 
 
@@ -40,17 +41,59 @@ nonOverlappingLiberties =
 -- finding liberties
 
 
+{-| Walk each integer disc boundary once, storing its half-width at each row.
+widthBound must be at least the radius. The squared radii subtract one because
+adjacency and overlap are strict.
+-}
+discRows : Int -> Int -> Array Int
+discRows widthBound squaredRadius =
+    let
+        build y x rows =
+            if y * y > squaredRadius then
+                Array.fromList (List.reverse rows)
+
+            else if x * x + y * y > squaredRadius then
+                build y (x - 1) rows
+
+            else
+                build (y + 1) x (x :: rows)
+    in
+    build 0 widthBound []
+
+
+adjacencyRows : Array Int
+adjacencyRows =
+    discRows (2 * diameter) (2 * diameter * diameter - 1)
+
+
+overlapRows : Array Int
+overlapRows =
+    discRows diameter (diameter * diameter - 1)
+
+
+maxRowOffset : Int
+maxRowOffset =
+    Array.length adjacencyRows - 1
+
+
+{-| -1 denotes an empty row outside the disc.
+-}
+rowHalfWidth : Array Int -> Int -> Int
+rowHalfWidth rows offset =
+    Array.get (abs offset) rows |> Maybe.withDefault -1
+
+
 candidateOffsets : List Spot
 candidateOffsets =
     -- precompute ring of candidates around zero: 18k spots
     let
         range =
-            List.range -(ceiling adjacentDistance) (ceiling adjacentDistance)
+            List.range -maxRowOffset maxRowOffset
     in
     List.concatMap (\x -> List.map (Spot x) range) range
         |> List.filter (\s -> not <| overlaps s zero)
         |> List.filter (adjacent zero)
-        |> List.sortBy (distance zero)
+        |> List.sortBy (distanceSquared zero)
 
 
 isLiberty : List Spot -> Spot -> Bool
@@ -85,8 +128,8 @@ hasLiberties { spot } nearbySpots =
     List.any (translate spot >> isLiberty nearbySpots) libertyProbes
         || hasLibertyInRows spot
             nearbySpots
-            (max boardMin (spot.y - floor adjacentDistance))
-            (min boardMax (spot.y + floor adjacentDistance))
+            (max boardMin (spot.y - maxRowOffset))
+            (min boardMax (spot.y + maxRowOffset))
 
 
 hasLibertyInRows : Spot -> List Spot -> Int -> Int -> Bool
@@ -99,36 +142,22 @@ hasLibertyInRows spot nearbySpots y lastY =
             dy =
                 y - spot.y
 
-            -- Adjacency is strict; overlap is strict too. All coordinates are
-            -- integers, so subtracting one preserves both boundary rules.
-            outerSquared =
-                2 * diameter * diameter - 1 - dy * dy
-
-            innerSquared =
-                diameter * diameter - dy * dy
-
             outer =
-                floor (sqrt (toFloat outerSquared))
+                rowHalfWidth adjacencyRows dy
 
             inner =
-                ceiling (sqrt (toFloat (max 0 innerSquared)))
+                -- The first integer outside the overlap disc permits exact touching.
+                rowHalfWidth overlapRows dy + 1
 
             blockedInterval other =
                 let
-                    deltaY =
-                        y - other.y
-
-                    squared =
-                        diameter * diameter - 1 - deltaY * deltaY
+                    halfWidth =
+                        rowHalfWidth overlapRows (y - other.y)
                 in
-                if squared < 0 then
+                if halfWidth < 0 then
                     Nothing
 
                 else
-                    let
-                        halfWidth =
-                            floor (sqrt (toFloat squared))
-                    in
                     Just ( other.x - halfWidth, other.x + halfWidth )
 
             blocked =
@@ -137,7 +166,7 @@ hasLibertyInRows spot nearbySpots y lastY =
             openInterval left right =
                 intervalHasGap (max boardMin left) (min boardMax right) blocked
         in
-        (outerSquared
+        (outer
             >= 0
             && (openInterval (spot.x - outer) (spot.x - inner)
                     || openInterval (spot.x + inner) (spot.x + outer)
