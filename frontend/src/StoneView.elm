@@ -1,5 +1,6 @@
 module StoneView exposing (classJustPlayed, getStoneLinks, getUniqueLinks, spotBorderNearestTo, spotKey, viewGhostLink, viewGhostStone, viewHighlight, viewKeyedLineCover, viewKeyedLink, viewKeyedStone, viewLink, viewStagedStone, viewStone)
 
+import BoardGeometry exposing (distance)
 import Rules.Board exposing (stoneRadius)
 import Rules.Position exposing (..)
 import Svg exposing (Svg)

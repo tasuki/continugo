@@ -14,8 +14,9 @@ of adjacency discs around its members. Both displays share the same sweep.
 
 -}
 
+import BoardGeometry exposing (adjacentDistance)
 import Rules.Board exposing (coordRange, stoneRadius)
-import Rules.Position exposing (Spot, Stones, adjacentDistance, diameter, stoneList)
+import Rules.Position exposing (Spot, Stones, diameter, stoneList)
 import StoneView exposing (spotKey)
 import Svg exposing (Svg)
 import Svg.Attributes as SA

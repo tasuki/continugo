@@ -1,12 +1,13 @@
 module CoverageTests exposing (tests)
 
+import BoardGeometry exposing (adjacentDistance)
 import Coverage exposing (Point, canCover, geometry, libertyGeometry)
 import Dict
 import Expect
 import Fuzz
 import Rules.Board exposing (stoneRadius)
 import Rules.Play as Play
-import Rules.Position as Position exposing (Spot, adjacentDistance, diameter)
+import Rules.Position as Position exposing (Spot, diameter)
 import Sgf
 import Test exposing (..)
 

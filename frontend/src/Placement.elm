@@ -17,8 +17,8 @@ candidateOffsets =
             List.range -stoneRadius stoneRadius
     in
     List.concatMap (\x -> List.map (Spot x) range) range
-        |> List.filter (\s -> distance s (Spot 0 0) < toFloat stoneRadius)
-        |> List.sortBy (distance (Spot 0 0))
+        |> List.filter (\s -> distanceSquared s (Spot 0 0) < stoneRadius * stoneRadius)
+        |> List.sortBy (distanceSquared (Spot 0 0))
 
 
 firstFreeSpot : Spot -> List Spot -> List Spot -> Maybe Spot

@@ -19,9 +19,14 @@ tests =
     describe "Position geometry and cached neighbors"
         [ fuzz2 spotFuzzer spotFuzzer "Integer nearby checks preserve the existing radius" <|
             \a b ->
-                Expect.equal
-                    (distance a b < 2 * toFloat diameter + adjacentDistance)
-                    (isNearby a b)
+                let
+                    floatDistance =
+                        sqrt (toFloat (distanceSquared a b))
+
+                    floatRadius =
+                        2 * toFloat diameter + sqrt 2 * toFloat diameter
+                in
+                Expect.equal (floatDistance < floatRadius) (isNearby a b)
         , test "Nearby filtering keeps close stones and excludes distant ones" <|
             \_ ->
                 let

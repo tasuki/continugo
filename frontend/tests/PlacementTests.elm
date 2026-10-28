@@ -3,6 +3,7 @@ module PlacementTests exposing (tests)
 import Dict
 import Expect
 import Placement exposing (nearestFreeSpot)
+import Rules.Board exposing (stoneRadius)
 import Rules.Play as Play
 import Rules.Position exposing (..)
 import Test exposing (..)
@@ -11,7 +12,25 @@ import Test exposing (..)
 tests : Test
 tests =
     describe "Frontend placement adjustment"
-        [ test "Basic: 200, hover 250 => 276" <|
+        [ test "Integer candidate filtering preserves the previous offsets and ordering" <|
+            \_ ->
+                let
+                    origin =
+                        Spot 0 0
+
+                    range =
+                        List.range -stoneRadius stoneRadius
+
+                    floatDistance offset =
+                        sqrt (toFloat (distanceSquared origin offset))
+
+                    previousOffsets =
+                        List.concatMap (\x -> List.map (Spot x) range) range
+                            |> List.filter (\offset -> floatDistance offset < toFloat stoneRadius)
+                            |> List.sortBy floatDistance
+                in
+                Expect.equal previousOffsets Placement.candidateOffsets
+        , test "Basic: 200, hover 250 => 276" <|
             \_ ->
                 Expect.equal (Just <| Spot 276 200)
                     (nearestFreeSpot (Spot 250 200) [ Spot 200 200 ])

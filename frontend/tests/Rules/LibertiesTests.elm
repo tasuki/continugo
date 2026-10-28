@@ -9,8 +9,9 @@ import Test exposing (..)
 
 closestDistance : Spot -> (() -> List Spot) -> Float
 closestDistance toSpot spots =
-    List.map (distance toSpot) (spots ())
+    List.map (distanceSquared toSpot) (spots ())
         |> List.minimum
+        |> Maybe.map (toFloat >> sqrt)
         |> Maybe.withDefault 10000
 
 

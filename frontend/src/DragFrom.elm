@@ -1,5 +1,6 @@
 module DragFrom exposing (..)
 
+import BoardGeometry exposing (adjacentDistance, distance)
 import List.Extra
 import Placement
 import Rules.Position exposing (..)

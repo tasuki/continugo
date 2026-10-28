@@ -14,12 +14,6 @@ diameter =
     2 * stoneRadius
 
 
-adjacentDistance : Float
-adjacentDistance =
-    -- stones which are considered connected
-    sqrt 2 * toFloat diameter
-
-
 
 -- Spot
 
@@ -32,11 +26,6 @@ type alias Spot =
 translate : Spot -> Spot -> Spot
 translate spot offset =
     Spot (spot.x + offset.x) (spot.y + offset.y)
-
-
-distance : Spot -> Spot -> Float
-distance s1 s2 =
-    sqrt (toFloat (distanceSquared s1 s2))
 
 
 distanceSquared : Spot -> Spot -> Int
