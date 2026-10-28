@@ -1,6 +1,7 @@
-module DeadZones exposing (Geometry, Point, canCover, geometry, libertyGeometry, view, viewLiberties, viewSpots)
+module Coverage exposing (Geometry, Point, canCover, geometry, libertyGeometry, view, viewLiberties, viewSpots)
 
 {-| A visual, continuous-space model, independent of turns and suicide rules.
+Spots are integer stone centres; Points are floating-point boundary geometry.
 
 The possible stone centres form the inset board minus diameter-radius discs.
 To show the area a stone could cover, expand that set by one stone radius:
@@ -15,7 +16,7 @@ of adjacency discs around its members. Both displays share the same sweep.
 
 import Rules.Board exposing (coordRange, stoneRadius)
 import Rules.Position exposing (Spot, Stones, adjacentDistance, diameter, stoneList)
-import StoneView exposing (spotKeyStr)
+import StoneView exposing (spotKey)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 import Svg.Keyed
@@ -51,8 +52,8 @@ radius =
     toFloat stoneRadius
 
 
-deadRadius : Float
-deadRadius =
+exclusionRadius : Float
+exclusionRadius =
     toFloat diameter
 
 
@@ -78,7 +79,7 @@ distance a b =
 
 placeable : List Point -> Point -> Bool
 placeable centers p =
-    p.x >= low - epsilon && p.x <= high + epsilon && p.y >= low - epsilon && p.y <= high + epsilon && List.all (\c -> distance c p >= deadRadius - epsilon) centers
+    p.x >= low - epsilon && p.x <= high + epsilon && p.y >= low - epsilon && p.y <= high + epsilon && List.all (\c -> distance c p >= exclusionRadius - epsilon) centers
 
 
 inReach : Maybe (List Point) -> Point -> Bool
@@ -230,13 +231,13 @@ regionGeometry group spots =
                     -- Only blockers that can intersect the group's possible
                     -- centres affect its liberty-area (or its swept boundary).
                     List.map toPoint spots
-                        |> List.filter (\c -> List.any (\member -> distance c member <= deadRadius + adjacentDistance + epsilon) members)
+                        |> List.filter (\c -> List.any (\member -> distance c member <= exclusionRadius + adjacentDistance + epsilon) members)
 
         reach =
             Maybe.map (List.map toPoint) group
 
         circles =
-            List.map (\c -> Circle c deadRadius) centers
+            List.map (\c -> Circle c exclusionRadius) centers
                 ++ List.map (\c -> Circle c adjacentDistance) (Maybe.withDefault [] reach)
 
         circleBoundary c =
@@ -245,7 +246,7 @@ regionGeometry group spots =
                     List.filter (\other -> other /= c && distance c.center other.center <= c.radius + other.radius + epsilon) circles
 
                 nearbyStones =
-                    List.filter (\other -> distance c.center other <= c.radius + deadRadius + epsilon) centers
+                    List.filter (\other -> distance c.center other <= c.radius + exclusionRadius + epsilon) centers
 
                 crossings =
                     List.concatMap (circleCrossings c) neighbours
@@ -361,7 +362,7 @@ viewSpots : List Spot -> Svg msg
 viewSpots spots =
     let
         positionKey =
-            List.map spotKeyStr spots |> String.join ""
+            List.map spotKey spots |> String.join ""
     in
     -- Browsers can retain a stale image of nested SVG masks when only their
     -- contents change. Replace both masks and their painted rectangle whenever
@@ -451,7 +452,7 @@ sweptMasks inverted name shape =
                 [ boardRect [ SA.fill background ]
                 , Svg.g reachAttributes
                     [ Svg.rect [ SA.x (String.fromFloat low), SA.y (String.fromFloat low), SA.width (String.fromFloat (high - low)), SA.height (String.fromFloat (high - low)), SA.fill foreground ] []
-                    , Svg.g [] (List.map (circle deadRadius background) shape.centers)
+                    , Svg.g [] (List.map (circle exclusionRadius background) shape.centers)
                     ]
                 , Svg.path
                     [ SA.d (String.join " " (List.map arcPath shape.arcs ++ List.map linePath shape.lines))
@@ -482,7 +483,7 @@ viewLiberties stones group =
             List.map .spot (stoneList stones)
 
         positionKey =
-            (List.map spotKeyStr spots |> String.join "") ++ "/" ++ (List.map spotKeyStr group |> String.join "")
+            (List.map spotKey spots |> String.join "") ++ "/" ++ (List.map spotKey group |> String.join "")
     in
     Svg.Keyed.node "g"
         [ SA.id "liberties", SA.pointerEvents "none" ]

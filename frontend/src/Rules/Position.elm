@@ -98,17 +98,17 @@ isWithinBoard spot =
 
 
 
--- Players
+-- Colors
 
 
-type Player
+type Color
     = Black
     | White
 
 
-otherPlayer : Player -> Player
-otherPlayer p =
-    case p of
+otherColor : Color -> Color
+otherColor color =
+    case color of
         White ->
             Black
 
@@ -121,16 +121,16 @@ otherPlayer p =
 
 
 type alias Stone =
-    { player : Player
+    { color : Color
     , spot : Spot
     , nearby : List Spot
     , adjacent : List Spot
     }
 
 
-createStone : Player -> Spot -> Stone
-createStone player spot =
-    { player = player
+createStone : Color -> Spot -> Stone
+createStone color spot =
+    { color = color
     , spot = spot
     , nearby = []
     , adjacent = []
@@ -168,8 +168,8 @@ nearbyStones stones spot =
         |> List.filter (\s -> distance spot s.spot < nearbyDistance)
 
 
-enhanceInfo : Stones -> Stone -> Stone
-enhanceInfo stones stone =
+withNeighbors : Stones -> Stone -> Stone
+withNeighbors stones stone =
     let
         nearby =
             nearbyStones stones stone.spot
@@ -177,7 +177,7 @@ enhanceInfo stones stone =
         adjacentStones : List Stone
         adjacentStones =
             nearby
-                |> List.filter (\s -> s.player == stone.player)
+                |> List.filter (\s -> s.color == stone.color)
                 |> List.filter (\s -> stoneDistance stone s < adjacentDistance)
     in
     { stone
@@ -204,9 +204,9 @@ stoneList stones =
     Dict.values stones
 
 
-addStones : (Stone -> Stone) -> List Spot -> Stones -> Stones
-addStones addFun spots sts =
-    List.foldl (\s -> Dict.update ( s.x, s.y ) (Maybe.map addFun)) sts spots
+updateStones : (Stone -> Stone) -> List Spot -> Stones -> Stones
+updateStones transform spots stones =
+    List.foldl (\s -> Dict.update ( s.x, s.y ) (Maybe.map transform)) stones spots
 
 
 removedStones : Stones -> Stones -> List Stone
@@ -234,21 +234,21 @@ type Move
 
 
 type alias Play =
-    { player : Player
+    { color : Color
     , move : Move
     }
 
 
-createPlay : Player -> Spot -> Play
-createPlay player spot =
-    { player = player
-    , move = Place <| createStone player spot
+createPlay : Color -> Spot -> Play
+createPlay color spot =
+    { color = color
+    , move = Place <| createStone color spot
     }
 
 
-createPass : Player -> Play
-createPass player =
-    { player = player
+createPass : Color -> Play
+createPass color =
+    { color = color
     , move = Pass
     }
 

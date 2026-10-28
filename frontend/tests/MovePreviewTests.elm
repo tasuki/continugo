@@ -1,6 +1,6 @@
 module MovePreviewTests exposing (tests)
 
-import DeadZones exposing (Point, canCover, geometry, libertyGeometry)
+import Coverage exposing (Point, canCover, geometry, libertyGeometry)
 import Dict
 import Expect
 import Fixtures.Play as PlayFixtures
@@ -15,14 +15,14 @@ tests =
     describe "Move previews"
         [ test "No candidate leaves the position unpreviewed" <|
             \_ ->
-                Expect.equal Nothing (MovePreview.fromMoves Dict.empty Nothing Nothing)
+                Expect.equal Nothing (MovePreview.fromCandidates Dict.empty Nothing Nothing)
         , test "A hovered move occupies space and shows its group's liberties" <|
             \_ ->
                 let
                     candidate =
                         createStone Black (Spot 500 500)
                 in
-                case MovePreview.fromMoves Dict.empty (Just candidate) Nothing of
+                case MovePreview.fromCandidates Dict.empty (Just candidate) Nothing of
                     Nothing ->
                         Expect.fail "Expected a legal preview"
 
@@ -43,7 +43,7 @@ tests =
                         createStone Black (Spot 500 500)
                 in
                 Expect.equal (Just candidate.spot)
-                    (MovePreview.fromMoves Dict.empty Nothing (Just candidate)
+                    (MovePreview.fromCandidates Dict.empty Nothing (Just candidate)
                         |> Maybe.map (.stone >> .spot)
                     )
         , test "Staging takes precedence over a different hovered stone" <|
@@ -56,14 +56,14 @@ tests =
                         createStone Black (Spot 700 500)
                 in
                 Expect.equal (Just [ staged.spot ])
-                    (MovePreview.fromMoves Dict.empty (Just hovered) (Just staged)
+                    (MovePreview.fromCandidates Dict.empty (Just hovered) (Just staged)
                         |> Maybe.map (.stones >> stoneList >> List.map .spot)
                     )
         , test "The preview highlights the whole connected group" <|
             \_ ->
                 let
                     stones =
-                        Play.playStones
+                        Play.replayPlacements
                             [ createPlay Black (Spot 400 500)
                             , createPlay Black (Spot 500 500)
                             , createPlay White (Spot 700 500)
@@ -71,17 +71,17 @@ tests =
                             Dict.empty
                 in
                 Expect.equal (Just [ Spot 400 500, Spot 500 500, Spot 600 500 ])
-                    (MovePreview.fromMoves stones (Just (createStone Black (Spot 600 500))) Nothing
+                    (MovePreview.fromCandidates stones (Just (createStone Black (Spot 600 500))) Nothing
                         |> Maybe.map (.group >> List.sortBy .x)
                     )
         , test "An overlapping candidate is rejected rather than moved elsewhere" <|
             \_ ->
                 let
                     stones =
-                        Play.playStones [ createPlay Black (Spot 500 500) ] Dict.empty
+                        Play.replayPlacements [ createPlay Black (Spot 500 500) ] Dict.empty
                 in
                 Expect.equal Nothing
-                    (MovePreview.fromMoves stones (Just (createStone White (Spot 510 500))) Nothing)
+                    (MovePreview.fromCandidates stones (Just (createStone White (Spot 510 500))) Nothing)
         , describe "Previewing captures and suicide uses the actual move rules"
             (List.map previewCase PlayFixtures.cases)
         ]
@@ -93,7 +93,7 @@ previewCase tc =
         \_ ->
             let
                 stones =
-                    Play.playStones tc.record Dict.empty
+                    Play.replayPlacements tc.record Dict.empty
 
                 expected =
                     Play.playIfLegal stones tc.playStone
@@ -121,7 +121,7 @@ previewCase tc =
                         ]
                         ()
             in
-            case MovePreview.fromMoves stones (Just tc.playStone) Nothing of
+            case MovePreview.fromCandidates stones (Just tc.playStone) Nothing of
                 Nothing ->
                     Expect.equal Nothing expected
 

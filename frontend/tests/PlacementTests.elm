@@ -36,7 +36,7 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones [ createPlay Black (Spot 200 200) ] Dict.empty
+                        Play.replayPlacements [ createPlay Black (Spot 200 200) ] Dict.empty
 
                     intended =
                         Spot 250 200

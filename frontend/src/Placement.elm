@@ -49,12 +49,12 @@ nearbySpot stones spot =
     nearestFreeSpot spot (List.map .spot (nearbyStones stones spot))
 
 
-playNearby : Player -> Stones -> Spot -> Maybe ( Stones, Stone )
-playNearby player stones spot =
+playNearby : Color -> Stones -> Spot -> Maybe ( Stones, Stone )
+playNearby color stones spot =
     nearbySpot stones spot
         |> Maybe.andThen
             (\target ->
-                Play.playIfLegal stones (createStone player target)
+                Play.playIfLegal stones (createStone color target)
                     |> Maybe.andThen
                         (\result ->
                             Dict.get ( target.x, target.y ) result

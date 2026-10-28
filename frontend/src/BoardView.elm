@@ -7,6 +7,7 @@ import Svg.Attributes as SA
 
 preciseRadius : Float
 preciseRadius =
+    -- for drawing the lines
     toFloat coordRange / (toFloat boardSize * 2)
 
 

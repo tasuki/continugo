@@ -1,4 +1,4 @@
-module StoneView exposing (classJustPlayed, getStoneLinks, getUniqueLinks, hideLinesKeyed, spotBorderNearestTo, spotKeyStr, viewGhostLink, viewGhostStone, viewHighlight, viewKeyedLink, viewKeyedStone, viewLink, viewStagedStone, viewStone)
+module StoneView exposing (classJustPlayed, getStoneLinks, getUniqueLinks, spotBorderNearestTo, spotKey, viewGhostLink, viewGhostStone, viewHighlight, viewKeyedLineCover, viewKeyedLink, viewKeyedStone, viewLink, viewStagedStone, viewStone)
 
 import Rules.Board exposing (stoneRadius)
 import Rules.Position exposing (..)
@@ -51,8 +51,8 @@ spotBorderNearestTo otherSpot spot =
     Spot (coord spot.x otherSpot.x) (coord spot.y otherSpot.y)
 
 
-hideLines : Stone -> Svg msg
-hideLines { spot } =
+viewLineCover : Stone -> Svg msg
+viewLineCover { spot } =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
@@ -62,10 +62,10 @@ hideLines { spot } =
 
 
 viewStone : String -> Stone -> Svg msg
-viewStone extraClass { player, spot } =
+viewStone extraClass { color, spot } =
     let
         class =
-            case player of
+            case color of
                 Black ->
                     "black"
 
@@ -118,28 +118,28 @@ viewGhostLink ( ghost, existing ) =
     viewLink ( spotBorderNearestTo existing ghost, existing )
 
 
-spotKeyStr : Spot -> String
-spotKeyStr s =
+spotKey : Spot -> String
+spotKey s =
     "-" ++ String.fromInt s.x ++ "-" ++ String.fromInt s.y
 
 
-hideLinesKeyed : Stone -> ( String, Svg msg )
-hideLinesKeyed stone =
-    ( "hide" ++ spotKeyStr stone.spot
-    , lazy hideLines stone
+viewKeyedLineCover : Stone -> ( String, Svg msg )
+viewKeyedLineCover stone =
+    ( "hide" ++ spotKey stone.spot
+    , lazy viewLineCover stone
     )
 
 
 viewKeyedStone : String -> Stone -> ( String, Svg msg )
 viewKeyedStone extraClass stone =
-    ( "stone" ++ spotKeyStr stone.spot
+    ( "stone" ++ spotKey stone.spot
     , lazy2 viewStone extraClass stone
     )
 
 
 viewKeyedLink : ( Spot, Spot ) -> ( String, Svg msg )
 viewKeyedLink ( s1, s2 ) =
-    ( "link" ++ spotKeyStr s1 ++ spotKeyStr s2
+    ( "link" ++ spotKey s1 ++ spotKey s2
     , lazy viewLink ( s1, s2 )
     )
 

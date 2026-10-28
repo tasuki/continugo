@@ -1,7 +1,7 @@
 module AnalysisTests exposing (tests)
 
 import Analysis exposing (Effect(..))
-import DeadZones exposing (Point, canCover, geometry)
+import Coverage exposing (Point, canCover, geometry)
 import Dict
 import DragFrom
 import Expect
@@ -71,7 +71,7 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones [ createPlay Black (Spot 300 500), createPlay White (Spot 700 500) ] Dict.empty
+                        Play.replayPlacements [ createPlay Black (Spot 300 500), createPlay White (Spot 700 500) ] Dict.empty
 
                     model =
                         withCircles [ Spot 500 500 ]
@@ -83,7 +83,7 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones [ createPlay White (Spot 700 500) ] Dict.empty
+                        Play.replayPlacements [ createPlay White (Spot 700 500) ] Dict.empty
 
                     model =
                         withCircles [ Spot 500 500 ] |> Analysis.move stones (Spot 400 400)
@@ -100,7 +100,7 @@ tests =
                             |> Analysis.move Dict.empty (Spot 600 500)
                             |> Analysis.clearHover
                 in
-                Expect.equal ( Nothing, Just ( 1, Spot 500 500 ) ) ( model.preview, model.pending )
+                Expect.equal ( Nothing, Just ( 1, Spot 500 500 ) ) ( model.preview, model.pendingRemoval )
         , test "Hovering then releasing without a press cannot add a circle" <|
             \_ ->
                 Analysis.move Dict.empty (Spot 500 500) Analysis.empty
@@ -112,7 +112,7 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones [ createPlay White (Spot 700 500) ] Dict.empty
+                        Play.replayPlacements [ createPlay White (Spot 700 500) ] Dict.empty
 
                     model =
                         withCircles [ Spot 500 500 ]
@@ -124,7 +124,7 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones [ createPlay White (Spot 700 500) ] Dict.empty
+                        Play.replayPlacements [ createPlay White (Spot 700 500) ] Dict.empty
 
                     model =
                         withCircles [ Spot 500 500 ]
@@ -153,7 +153,7 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones
+                        Play.replayPlacements
                             [ createPlay Black (Spot 400 500), createPlay White (Spot 600 500) ]
                             Dict.empty
                 in
@@ -175,10 +175,10 @@ tests =
             \_ ->
                 [ Black, White ]
                     |> List.map
-                        (\player ->
+                        (\color ->
                             let
                                 stones =
-                                    Play.playStones [ createPlay player (Spot 500 500) ] Dict.empty
+                                    Play.replayPlacements [ createPlay color (Spot 500 500) ] Dict.empty
                             in
                             drag stones (Spot 500 500) (Spot 900 500) Analysis.empty |> .circles
                         )
@@ -187,7 +187,7 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones [ createPlay White (Spot 600 570) ] Dict.empty
+                        Play.replayPlacements [ createPlay White (Spot 600 570) ] Dict.empty
 
                     model =
                         drag stones (Spot 500 500) (Spot 900 500) (withCircles [ Spot 500 500, Spot 650 450 ])
@@ -224,14 +224,14 @@ tests =
                 Analysis.start Dict.empty (Spot 500 500) (withCircles [ Spot 500 500 ])
                     |> Analysis.finish Dict.empty (Spot 503 502)
                     |> Tuple.second
-                    |> Expect.equal (RemoveAfter 1)
+                    |> Expect.equal (ScheduleRemoval 1)
         , test "Single-tap removal waits for its timer" <|
             \_ ->
                 let
                     ( model, effect ) =
                         tap Dict.empty (Spot 500 500) (withCircles [ Spot 500 500 ])
                 in
-                Expect.equal ( [ Spot 500 500 ], RemoveAfter 1, [] )
+                Expect.equal ( [ Spot 500 500 ], ScheduleRemoval 1, [] )
                     ( model.circles, effect, (Analysis.expire 1 model).circles )
         , test "Double-tap proposes the exact circle and cancels pending removal" <|
             \_ ->
@@ -291,12 +291,12 @@ tests =
                             |> Analysis.expire 1
                 in
                 Expect.equal ( [ Spot 500 500 ], ( Nothing, Nothing, Nothing ) )
-                    ( model.circles, ( model.gesture, model.preview, model.pending ) )
+                    ( model.circles, ( model.gesture, model.preview, model.pendingRemoval ) )
         , test "Actual moves discard only circles now occupied by stones" <|
             \_ ->
                 let
                     stones =
-                        Play.playStones [ createPlay Black (Spot 500 500) ] Dict.empty
+                        Play.replayPlacements [ createPlay Black (Spot 500 500) ] Dict.empty
                 in
                 Analysis.reconcile stones (withCircles [ Spot 500 500, Spot 700 500 ])
                     |> .circles
@@ -305,7 +305,7 @@ tests =
             \_ ->
                 let
                     stones =
-                        Play.playStones PlayFixtures.suicideRecord Dict.empty
+                        Play.replayPlacements PlayFixtures.suicideRecord Dict.empty
 
                     candidate =
                         PlayFixtures.stoneFromSgf "B[cIaS]"

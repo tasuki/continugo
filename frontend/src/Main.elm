@@ -5,7 +5,7 @@ import BoardView
 import Browser
 import Browser.Dom as BD
 import Browser.Navigation as Nav
-import DeadZones
+import Coverage
 import Dict
 import DocumentCoords as DC exposing (DocumentCoords)
 import DragFrom as DF exposing (DragFrom)
@@ -93,7 +93,7 @@ emptyModel navKey =
 
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url navKey =
-    changeRouteTo url (emptyModel navKey)
+    restoreFromUrl url (emptyModel navKey)
 
 
 
@@ -104,15 +104,15 @@ type Msg
     = PointerEvent PointerInput.Event
     | PointerAtBoard Int PointerInput.Action (Result BD.Error Spot)
     | ClearAnalysisHover
-    | PlayPass
-    | RemoveStones
-    | Prev
-    | Next
-    | Help
+    | PassTurn
+    | ClearCaptureAnimation
+    | Undo
+    | Redo
+    | ToggleHelp
     | ToggleScoring
     | ToggleAnalysis
-    | RemoveAnalysisCircle Int
-    | New
+    | AnalysisRemovalExpired Int
+    | NewGame
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
 
@@ -159,7 +159,7 @@ handleHover model hoverSpot =
         ( Nothing, _ ) ->
             -- hovering over an empty spot: show ghost move if possible
             { model
-                | ghostStone = playStone hoverSpot model
+                | ghostStone = previewNearbyMove hoverSpot model
                 , highlightedGroup = []
                 , justPlayed = Nothing
             }
@@ -178,7 +178,7 @@ handleDrag model draggedFrom draggedTo =
                 model.ghostStone
 
             else
-                MovePreview.fromMoves model.game.stones (Just candidateStone) Nothing
+                MovePreview.fromCandidates model.game.stones (Just candidateStone) Nothing
     in
     { model
         | ghostStone = ghostStone
@@ -200,11 +200,11 @@ handleAnalysisFinished coords model =
         Analysis.NoEffect ->
             ( updated, Cmd.none )
 
-        Analysis.RemoveAfter serial ->
-            ( updated, Process.sleep 300 |> Task.perform (\_ -> RemoveAnalysisCircle serial) )
+        Analysis.ScheduleRemoval serial ->
+            ( updated, Process.sleep 300 |> Task.perform (\_ -> AnalysisRemovalExpired serial) )
 
         Analysis.Propose spot ->
-            case MovePreview.fromMoves model.game.stones (Just (createStone model.game.onMove spot)) Nothing of
+            case MovePreview.fromCandidates model.game.stones (Just (createStone model.game.onMove spot)) Nothing of
                 Just preview ->
                     if Game.isFinished model.game then
                         ( { updated | analysis = { analysis | invalid = Just spot } }, Cmd.none )
@@ -236,8 +236,8 @@ handlePlay model playSpot =
             in
             ( newModel
             , Cmd.batch
-                [ pushUrl newModel.navKey newModel.game.record
-                , Process.sleep 500 |> Task.perform (\_ -> RemoveStones)
+                [ pushRecordUrl newModel.navKey newModel.game.record
+                , Process.sleep 500 |> Task.perform (\_ -> ClearCaptureAnimation)
                 ]
             )
 
@@ -246,8 +246,8 @@ handlePlay model playSpot =
             ( model, Cmd.none )
 
 
-playStone : Spot -> Model -> Maybe MovePreview.Preview
-playStone coords model =
+previewNearbyMove : Spot -> Model -> Maybe MovePreview.Preview
+previewNearbyMove coords model =
     case Placement.playNearby model.game.onMove model.game.stones coords of
         Nothing ->
             Nothing
@@ -267,8 +267,8 @@ playStone coords model =
                     Just (MovePreview.fromResult model.game.stones result)
 
 
-filterStaged : Spot -> Model -> Maybe MovePreview.Preview
-filterStaged coords model =
+stagedMoveAt : Spot -> Model -> Maybe MovePreview.Preview
+stagedMoveAt coords model =
     model.stagedMove
         |> Maybe.Extra.filter (\preview -> isWithinStone coords preview.stone.spot)
 
@@ -288,7 +288,7 @@ withBoardCoords action model documentCoords =
 
 handleMoved : Spot -> Model -> Model
 handleMoved coords model =
-    case ( filterStaged coords model, model.dragFrom ) of
+    case ( stagedMoveAt coords model, model.dragFrom ) of
         ( Just _, _ ) ->
             -- hovering over staged move
             model
@@ -358,7 +358,7 @@ handleBoardPointer action coords model =
             else
                 ( { model
                     | dragFrom = DF.getDragFrom model.game.stones model.game.onMove coords
-                    , stagedMove = filterStaged coords model
+                    , stagedMove = stagedMoveAt coords model
                   }
                 , Cmd.none
                 )
@@ -387,7 +387,7 @@ handleBoardPointer action coords model =
                             , ghostStone = Nothing
                         }
                 in
-                case filterStaged coords model of
+                case stagedMoveAt coords model of
                     Just staged ->
                         handlePlay cleared staged.stone.spot
 
@@ -434,7 +434,7 @@ update msg model =
         ClearAnalysisHover ->
             ( { model | analysis = Analysis.clearHover model.analysis }, Cmd.none )
 
-        PlayPass ->
+        PassTurn ->
             if model.showAnalysis then
                 ( model, Cmd.none )
 
@@ -446,22 +446,22 @@ update msg model =
                     Nothing ->
                         ( model, Cmd.none )
 
-        RemoveStones ->
+        ClearCaptureAnimation ->
             ( { model | justRemoved = [] }
             , Cmd.none
             )
 
-        Prev ->
+        Undo ->
             ( model
             , Nav.back model.navKey 1
             )
 
-        Next ->
+        Redo ->
             ( model
             , Nav.forward model.navKey 1
             )
 
-        New ->
+        NewGame ->
             let
                 fresh =
                     emptyModel model.navKey
@@ -475,7 +475,7 @@ update msg model =
                     , pointer = PointerInput.cancel model.pointer
                 }
 
-        Help ->
+        ToggleHelp ->
             ( { model
                 | showHelp = not model.showHelp
                 , pointer = PointerInput.cancel model.pointer
@@ -515,11 +515,11 @@ update msg model =
             , Cmd.none
             )
 
-        RemoveAnalysisCircle serial ->
+        AnalysisRemovalExpired serial ->
             ( { model | analysis = Analysis.expire serial model.analysis }, Cmd.none )
 
         UrlChanged url ->
-            changeRouteTo url model
+            restoreFromUrl url model
 
         _ ->
             ( model, Cmd.none )
@@ -535,8 +535,8 @@ recordRegex =
         Regex.fromString "^record=(.*)$"
 
 
-changeRouteTo : Url.Url -> Model -> ( Model, Cmd Msg )
-changeRouteTo url model =
+restoreFromUrl : Url.Url -> Model -> ( Model, Cmd Msg )
+restoreFromUrl url model =
     let
         maybeRecord : Maybe (List Play)
         maybeRecord =
@@ -582,12 +582,12 @@ changeRouteTo url model =
 updatePosition : Model -> ( Model, Cmd Msg )
 updatePosition model =
     ( { model | ghostStone = Nothing, stagedMove = Nothing, highlightedGroup = [] }
-    , pushUrl model.navKey model.game.record
+    , pushRecordUrl model.navKey model.game.record
     )
 
 
-pushUrl : Nav.Key -> List Play -> Cmd msg
-pushUrl navKey record =
+pushRecordUrl : Nav.Key -> List Play -> Cmd msg
+pushRecordUrl navKey record =
     let
         rec =
             if List.length record > 0 then
@@ -623,7 +623,7 @@ viewBackground stones =
         , lazy3 Svg.node "g" [ SA.id "lines" ] <| BoardView.viewLines
         , lazy3 Svg.node "g" [ SA.id "stars" ] <| BoardView.viewStars
         , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
-            List.map hideLinesKeyed (stoneList stones)
+            List.map viewKeyedLineCover (stoneList stones)
         ]
 
 
@@ -699,7 +699,7 @@ viewPosition stones candidate group justPlayed justRemoved scoring staged analys
             Svg.g [] []
 
           else
-            lazy2 DeadZones.viewLiberties previewStones highlightedGroup
+            lazy2 Coverage.viewLiberties previewStones highlightedGroup
         , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
             List.map viewGhostLink (Maybe.map getStoneLinks previewStone |> Maybe.withDefault [])
         , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|
@@ -794,9 +794,9 @@ view model =
     { title = title
     , body =
         [ H.div [ HA.id "menu" ]
-            [ menuLink New "!" "new"
-            , menuLink Help "?" "help"
-            , menuLink PlayPass "*" "pass"
+            [ menuLink NewGame "!" "new"
+            , menuLink ToggleHelp "?" "help"
+            , menuLink PassTurn "*" "pass"
             , H.div [ HA.class "item" ]
                 [ H.button
                     [ HA.id "score-toggle"
@@ -830,8 +830,8 @@ view model =
                     ]
                     [ H.text "o", H.span [ HA.class "tooltip" ] [ H.text " analysis" ] ]
                 ]
-            , menuLink Prev "‹" "undo"
-            , menuLink Next "︎︎›︎" "redo"
+            , menuLink Undo "‹" "undo"
+            , menuLink Redo "︎︎›︎" "redo"
             ]
         , content
         ]

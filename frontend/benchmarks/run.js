@@ -8,7 +8,7 @@ app.ports.done.subscribe(value => { checksum = value; finished(); });
 (async () => {
   for (const [scenario, iterations] of [
     ['blocked-liberties', 1000], ['capture', 100], ['hover', 100],
-    ['deadzones', 100], ['liberty-geometry', 100],
+    ['coverage', 100], ['liberty-geometry', 100],
   ]) {
     const times = [];
     for (let trial = 0; trial < 6; trial++) {

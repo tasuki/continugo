@@ -16,7 +16,7 @@ import Rules.Position exposing (..)
 
 type alias Game =
     { record : List Play
-    , onMove : Player
+    , onMove : Color
     , stones : Stones
     }
 
@@ -36,10 +36,10 @@ This is not a validator for externally submitted game histories.
 fromRecord : List Play -> Game
 fromRecord record =
     { record = record
-    , stones = Play.playStones (List.reverse record) Dict.empty
+    , stones = Play.replayPlacements (List.reverse record) Dict.empty
     , onMove =
         List.head record
-            |> Maybe.map (.player >> otherPlayer)
+            |> Maybe.map (.color >> otherColor)
             |> Maybe.withDefault Black
     }
 
@@ -56,8 +56,8 @@ isFinished game =
 
 advance : Move -> Stones -> Game -> Game
 advance move stones game =
-    { record = { player = game.onMove, move = move } :: game.record
-    , onMove = otherPlayer game.onMove
+    { record = { color = game.onMove, move = move } :: game.record
+    , onMove = otherColor game.onMove
     , stones = stones
     }
 

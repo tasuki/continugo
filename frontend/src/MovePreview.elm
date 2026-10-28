@@ -1,4 +1,4 @@
-module MovePreview exposing (Preview, fromMoves, fromResult)
+module MovePreview exposing (Preview, fromCandidates, fromResult)
 
 import Dict
 import Maybe.Extra
@@ -17,8 +17,8 @@ type alias Preview =
 {-| A staged move takes precedence over hovering. Replay the exact candidate,
 not a nearby move, so captures and connections match what would be confirmed.
 -}
-fromMoves : Stones -> Maybe Stone -> Maybe Stone -> Maybe Preview
-fromMoves stones hovered staged =
+fromCandidates : Stones -> Maybe Stone -> Maybe Stone -> Maybe Preview
+fromCandidates stones hovered staged =
     Maybe.Extra.or staged hovered
         |> Maybe.andThen
             (\candidate ->

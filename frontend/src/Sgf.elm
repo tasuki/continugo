@@ -9,37 +9,37 @@ import Rules.Position exposing (..)
 -- "Sgf", now that's rich...
 
 
-alphabet =
+lowercaseAlphabet =
     "abcdefghijklmnopqrstuvwxyz"
 
 
-indexes : List Char
-indexes =
+coordinateAlphabet : List Char
+coordinateAlphabet =
     -- 26 * 2 = 52 characters
-    String.toList <| alphabet ++ String.toUpper alphabet
+    String.toList <| lowercaseAlphabet ++ String.toUpper lowercaseAlphabet
 
 
-indexLen : Int
-indexLen =
-    List.length indexes
+alphabetSize : Int
+alphabetSize =
+    List.length coordinateAlphabet
 
 
 encodePlay : Play -> String
 encodePlay play =
     let
         charFromIndex : Int -> String
-        charFromIndex drop =
-            List.drop drop indexes
+        charFromIndex index =
+            List.drop index coordinateAlphabet
                 |> List.head
                 |> Maybe.withDefault '*'
                 |> String.fromChar
 
         coord : Int -> String
         coord c =
-            (charFromIndex <| c // indexLen) ++ (charFromIndex <| modBy indexLen c)
+            (charFromIndex <| c // alphabetSize) ++ (charFromIndex <| modBy alphabetSize c)
 
-        player =
-            case play.player of
+        colorCode =
+            case play.color of
                 Black ->
                     "B"
 
@@ -54,7 +54,7 @@ encodePlay play =
                 Pass ->
                     "[]"
     in
-    player ++ encodedPlay
+    colorCode ++ encodedPlay
 
 
 playRegex : Regex.Regex
@@ -64,23 +64,23 @@ playRegex =
 
 
 decodePlay : String -> Maybe Play
-decodePlay move =
+decodePlay encodedPlay =
     let
         charToIndex : Char -> Maybe Int
         charToIndex c =
-            List.Extra.findIndex ((==) c) indexes
+            List.Extra.findIndex ((==) c) coordinateAlphabet
 
         maybeCoord : String -> Maybe Int
         maybeCoord chars =
             case String.toList chars |> List.map charToIndex of
                 [ Just a, Just b ] ->
-                    Just <| a * indexLen + b
+                    Just <| a * alphabetSize + b
 
                 _ ->
                     Nothing
 
-        maybePlayer : String -> Maybe Player
-        maybePlayer str =
+        maybeColor : String -> Maybe Color
+        maybeColor str =
             case str of
                 "B" ->
                     Just Black
@@ -91,22 +91,22 @@ decodePlay move =
                 _ ->
                     Nothing
 
-        maybePlay : List (Maybe String)
-        maybePlay =
-            Regex.find playRegex move
+        submatches : List (Maybe String)
+        submatches =
+            Regex.find playRegex encodedPlay
                 |> List.concatMap .submatches
     in
-    case maybePlay of
-        [ Just player, Just xEncoded, Just yEncoded ] ->
-            case ( maybePlayer player, maybeCoord xEncoded, maybeCoord yEncoded ) of
-                ( Just p, Just x, Just y ) ->
-                    Just { player = p, move = Place <| createStone p { x = x, y = y } }
+    case submatches of
+        [ Just colorCode, Just xEncoded, Just yEncoded ] ->
+            case ( maybeColor colorCode, maybeCoord xEncoded, maybeCoord yEncoded ) of
+                ( Just color, Just x, Just y ) ->
+                    Just { color = color, move = Place <| createStone color { x = x, y = y } }
 
                 _ ->
                     Nothing
 
-        [ Just player, Nothing, Nothing ] ->
-            Maybe.map (\p -> { player = p, move = Pass }) (maybePlayer player)
+        [ Just colorCode, Nothing, Nothing ] ->
+            Maybe.map (\color -> { color = color, move = Pass }) (maybeColor colorCode)
 
         _ ->
             Nothing

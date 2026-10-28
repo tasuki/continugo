@@ -75,7 +75,7 @@ cases =
       , playStone = stoneFromSgf "B[cIaS]"
       , stoneCountChange = Nothing
       }
-    , { name = "Allow suicide when taking"
+    , { name = "Allow a placement that gains liberties through capture"
       , record = suicideRecord
       , playStone = stoneFromSgf "W[cIaS]"
       , stoneCountChange = Just -4

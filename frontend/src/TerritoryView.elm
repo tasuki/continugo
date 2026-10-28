@@ -1,7 +1,7 @@
 module TerritoryView exposing (formatArea, resultString, view)
 
 import Rules.Board exposing (stoneRadius)
-import Rules.Position exposing (Player(..), Stones)
+import Rules.Position exposing (Color(..), Stones)
 import Rules.Territory as Territory exposing (Areas, Outcome(..))
 import Svg exposing (Svg)
 import Svg.Attributes as SA
@@ -25,7 +25,7 @@ resultString territory =
         Draw ->
             "jigo"
 
-        Win player margin ->
+        Win color margin ->
             let
                 displayedMargin =
                     if margin / stoneArea < 0.1 then
@@ -35,7 +35,7 @@ resultString territory =
                         formatArea margin
 
                 prefix =
-                    case player of
+                    case color of
                         Black ->
                             "B+"
 
@@ -56,7 +56,7 @@ view stones =
                         |> String.join " "
                     )
                 , SA.class
-                    (case cell.player of
+                    (case cell.color of
                         Black ->
                             "territory-black"
 

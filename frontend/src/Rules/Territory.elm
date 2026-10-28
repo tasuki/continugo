@@ -7,7 +7,7 @@ The cells already include occupied space: there is no extra stone-count score.
 -}
 
 import Rules.Board exposing (coordRange)
-import Rules.Position exposing (Player(..), Spot, Stones, stoneList)
+import Rules.Position exposing (Color(..), Spot, Stones, stoneList)
 
 
 type alias Point =
@@ -100,7 +100,7 @@ polygonArea polygon =
 
 
 type alias Cell =
-    { player : Player, polygon : List Point }
+    { color : Color, polygon : List Point }
 
 
 cells : Stones -> List Cell
@@ -111,7 +111,7 @@ cells stones =
     in
     List.map
         (\stone ->
-            Cell stone.player (List.foldl (\other -> clip stone.spot other.spot) board all)
+            Cell stone.color (List.foldl (\other -> clip stone.spot other.spot) board all)
         )
         all
 
@@ -124,7 +124,7 @@ areas stones =
                 area =
                     polygonArea cell.polygon
             in
-            case cell.player of
+            case cell.color of
                 Black ->
                     { total | black = total.black + area }
 
@@ -136,7 +136,7 @@ areas stones =
 
 type Outcome
     = Draw
-    | Win Player Float
+    | Win Color Float
 
 
 result : Areas -> Outcome

@@ -1,6 +1,6 @@
 port module Benchmark exposing (main)
 
-import DeadZones
+import Coverage
 import Dict
 import Placement
 import Platform
@@ -26,7 +26,7 @@ main =
 
 stones : Stones
 stones =
-    Play.playStones
+    Play.replayPlacements
         (Sgf.decode "B[oifh];W[fgoc];B[odpz];W[fhfm];B[ihdL];W[lfem];B[ekpj];W[fsqe];B[dWnk];W[eSmd];B[dGll];W[dsqt];B[fHkR];W[iogz];B[jAfl];W[kPgM];B[gMfX];W[gUez];B[jnhQ];W[hIit];B[lLfD];W[mRgQ];B[mLdR];W[jPcR];B[iHbT];W[hqcz];B[kJbI];W[mbcC];B[nrbT];W[hLaM];B[lZaM];W[jKjx];B[lfiC];W[lCko];B[mVjo];W[nAkG];B[oQjC];W[pCkQ];B[cQim];W[qrmH];B[pYii];W[qNju];B[regx];W[oshO];B[codi];W[dhfM];B[hNlD];W[pvgk]")
         Dict.empty
 
@@ -63,12 +63,12 @@ benchmark scenario iterations =
                                 |> Maybe.map (Tuple.first >> Dict.size)
                                 |> Maybe.withDefault 0
 
-                        "deadzones" ->
-                            DeadZones.geometry (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList stones))
+                        "coverage" ->
+                            Coverage.geometry (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList stones))
                                 |> (\g -> List.length g.arcs + List.length g.lines + List.length g.points)
 
                         "liberty-geometry" ->
-                            DeadZones.libertyGeometry (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList stones)) [ Spot (500 + modBy 30 i) 500 ]
+                            Coverage.libertyGeometry (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList stones)) [ Spot (500 + modBy 30 i) 500 ]
                                 |> (\g -> List.length g.arcs + List.length g.lines + List.length g.points)
 
                         _ ->

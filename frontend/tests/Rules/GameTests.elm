@@ -27,7 +27,7 @@ tests =
                     |> Maybe.map
                         (\game ->
                             ( game.onMove
-                            , List.map .player game.record
+                            , List.map .color game.record
                             , Dict.size game.stones
                             )
                         )

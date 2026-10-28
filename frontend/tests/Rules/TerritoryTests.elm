@@ -4,7 +4,7 @@ import Dict
 import Expect
 import Fuzz
 import Rules.Board exposing (coordRange)
-import Rules.Position exposing (Player(..), Spot, Stone, Stones, createStone, stoneKey)
+import Rules.Position exposing (Color(..), Spot, Stone, Stones, createStone, stoneKey)
 import Rules.Territory as Territory exposing (Outcome(..))
 import Test exposing (..)
 

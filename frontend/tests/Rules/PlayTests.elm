@@ -11,7 +11,7 @@ playCase : PlayFixtures.Case -> Test
 playCase tc =
     let
         stones =
-            playStones tc.record Dict.empty
+            replayPlacements tc.record Dict.empty
 
         stoneCountChange =
             playIfLegal stones tc.playStone

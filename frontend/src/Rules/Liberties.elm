@@ -1,4 +1,4 @@
-module Rules.Liberties exposing (candidateOffsets, findLiberties, hasLiberties)
+module Rules.Liberties exposing (candidateOffsets, hasLiberties, sampleLiberties)
 
 import Rules.Position exposing (..)
 
@@ -31,8 +31,8 @@ takeNonOverlapping acc queue =
                 takeNonOverlapping (head :: acc) tail
 
 
-uniqueLiberties : List Spot -> List Spot
-uniqueLiberties =
+nonOverlappingLiberties : List Spot -> List Spot
+nonOverlappingLiberties =
     takeNonOverlapping []
 
 
@@ -63,11 +63,13 @@ isLiberty nearbySpots suspect =
     isWithinBoard suspect && not overlapsNearby
 
 
-findLiberties : Stone -> List Spot -> List Spot
-findLiberties { spot } nearbySpots =
+{-| A greedy, non-overlapping sample, not the complete set of liberties.
+-}
+sampleLiberties : Stone -> List Spot -> List Spot
+sampleLiberties { spot } nearbySpots =
     List.map (translate spot) candidateOffsets
         |> List.filter (isLiberty nearbySpots)
-        |> uniqueLiberties
+        |> nonOverlappingLiberties
 
 
 libertyProbes : List Spot

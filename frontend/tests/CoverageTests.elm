@@ -1,6 +1,6 @@
-module DeadZonesTests exposing (tests)
+module CoverageTests exposing (tests)
 
-import DeadZones exposing (Point, canCover, geometry, libertyGeometry)
+import Coverage exposing (Point, canCover, geometry, libertyGeometry)
 import Dict
 import Expect
 import Fuzz
@@ -128,7 +128,7 @@ tests =
                             "B[ckaM];B[aMck];B[dIck];B[ckdI];B[aMdI];B[dIaM];W[rbaU];B[pmbt];W[sjcl];B[pNdt];W[rfdY];B[pXfw];W[sbfQ];B[sAhO];B[qBhv];W[aMfg];W[ckfg];W[fgaM];W[fgck];W[dIdI];W[dIfg]"
 
                         stones =
-                            Play.playStones (Sgf.decode record) Dict.empty
+                            Play.replayPlacements (Sgf.decode record) Dict.empty
 
                         members key =
                             Dict.get key stones

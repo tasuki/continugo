@@ -7,7 +7,7 @@
   intervals with the occupied discs subtracted. Strict overlap/adjacency and
   inclusive board boundaries are preserved, including single-point openings.
   The production build no longer constructs/sorts the exhaustive candidate ring.
-- `Rules.Play.takeAll` revisited connected groups through multiple nearby stones and
+- `Rules.Play.captureGroupsWithoutLiberties` revisited connected groups through multiple nearby stones and
   repeatedly removed the same stones. It now remembers discovered group members;
   group traversal uses coordinate sets instead of comparing entire stone records.
 - Hover/drag legality was calculated once in update and replayed again during
@@ -41,7 +41,7 @@ The benchmark uses the existing four-stone capture record from `Fixtures.Play`.
 | Blocked stone's liberty check | 2.64 ms | 0.084 ms |
 | Capture legality | 79.0 ms | 2.47 ms |
 | Open-space hover legality | 0.039 ms | 0.026 ms |
-| Full-board deadzone geometry | 1.84 ms | 1.29 ms |
+| Full-board coverage geometry | 1.84 ms | 1.29 ms |
 | Local liberty-area geometry | 2.00 ms | 0.265 ms |
 
 Headless Chrome, 900×900, software rendering, alternating 20 times between the
@@ -77,8 +77,10 @@ mise exec -- node frontend/benchmarks/run.js /tmp/continugo-benchmark.js
 
 For old sources, adapt the copied harness before compiling: replace
 `Rules.Position` with `Go`, `Rules.Play as Play` with `Play`, and
-`Rules.Liberties as Liberties` with `Liberties`. Remove `import Placement` and
-replace `Placement.playNearby` with `Play.playNearby`.
+`Rules.Liberties as Liberties` with `Liberties`, and `Coverage` with `DeadZones`.
+Remove `import Placement` and
+replace `Placement.playNearby` with `Play.playNearby` and
+`Play.replayPlacements` with `Play.playStones`.
 
 ```sh
 mkdir -p /tmp/continugo-before

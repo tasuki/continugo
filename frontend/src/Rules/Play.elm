@@ -1,4 +1,4 @@
-module Rules.Play exposing (group, playIfLegal, playStones)
+module Rules.Play exposing (group, playIfLegal, replayPlacements)
 
 import Dict
 import Rules.Liberties as Liberties
@@ -29,15 +29,15 @@ spotsToStones stones =
 newOpenClosed : Stones -> Stone -> Open -> Closed -> ( Open, Closed )
 newOpenClosed stones toExplore open closed =
     let
-        isClosed : Stone -> Bool
-        isClosed neighbor =
+        isUnvisited : Stone -> Bool
+        isUnvisited neighbor =
             not (Set.member (stoneKey neighbor) closed.keys)
 
         toOpen : List Stone
         toOpen =
             toExplore.adjacent
                 |> spotsToStones stones
-                |> List.filter isClosed
+                |> List.filter isUnvisited
     in
     ( toOpen ++ open
     , { members = toOpen ++ closed.members
@@ -97,11 +97,11 @@ findGroupWithoutLiberties stones stone =
             []
 
 
-takeAll : Player -> List Spot -> Stones -> Stones
-takeAll player spots stones =
+captureGroupsWithoutLiberties : Color -> List Spot -> Stones -> Stones
+captureGroupsWithoutLiberties color spots stones =
     let
         check stone ( seen, dead ) =
-            if stone.player /= player || Set.member (stoneKey stone) seen then
+            if stone.color /= color || Set.member (stoneKey stone) seen then
                 ( seen, dead )
 
             else
@@ -123,16 +123,16 @@ takeAll player spots stones =
     List.foldl removeStone stones toRemove
 
 
-maybePlay : Stone -> Stones -> Maybe Stones
-maybePlay stone stones =
+resolveCaptures : Stone -> Stones -> Maybe Stones
+resolveCaptures stone stones =
     let
         stonesAfterTake : Stones
         stonesAfterTake =
             stones
                 -- take enemy stones
-                |> takeAll (otherPlayer stone.player) stone.nearby
+                |> captureGroupsWithoutLiberties (otherColor stone.color) stone.nearby
                 -- also take own stones if necessary
-                |> takeAll stone.player stone.nearby
+                |> captureGroupsWithoutLiberties stone.color stone.nearby
 
         stonesIfHasLibertiesAfterTake : Stone -> Maybe Stones
         stonesIfHasLibertiesAfterTake newStone =
@@ -151,21 +151,23 @@ playIfLegal stones bareStone =
     let
         stone : Stone
         stone =
-            enhanceInfo stones bareStone
+            withNeighbors stones bareStone
     in
     if isWithinBoard stone.spot && (not <| overlapsAny stone.spot stone.nearby) then
         Dict.insert (stoneKey stone) stone stones
-            |> addStones (addNearby stone) stone.nearby
-            |> addStones (addAdjacent stone) stone.adjacent
-            |> maybePlay stone
+            |> updateStones (addNearby stone) stone.nearby
+            |> updateStones (addAdjacent stone) stone.adjacent
+            |> resolveCaptures stone
 
     else
         Nothing
 
 
-playStones : List Play -> Stones -> Stones
-playStones toPlay stones =
-    -- recreates the exact list of plays
+{-| Replay placements in chronological order, skipping passes and illegal placements.
+Turn order and game completion are not checked here.
+-}
+replayPlacements : List Play -> Stones -> Stones
+replayPlacements toPlay stones =
     let
         playStone stone acc =
             playIfLegal acc stone |> Maybe.withDefault acc

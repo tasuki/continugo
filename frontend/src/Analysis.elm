@@ -1,6 +1,6 @@
 module Analysis exposing (..)
 
-import DeadZones
+import Coverage
 import DragFrom
 import List.Extra
 import Placement
@@ -23,7 +23,7 @@ type alias Model =
     { circles : List Spot
     , gesture : Maybe Gesture
     , preview : Maybe Spot
-    , pending : Maybe ( Int, Spot )
+    , pendingRemoval : Maybe ( Int, Spot )
     , serial : Int
     , invalid : Maybe Spot
     }
@@ -31,12 +31,12 @@ type alias Model =
 
 empty : Model
 empty =
-    { circles = [], gesture = Nothing, preview = Nothing, pending = Nothing, serial = 0, invalid = Nothing }
+    { circles = [], gesture = Nothing, preview = Nothing, pendingRemoval = Nothing, serial = 0, invalid = Nothing }
 
 
 type Effect
     = NoEffect
-    | RemoveAfter Int
+    | ScheduleRemoval Int
     | Propose Spot
 
 
@@ -44,7 +44,7 @@ type Effect
 -}
 cancel : Model -> Model
 cancel model =
-    { model | gesture = Nothing, preview = Nothing, pending = Nothing, invalid = Nothing }
+    { model | gesture = Nothing, preview = Nothing, pendingRemoval = Nothing, invalid = Nothing }
 
 
 occupied : Stones -> Model -> List Spot
@@ -76,10 +76,10 @@ start stones coords model =
             List.Extra.find (isWithinStone coords) (occupied stones model)
 
         repeated =
-            Maybe.map Tuple.second model.pending == origin && origin /= Nothing
+            Maybe.map Tuple.second model.pendingRemoval == origin && origin /= Nothing
 
         circles =
-            case model.pending of
+            case model.pendingRemoval of
                 Just ( _, spot ) ->
                     if repeated then
                         model.circles
@@ -93,7 +93,7 @@ start stones coords model =
     { model
         | circles = circles
         , gesture = Just { start = coords, origin = origin, dragged = False, repeated = repeated }
-        , pending = Nothing
+        , pendingRemoval = Nothing
         , preview = Nothing
         , invalid = Nothing
     }
@@ -191,7 +191,7 @@ finish stones coords previous =
                                 serial =
                                     model.serial + 1
                             in
-                            ( { cleared | serial = serial, pending = Just ( serial, origin ) }, RemoveAfter serial )
+                            ( { cleared | serial = serial, pendingRemoval = Just ( serial, origin ) }, ScheduleRemoval serial )
 
                     Nothing ->
                         case Placement.nearestFreeSpot coords (occupied stones model) of
@@ -204,10 +204,10 @@ finish stones coords previous =
 
 expire : Int -> Model -> Model
 expire serial model =
-    case model.pending of
+    case model.pendingRemoval of
         Just ( token, spot ) ->
             if token == serial then
-                { model | circles = List.filter ((/=) spot) model.circles, pending = Nothing }
+                { model | circles = List.filter ((/=) spot) model.circles, pendingRemoval = Nothing }
 
             else
                 model
@@ -239,7 +239,7 @@ visibleCircles circles preview =
 
 viewDeadZones : Stones -> List Spot -> Maybe Spot -> Svg msg
 viewDeadZones stones circles preview =
-    DeadZones.viewSpots (List.map .spot (stoneList stones) ++ visibleCircles circles preview)
+    Coverage.viewSpots (List.map .spot (stoneList stones) ++ visibleCircles circles preview)
 
 
 view : Stones -> Model -> Svg msg

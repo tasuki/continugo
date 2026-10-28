@@ -11,12 +11,12 @@ type DragFrom
     | DragStone Stone
 
 
-getDragFrom : Stones -> Player -> Spot -> DragFrom
+getDragFrom : Stones -> Color -> Spot -> DragFrom
 getDragFrom stones onMove coords =
     let
         isOverOwn : Stone -> Bool
         isOverOwn s =
-            s.player == onMove && isWithinStone s.spot coords
+            s.color == onMove && isWithinStone s.spot coords
 
         maybeOverStone : Maybe Stone
         maybeOverStone =
@@ -30,20 +30,20 @@ getDragFrom stones onMove coords =
             DragSpot coords
 
 
-desiredCentre : Spot -> Spot -> Spot
-desiredCentre from to =
+desiredCenter : Spot -> Spot -> Spot
+desiredCenter from to =
     let
-        dstnc =
+        dragDistance =
             distance to from
     in
-    if dstnc < adjacentDistance then
+    if dragDistance < adjacentDistance then
         to
 
     else
         let
             ratio : Float
             ratio =
-                adjacentDistance / dstnc
+                adjacentDistance / dragDistance
 
             dx =
                 toFloat (to.x - from.x)
@@ -56,22 +56,22 @@ desiredCentre from to =
         }
 
 
-findDragged : Stones -> Player -> Stone -> Spot -> Stone
+findDragged : Stones -> Color -> Stone -> Spot -> Stone
 findDragged stones onMove draggedFrom draggedTo =
     findDraggedSpot (List.map .spot (stoneList stones)) draggedFrom.spot draggedTo
-        |> Maybe.withDefault (desiredCentre draggedFrom.spot draggedTo)
+        |> Maybe.withDefault (desiredCenter draggedFrom.spot draggedTo)
         |> createStone onMove
 
 
 {-| Geometry only: analysis circles obstruct placement just like real stones.
-Unlike a stone, a circle has no player or move-legality constraints.
+Unlike a stone, a circle has no color or move-legality constraints.
 -}
 findDraggedSpot : List Spot -> Spot -> Spot -> Maybe Spot
 findDraggedSpot spotList from draggedTo =
     let
         desiredSpot : Spot
         desiredSpot =
-            desiredCentre from draggedTo
+            desiredCenter from draggedTo
 
         findNearest : Spot -> Maybe ( Spot, Float ) -> Maybe ( Spot, Float )
         findNearest zeroCandidate current =
