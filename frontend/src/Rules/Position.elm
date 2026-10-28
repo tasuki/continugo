@@ -20,12 +20,6 @@ adjacentDistance =
     sqrt 2 * toFloat diameter
 
 
-nearbyDistance : Float
-nearbyDistance =
-    -- stones that could affect this stone's liberty status
-    2 * toFloat diameter + adjacentDistance
-
-
 
 -- Spot
 
@@ -75,6 +69,21 @@ overlapsAny spot =
 adjacent : Spot -> Spot -> Bool
 adjacent s1 s2 =
     distanceSquared s1 s2 < 2 * diameter * diameter
+
+
+{-| For squared distance q and diameter d, nearby means q < (6 + 4√2)d².
+Subtract 6d², then square only a nonnegative remainder.
+-}
+isNearby : Spot -> Spot -> Bool
+isNearby a b =
+    let
+        diameterSquared =
+            diameter * diameter
+
+        excess =
+            distanceSquared a b - 6 * diameterSquared
+    in
+    excess < 0 || excess * excess < 32 * diameterSquared * diameterSquared
 
 
 boardMin : Int
@@ -137,11 +146,6 @@ createStone color spot =
     }
 
 
-stoneDistance : Stone -> Stone -> Float
-stoneDistance s1 s2 =
-    distance s1.spot s2.spot
-
-
 addNearby : Stone -> Stone -> Stone
 addNearby toAdd orig =
     { orig | nearby = toAdd.spot :: orig.nearby }
@@ -165,7 +169,7 @@ removeAdjacent toRemove orig =
 nearbyStones : Stones -> Spot -> List Stone
 nearbyStones stones spot =
     stoneList stones
-        |> List.filter (\s -> distance spot s.spot < nearbyDistance)
+        |> List.filter (\s -> isNearby spot s.spot)
 
 
 withNeighbors : Stones -> Stone -> Stone
@@ -178,7 +182,7 @@ withNeighbors stones stone =
         adjacentStones =
             nearby
                 |> List.filter (\s -> s.color == stone.color)
-                |> List.filter (\s -> stoneDistance stone s < adjacentDistance)
+                |> List.filter (\s -> adjacent stone.spot s.spot)
     in
     { stone
         | nearby = List.map .spot nearby
