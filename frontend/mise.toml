@@ -14,7 +14,7 @@ uglifyjs public/continugo.js --compress 'pure_funcs=[F2,F3,F4,F5,F6,F7,F8,F9,A2,
 
 [tasks.test]
 description = "Run the Elm tests"
-depends = [":_help"]
+depends = [":_help", ":_fixtures"]
 run = "elm-test"
 
 [tasks.format]
@@ -33,6 +33,10 @@ run = 'serve public --listen "${PORT:-9071}" --single --no-clipboard --no-port-s
 [tasks._watch]
 hide = true
 run = "mise watch :build --watch src --watch elm.json --watch ../docs --exts elm,json,md --postpone --on-busy-update queue"
+
+[tasks._fixtures]
+hide = true
+run = "node tests/Fixtures/embed.mjs"
 
 [tasks._help]
 hide = true

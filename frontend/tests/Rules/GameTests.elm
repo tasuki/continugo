@@ -61,22 +61,21 @@ tests =
                     |> Expect.equal (Just False)
         , test "A capture updates the game and survives history restoration" <|
             \_ ->
-                let
-                    before =
-                        Game.fromRecord (List.reverse PlayFixtures.longGameRecord)
-
-                    capture =
-                        (PlayFixtures.stoneFromSgf "B[qheG]").spot
-                in
-                Game.play capture before
-                    |> Maybe.map
-                        (\game ->
-                            ( Dict.size game.stones - Dict.size before.stones
-                            , game.onMove
-                            , Game.fromRecord game.record == game
-                            )
-                        )
-                    |> Expect.equal (Just ( -3, White, True ))
+                PlayFixtures.withCase "capture-four.txt" <|
+                    \tc ->
+                        let
+                            before =
+                                Game.fromRecord (List.reverse tc.record)
+                        in
+                        Game.play tc.playStone.spot before
+                            |> Maybe.map
+                                (\game ->
+                                    ( Dict.size game.stones - Dict.size before.stones
+                                    , game.onMove
+                                    , Game.fromRecord game.record == game
+                                    )
+                                )
+                            |> Expect.equal (Just ( -3, White, True ))
         , test "Record restoration preserves setup-like moves and skips illegal stones" <|
             \_ ->
                 let

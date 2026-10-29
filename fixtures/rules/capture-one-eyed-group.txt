@@ -1,0 +1,4 @@
+name: Allow capturing a one-eyed group with a stone inside
+record: B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS]
+move: W[aMaM]
+result: -3

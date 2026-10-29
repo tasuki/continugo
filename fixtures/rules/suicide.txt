@@ -1,0 +1,4 @@
+name: Disallow suicide
+record: B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS];B[aMaM]
+move: B[cIaS]
+result: illegal

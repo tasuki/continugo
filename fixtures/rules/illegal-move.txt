@@ -1,0 +1,4 @@
+name: Don't add an illegal move
+record: 
+move: B[butt]
+result: illegal

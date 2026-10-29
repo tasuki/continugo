@@ -1,0 +1,4 @@
+name: Allow one-eyed group to survive a little longer by taking
+record: B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS]
+move: B[aMaM]
+result: 0

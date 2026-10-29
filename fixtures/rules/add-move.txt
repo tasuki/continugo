@@ -1,0 +1,4 @@
+name: Add a move
+record: 
+move: B[boob]
+result: 1

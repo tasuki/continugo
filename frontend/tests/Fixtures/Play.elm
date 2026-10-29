@@ -1,52 +1,15 @@
-module Fixtures.Play exposing (Case, cases, connectedSuicideRecord, decodeRecord, longGameRecord, stoneFromSgf, suicideRecord)
+module Fixtures.Play exposing (Case, decode, decodeRecord, tests, withCase)
 
+{-| The generator parses fixture fields; Elm interprets the SGF strings.
+Records are chronological and may include setup-like same-colour sequences.
+All cases currently use the 1000-unit board and radius 38 (13x13 equivalent).
+-}
+
+import Expect exposing (Expectation)
+import Fixtures.Generated as Generated
 import Rules.Position exposing (..)
 import Sgf
-
-
-decodeRecord : String -> List Play
-decodeRecord str =
-    case Sgf.decode str of
-        Ok record ->
-            record
-
-        Err error ->
-            Debug.todo error
-
-
-stoneFromSgf : String -> Stone
-stoneFromSgf str =
-    case Sgf.decodePlay str |> Maybe.map .move of
-        Just (Place stone) ->
-            stone
-
-        _ ->
-            Debug.todo ("Invalid stone fixture: " ++ str)
-
-
-longGameRecord : List Play
-longGameRecord =
-    decodeRecord <|
-        String.concat
-            [ "B[oifh];W[fgoc];B[odpz];W[fhfm];B[ihdL];W[lfem];B[ekpj];W[fsqe];"
-            , "B[dWnk];W[eSmd];B[dGll];W[dsqt];B[fHkR];W[iogz];B[jAfl];W[kPgM];"
-            , "B[gMfX];W[gUez];B[jnhQ];W[hIit];B[lLfD];W[mRgQ];B[mLdR];W[jPcR];"
-            , "B[iHbT];W[hqcz];B[kJbI];W[mbcC];B[nrbT];W[hLaM];B[lZaM];W[jKjx];"
-            , "B[lfiC];W[lCko];B[mVjo];W[nAkG];B[oQjC];W[pCkQ];B[cQim];W[qrmH];"
-            , "B[pYii];W[qNju];B[regx];W[oshO];B[codi];W[dhfM];B[hNlD];W[pvgk]"
-            ]
-
-
-suicideRecord : List Play
-suicideRecord =
-    decodeRecord <|
-        "B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS];B[aMaM]"
-
-
-connectedSuicideRecord : List Play
-connectedSuicideRecord =
-    decodeRecord <|
-        "B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS]"
+import Test exposing (Test)
 
 
 type alias Case =
@@ -57,41 +20,53 @@ type alias Case =
     }
 
 
-cases : List Case
-cases =
-    [ { name = "Add a move"
-      , record = []
-      , playStone = stoneFromSgf "B[boob]"
-      , stoneCountChange = Just 1
-      }
-    , { name = "Don't add an illegal move"
-      , record = []
-      , playStone = stoneFromSgf "B[butt]"
-      , stoneCountChange = Nothing
-      }
-    , { name = "Capture a group of four stones"
-      , record = longGameRecord
-      , playStone = stoneFromSgf "B[qheG]"
-      , stoneCountChange = Just -3
-      }
-    , { name = "Disallow suicide"
-      , record = suicideRecord
-      , playStone = stoneFromSgf "B[cIaS]"
-      , stoneCountChange = Nothing
-      }
-    , { name = "Allow a placement that gains liberties through capture"
-      , record = suicideRecord
-      , playStone = stoneFromSgf "W[cIaS]"
-      , stoneCountChange = Just -4
-      }
-    , { name = "Allow capturing a one-eyed group with a stone inside"
-      , record = connectedSuicideRecord
-      , playStone = stoneFromSgf "W[aMaM]"
-      , stoneCountChange = Just -3
-      }
-    , { name = "Allow one-eyed group to survive a little longer by taking"
-      , record = connectedSuicideRecord
-      , playStone = stoneFromSgf "B[aMaM]"
-      , stoneCountChange = Just 0
-      }
-    ]
+decode : Generated.Case -> Result String Case
+decode fixture =
+    case ( Sgf.decode fixture.record, Sgf.decodePlay fixture.move |> Maybe.map .move ) of
+        ( Ok record, Just (Place stone) ) ->
+            Ok (Case fixture.name record stone fixture.stoneCountChange)
+
+        ( Err error, _ ) ->
+            Err error
+
+        _ ->
+            Err ("Expected a placement, got: " ++ fixture.move)
+
+
+checkCase : (Case -> Expectation) -> Generated.Case -> Expectation
+checkCase check fixture =
+    case decode fixture of
+        Ok tc ->
+            check tc
+
+        Err error ->
+            Expect.fail (fixture.filename ++ ": " ++ error)
+
+
+tests : (Case -> Expectation) -> List Test
+tests check =
+    Generated.cases
+        |> List.map
+            (\fixture ->
+                Test.test (fixture.filename ++ ": " ++ fixture.name) (\_ -> checkCase check fixture)
+            )
+
+
+withCase : String -> (Case -> Expectation) -> Expectation
+withCase filename check =
+    case List.filter (.filename >> (==) filename) Generated.cases of
+        [ fixture ] ->
+            checkCase check fixture
+
+        _ ->
+            Expect.fail ("Missing or duplicate fixture: " ++ filename)
+
+
+decodeRecord : String -> List Play
+decodeRecord str =
+    case Sgf.decode str of
+        Ok record ->
+            record
+
+        Err error ->
+            Debug.todo error

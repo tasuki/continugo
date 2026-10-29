@@ -303,15 +303,14 @@ tests =
                     |> Expect.equal [ Spot 700 500 ]
         , test "Analysis allows a physically fitting circle even when playing it would be suicide" <|
             \_ ->
-                let
-                    stones =
-                        Play.replayPlacements PlayFixtures.suicideRecord Dict.empty
-
-                    candidate =
-                        PlayFixtures.stoneFromSgf "B[cIaS]"
-                in
-                Expect.equal ( Nothing, [ candidate.spot ] )
-                    ( Play.playIfLegal stones candidate
-                    , tap stones candidate.spot Analysis.empty |> Tuple.first |> .circles
-                    )
+                PlayFixtures.withCase "suicide.txt" <|
+                    \tc ->
+                        let
+                            stones =
+                                Play.replayPlacements tc.record Dict.empty
+                        in
+                        Expect.equal ( Nothing, [ tc.playStone.spot ] )
+                            ( Play.playIfLegal stones tc.playStone
+                            , tap stones tc.playStone.spot Analysis.empty |> Tuple.first |> .circles
+                            )
         ]

@@ -7,7 +7,7 @@ import Rules.Play exposing (..)
 import Test exposing (..)
 
 
-playCase : PlayFixtures.Case -> Test
+playCase : PlayFixtures.Case -> Expect.Expectation
 playCase tc =
     let
         stones =
@@ -17,11 +17,9 @@ playCase tc =
             playIfLegal stones tc.playStone
                 |> Maybe.map (\result -> Dict.size result - Dict.size stones)
     in
-    test tc.name <|
-        \_ ->
-            Expect.equal tc.stoneCountChange stoneCountChange
+    Expect.equal tc.stoneCountChange stoneCountChange
 
 
 tests : Test
 tests =
-    PlayFixtures.cases |> List.map playCase |> describe "play"
+    PlayFixtures.tests playCase |> describe "play"

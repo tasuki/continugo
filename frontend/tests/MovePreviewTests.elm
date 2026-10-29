@@ -83,47 +83,45 @@ tests =
                 Expect.equal Nothing
                     (MovePreview.fromCandidates stones (Just (createStone White (Spot 510 500))) Nothing)
         , describe "Previewing captures and suicide uses the actual move rules"
-            (List.map previewCase PlayFixtures.cases)
+            (PlayFixtures.tests previewCase)
         ]
 
 
-previewCase : PlayFixtures.Case -> Test
+previewCase : PlayFixtures.Case -> Expect.Expectation
 previewCase tc =
-    test tc.name <|
-        \_ ->
+    let
+        stones =
+            Play.replayPlacements tc.record Dict.empty
+
+        expected =
+            Play.playIfLegal stones tc.playStone
+
+        check preview =
             let
-                stones =
-                    Play.replayPlacements tc.record Dict.empty
+                spots =
+                    List.map .spot (stoneList preview.stones)
 
-                expected =
-                    Play.playIfLegal stones tc.playStone
+                shape =
+                    geometry spots
 
-                check preview =
-                    let
-                        spots =
-                            List.map .spot (stoneList preview.stones)
-
-                        shape =
-                            geometry spots
-
-                        capturedOpenings =
-                            List.all
-                                (\stone -> canCover shape (Point (toFloat stone.spot.x) (toFloat stone.spot.y)))
-                                preview.captured
-                    in
-                    Expect.all
-                        [ \_ -> Expect.equal expected (Just preview.stones)
-                        , \_ -> Expect.equal preview (MovePreview.fromResult stones ( preview.stones, preview.stone ))
-                        , \_ -> Expect.equal (removedStones stones preview.stones) preview.captured
-                        , \_ -> Expect.equal True capturedOpenings
-                        , \_ -> Expect.equal (Just preview.stone) (Dict.get (stoneKey preview.stone) preview.stones)
-                        , \_ -> Expect.equal (List.map .spot (Play.group preview.stones preview.stone)) preview.group
-                        ]
-                        ()
+                capturedOpenings =
+                    List.all
+                        (\stone -> canCover shape (Point (toFloat stone.spot.x) (toFloat stone.spot.y)))
+                        preview.captured
             in
-            case MovePreview.fromCandidates stones (Just tc.playStone) Nothing of
-                Nothing ->
-                    Expect.equal Nothing expected
+            Expect.all
+                [ \_ -> Expect.equal expected (Just preview.stones)
+                , \_ -> Expect.equal preview (MovePreview.fromResult stones ( preview.stones, preview.stone ))
+                , \_ -> Expect.equal (removedStones stones preview.stones) preview.captured
+                , \_ -> Expect.equal True capturedOpenings
+                , \_ -> Expect.equal (Just preview.stone) (Dict.get (stoneKey preview.stone) preview.stones)
+                , \_ -> Expect.equal (List.map .spot (Play.group preview.stones preview.stone)) preview.group
+                ]
+                ()
+    in
+    case MovePreview.fromCandidates stones (Just tc.playStone) Nothing of
+        Nothing ->
+            Expect.equal Nothing expected
 
-                Just preview ->
-                    check preview
+        Just preview ->
+            check preview
