@@ -1,3 +1,4 @@
+/backend/target/
 /frontend/elm-stuff/
 /frontend/public/continugo.js
 /frontend/src/HelpContent.elm

@@ -1,0 +1,4 @@
+[tasks]
+build = "cargo build --workspace"
+test = "cargo test --workspace"
+format = "cargo fmt --all"

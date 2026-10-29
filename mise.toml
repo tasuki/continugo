@@ -1,10 +1,11 @@
 monorepo_root = true
 
 [monorepo]
-config_roots = ["frontend"]
+config_roots = ["frontend", "backend"]
 
 [tools]
 node = "24.22.1"
+rust = "1.99.1"
 "github:elm/compiler" = { version = "0.19.1", bin = "elm" }
 "npm:elm-test" = "0.19.1-revision17"
 "npm:elm-format" = "0.8.8"
@@ -14,7 +15,7 @@ node = "24.22.1"
 
 [tasks]
 dev = { depends = ["//frontend:dev"] }
-build = { depends = ["//frontend:build"] }
+build = { depends = ["//frontend:build", "//backend:build"] }
 release = { depends = ["//frontend:release"] }
-test = { depends = ["//frontend:test"] }
-format = { depends = ["//frontend:format"] }
+test = { depends = ["//frontend:test", "//backend:test"] }
+format = { depends = ["//frontend:format", "//backend:format"] }
