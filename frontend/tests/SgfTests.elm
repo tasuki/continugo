@@ -56,8 +56,34 @@ canDecode testCase =
     case testCase of
         ( decoded, encoded, comment ) ->
             test ("Can decode " ++ comment) <|
-                \_ -> Expect.equal (Sgf.decode encoded) decoded
+                \_ -> Expect.equal (Ok decoded) (Sgf.decode encoded)
 
 
 decodeTest =
-    cases |> List.map canDecode |> describe "decode"
+    describe "decode"
+        [ cases |> List.map canDecode |> describe "valid records"
+        , [ "invalid"
+          , "invalid;B[bbbb]"
+          , "B[bbbb];invalid"
+          , "B[bbbb];invalid;W[mmmm]"
+          , "B[bb]"
+          , "X[bbbb]"
+          , "B[bb1b]"
+          , " B[bbbb]"
+          , "B[bbbb]\n"
+          , ";B[bbbb]"
+          , "B[bbbb];"
+          , "B[bbbb];;W[mmmm]"
+          ]
+            |> List.map
+                (\record ->
+                    test ("Rejects " ++ record) <|
+                        \_ ->
+                            Sgf.decode record |> Expect.err
+                )
+            |> describe "invalid records"
+        , test "Reports the malformed entry and its one-based index" <|
+            \_ ->
+                Expect.equal (Err "Invalid SGF entry 2: invalid")
+                    (Sgf.decode "B[bbbb];invalid;W[mmmm]")
+        ]

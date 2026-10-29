@@ -94,6 +94,7 @@ decodePlay encodedPlay =
         submatches : List (Maybe String)
         submatches =
             Regex.find playRegex encodedPlay
+                |> List.filter (\match -> match.match == encodedPlay)
                 |> List.concatMap .submatches
     in
     case submatches of
@@ -117,6 +118,17 @@ encode plays =
     String.join ";" <| List.map encodePlay plays
 
 
-decode : String -> List Play
+decode : String -> Result String (List Play)
 decode sgf =
-    String.split ";" sgf |> List.filterMap decodePlay
+    if String.isEmpty sgf then
+        Ok []
+
+    else
+        String.split ";" sgf
+            |> List.indexedMap
+                (\index entry ->
+                    decodePlay entry
+                        |> Result.fromMaybe
+                            ("Invalid SGF entry " ++ String.fromInt (index + 1) ++ ": " ++ entry)
+                )
+            |> List.foldr (Result.map2 (::)) (Ok [])

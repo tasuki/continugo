@@ -1,28 +1,32 @@
-module Fixtures.Play exposing (Case, cases, connectedSuicideRecord, longGameRecord, stoneFromSgf, suicideRecord)
+module Fixtures.Play exposing (Case, cases, connectedSuicideRecord, decodeRecord, longGameRecord, stoneFromSgf, suicideRecord)
 
 import Rules.Position exposing (..)
 import Sgf
 
 
+decodeRecord : String -> List Play
+decodeRecord str =
+    case Sgf.decode str of
+        Ok record ->
+            record
+
+        Err error ->
+            Debug.todo error
+
+
 stoneFromSgf : String -> Stone
 stoneFromSgf str =
-    Sgf.decode str
-        |> List.head
-        |> Maybe.andThen
-            (\play ->
-                case play.move of
-                    Place s ->
-                        Just s
+    case Sgf.decodePlay str |> Maybe.map .move of
+        Just (Place stone) ->
+            stone
 
-                    _ ->
-                        Nothing
-            )
-        |> Maybe.withDefault (createStone Black <| Spot 0 0)
+        _ ->
+            Debug.todo ("Invalid stone fixture: " ++ str)
 
 
 longGameRecord : List Play
 longGameRecord =
-    Sgf.decode <|
+    decodeRecord <|
         String.concat
             [ "B[oifh];W[fgoc];B[odpz];W[fhfm];B[ihdL];W[lfem];B[ekpj];W[fsqe];"
             , "B[dWnk];W[eSmd];B[dGll];W[dsqt];B[fHkR];W[iogz];B[jAfl];W[kPgM];"
@@ -35,13 +39,13 @@ longGameRecord =
 
 suicideRecord : List Play
 suicideRecord =
-    Sgf.decode <|
+    decodeRecord <|
         "B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS];B[aMaM]"
 
 
 connectedSuicideRecord : List Play
 connectedSuicideRecord =
-    Sgf.decode <|
+    decodeRecord <|
         "B[aMcm];W[aMdK];B[cmco];W[ckdM];B[dKcm];W[eddI];B[eCaO];W[fmcj];W[gaaM];W[cIaS]"
 
 
@@ -56,12 +60,12 @@ type alias Case =
 cases : List Case
 cases =
     [ { name = "Add a move"
-      , record = Sgf.decode ""
+      , record = []
       , playStone = stoneFromSgf "B[boob]"
       , stoneCountChange = Just 1
       }
     , { name = "Don't add an illegal move"
-      , record = Sgf.decode ""
+      , record = []
       , playStone = stoneFromSgf "B[butt]"
       , stoneCountChange = Nothing
       }

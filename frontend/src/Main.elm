@@ -544,7 +544,8 @@ restoreFromUrl url model =
                 |> Maybe.andThen List.head
                 |> Maybe.andThen (.submatches >> List.head)
                 |> Maybe.andThen identity
-                |> Maybe.map (Sgf.decode >> List.reverse)
+                |> Maybe.andThen (Sgf.decode >> Result.toMaybe)
+                |> Maybe.map List.reverse
 
         createModel : List Play -> Model
         createModel record =

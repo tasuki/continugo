@@ -4,6 +4,7 @@ const { Elm } = require(process.argv[2] || '/tmp/continugo-benchmark.js');
 const app = Elm.Benchmark.init({ flags: null });
 let checksum, finished;
 app.ports.done.subscribe(value => { checksum = value; finished(); });
+app.ports.failed.subscribe(error => { throw new Error(error); });
 
 (async () => {
   for (const [scenario, iterations] of [
