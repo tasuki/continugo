@@ -1,0 +1,4 @@
+name: An empty board has no owned area
+stones:
+black: 0
+white: 0

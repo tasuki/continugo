@@ -1,0 +1,4 @@
+name: One black stone owns the whole board, even near a corner
+stones: B[aMaM]
+black: 1000000
+white: 0

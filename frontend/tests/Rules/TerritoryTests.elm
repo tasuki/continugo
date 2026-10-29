@@ -2,6 +2,7 @@ module Rules.TerritoryTests exposing (tests)
 
 import Dict
 import Expect
+import Fixtures.Territory as TerritoryFixtures
 import Fuzz
 import Rules.Board exposing (coordRange)
 import Rules.Position exposing (Color(..), Spot, Stone, Stones, createStone, stoneKey)
@@ -29,71 +30,10 @@ boardArea =
     toFloat coordRange ^ 2
 
 
-expectAreas : Float -> Float -> Stones -> Expect.Expectation
-expectAreas expectedBlack expectedWhite position =
-    let
-        actual =
-            Territory.areas position
-    in
-    Expect.all
-        [ \_ -> Expect.within (Expect.Absolute 0.00001) expectedBlack actual.black
-        , \_ -> Expect.within (Expect.Absolute 0.00001) expectedWhite actual.white
-        ]
-        ()
-
-
 tests : Test
 tests =
     describe "Voronoi area scoring"
-        [ test "An empty board has no owned area and is a draw" <|
-            \_ ->
-                Expect.equal ( Territory.Areas 0 0, Draw )
-                    ( Territory.areas Dict.empty, Territory.result (Territory.areas Dict.empty) )
-        , test "A single stone owns the entire board, even when near a corner" <|
-            \_ ->
-                Expect.all
-                    [ \_ -> expectAreas boardArea 0 (stones [ black 38 38 ])
-                    , \_ -> expectAreas 0 boardArea (stones [ white 962 962 ])
-                    , \_ -> Expect.equal (Win Black boardArea) (Territory.result (Territory.areas (stones [ black 500 500 ])))
-                    ]
-                    ()
-        , test "Two symmetric stones divide the board equally" <|
-            \_ ->
-                let
-                    position =
-                        stones [ black 100 500, white 900 500 ]
-                in
-                Expect.all
-                    [ \_ -> expectAreas (boardArea / 2) (boardArea / 2) position
-                    , \_ -> Expect.equal Draw (Territory.result (Territory.areas position))
-                    ]
-                    ()
-        , test "An off-centre bisector gives the correct shares and area margin" <|
-            \_ ->
-                let
-                    position =
-                        stones [ black 100 500, white 300 500 ]
-                in
-                Expect.all
-                    [ \_ -> expectAreas (boardArea * 0.2) (boardArea * 0.8) position
-                    , \_ -> Expect.equal (Win White (boardArea * 0.6)) (Territory.result (Territory.areas position))
-                    ]
-                    ()
-        , test "A diagonal bisector clips the board correctly" <|
-            \_ ->
-                expectAreas (boardArea / 2)
-                    (boardArea / 2)
-                    (stones [ black 250 250, white 750 750 ])
-        , test "Cocircular sites have four quarter-board cells, not a triangulation-dependent score" <|
-            \_ ->
-                expectAreas (boardArea / 4)
-                    (boardArea * 0.75)
-                    (stones [ black 250 250, white 750 250, white 250 750, white 750 750 ])
-        , test "Collinear sites are supported" <|
-            \_ ->
-                expectAreas (boardArea * 0.35)
-                    (boardArea * 0.65)
-                    (stones [ black 200 500, white 500 500, white 800 500 ])
+        [ describe "Shared territory fixtures" TerritoryFixtures.tests
         , test "More stones do not necessarily mean more territory" <|
             \_ ->
                 let

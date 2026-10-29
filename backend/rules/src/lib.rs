@@ -5,7 +5,7 @@
 //! `Some(new_position)` for a legal placement or `None` for an illegal one,
 //! leaving the original unchanged. Positions allow placements of either colour.
 //! `Game` adds alternating turns, records, and two-pass completion.
-//! Ko and scoring are not implemented yet.
+//! `territory` provides Voronoi area scoring. Ko is not implemented yet.
 //!
 //! Groups and liberties are recomputed directly; no neighbour caches or external
 //! dependencies are needed for this first implementation.
@@ -13,6 +13,7 @@
 pub mod board;
 pub mod game;
 pub mod sgf;
+pub mod territory;
 
 pub use board::Board;
 pub use game::Game;

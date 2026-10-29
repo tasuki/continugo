@@ -1,0 +1,4 @@
+name: Symmetric stones divide the board equally
+stones: B[bWjG];W[rqjG]
+black: 500000
+white: 500000

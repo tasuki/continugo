@@ -1,0 +1,4 @@
+name: Collinear sites form vertical strips
+stones: B[dSjG];W[jGjG];W[pujG]
+black: 350000
+white: 650000

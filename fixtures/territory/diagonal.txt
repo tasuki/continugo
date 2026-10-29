@@ -1,0 +1,4 @@
+name: A diagonal bisector clips the board into equal halves
+stones: B[eQeQ];W[owow]
+black: 500000
+white: 500000

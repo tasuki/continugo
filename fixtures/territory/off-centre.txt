@@ -1,0 +1,4 @@
+name: An off-centre bisector gives white a 600000-unit lead
+stones: B[bWjG];W[fOjG]
+black: 200000
+white: 800000

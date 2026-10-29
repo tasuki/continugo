@@ -1,0 +1,4 @@
+name: Cocircular sites have four quarter-board cells
+stones: B[eQeQ];W[oweQ];W[eQow];W[owow]
+black: 250000
+white: 750000

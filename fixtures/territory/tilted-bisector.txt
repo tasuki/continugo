@@ -1,0 +1,4 @@
+name: A tilted bisector gives fractional triangle areas
+stones: B[bWbW];W[hKfO]
+black: 110208.33333333333
+white: 889791.6666666666

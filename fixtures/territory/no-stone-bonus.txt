@@ -1,0 +1,4 @@
+name: Stones deep inside your area do not add a stone-count bonus
+stones: B[bWjG];B[fOjG];W[rqjG]
+black: 600000
+white: 400000
