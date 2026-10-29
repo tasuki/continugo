@@ -2,7 +2,9 @@
 //! integer division. Sizes must be positive and leave a radius of at least one;
 //! the 13x13 equivalent is the default in both languages.
 
-use crate::{COORD_RANGE, Spot};
+use crate::Spot;
+
+pub const COORD_RANGE: i32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Board {
