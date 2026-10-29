@@ -1,0 +1,5 @@
+board: 19
+name: Smaller stones may touch at distance 52
+record: B[dSdS]
+move: W[eSdS]
+result: 1

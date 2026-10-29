@@ -1,0 +1,5 @@
+board: 11
+name: Capture a corner stone with radius 45
+record: B[aTaT];W[cFaT]
+move: W[aTcF]
+result: 0

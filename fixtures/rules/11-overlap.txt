@@ -1,0 +1,5 @@
+board: 11
+name: Arbitrary board sizes use their calculated radius for overlap
+record: B[dSdS]
+move: W[fDdS]
+result: illegal

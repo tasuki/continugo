@@ -3,6 +3,8 @@
 //! Records are chronological, matching `sgf`. Import rejects wrong colours,
 //! illegal placements, and moves after two consecutive passes. Setup/handicap
 //! sequences belong at the `Position` level instead. Ko is not enforced yet.
+//! Use `Game::new(board)` and `from_record_on(board, record)` for non-default
+//! boards: the compact SGF record does not store board configuration.
 //!
 //! ```
 //! use continugo_rules::{Color, Game, Spot, sgf};
@@ -16,7 +18,7 @@
 //! # Ok::<(), String>(())
 //! ```
 
-use crate::{Color, Play, Position, Spot, Stone};
+use crate::{Board, Color, Play, Position, Spot, Stone};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Game {
@@ -25,6 +27,17 @@ pub struct Game {
 }
 
 impl Game {
+    pub fn new(board: Board) -> Self {
+        Self {
+            position: Position::new(board),
+            record: Vec::new(),
+        }
+    }
+
+    pub fn board(&self) -> Board {
+        self.position.board()
+    }
+
     pub fn position(&self) -> &Position {
         &self.position
     }
@@ -73,7 +86,11 @@ impl Game {
 
     /// Import a chronological record, rejecting the first invalid move.
     pub fn from_record(record: &[Play]) -> Result<Self, String> {
-        let mut game = Self::default();
+        Self::from_record_on(Board::default(), record)
+    }
+
+    pub fn from_record_on(board: Board, record: &[Play]) -> Result<Self, String> {
+        let mut game = Self::new(board);
         for (index, &play) in record.iter().enumerate() {
             if play.color() != game.on_move() {
                 return Err(format!(

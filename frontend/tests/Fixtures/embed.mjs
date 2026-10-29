@@ -1,4 +1,5 @@
 // Fixtures have four ordered fields: name, record, move, result.
+// An optional leading board: <positive integer> selects a size; omitted means 13.
 // Result is "illegal" or the net stone-count change, including the new stone.
 // SGF strings are left for each language's own decoder to interpret.
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -11,6 +12,10 @@ if (!files.length) throw new Error('No rule fixtures found');
 const entries = files.map(filename => {
   const fail = message => { throw new Error(`${filename}: ${message}`); };
   const lines = readFileSync(new URL(filename, source), 'utf8').trim().split(/\r?\n/);
+  const boardSize = lines[0].startsWith('board:') ? lines.shift().slice(6).trim() : '13';
+  if (!/^[+]?\d+$/.test(boardSize) || !Number.isSafeInteger(Number(boardSize)) || Number(boardSize) <= 0) {
+    fail(`Board size must be a positive integer, got: ${boardSize}`);
+  }
   const keys = ['name', 'record', 'move', 'result'];
   if (lines.length !== keys.length) fail('Expected exactly four lines: name, record, move, result');
 
@@ -25,6 +30,7 @@ const entries = files.map(filename => {
 
   return `{ filename = ${JSON.stringify(filename)}
       , name = ${JSON.stringify(fields.name)}
+      , boardSize = ${Number(boardSize)}
       , record = ${JSON.stringify(fields.record)}
       , move = ${JSON.stringify(fields.move)}
       , stoneCountChange = ${result === 'illegal' ? 'Nothing' : `Just (${Number(result)})`}
@@ -37,6 +43,7 @@ writeFileSync(output, `module Fixtures.Generated exposing (Case, cases)
 type alias Case =
     { filename : String
     , name : String
+    , boardSize : Int
     , record : String
     , move : String
     , stoneCountChange : Maybe Int

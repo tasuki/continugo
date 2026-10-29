@@ -11,10 +11,10 @@ playCase : PlayFixtures.Case -> Expect.Expectation
 playCase tc =
     let
         stones =
-            replayPlacements tc.record Dict.empty
+            replayPlacementsOn tc.board tc.record Dict.empty
 
         stoneCountChange =
-            playIfLegal stones tc.playStone
+            playIfLegalOn tc.board stones tc.playStone
                 |> Maybe.map (\result -> Dict.size result - Dict.size stones)
     in
     Expect.equal tc.stoneCountChange stoneCountChange

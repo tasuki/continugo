@@ -1,4 +1,4 @@
-module Rules.Game exposing (Game, empty, fromRecord, isFinished, pass, play)
+module Rules.Game exposing (Game, empty, fromRecord, fromRecordOn, isFinished, onBoard, pass, play)
 
 {-| Rules depend only on elm/core and other Rules modules. The frontend owns
 rendering, gestures, placement adjustment, and record serialization.
@@ -10,12 +10,14 @@ the frontend's existing history convention.
 -}
 
 import Dict
+import Rules.Board as Board exposing (Board)
 import Rules.Play as Play
 import Rules.Position exposing (..)
 
 
 type alias Game =
-    { record : List Play
+    { board : Board
+    , record : List Play
     , onMove : Color
     , stones : Stones
     }
@@ -23,7 +25,13 @@ type alias Game =
 
 empty : Game
 empty =
-    { record = []
+    onBoard Board.default
+
+
+onBoard : Board -> Game
+onBoard board =
+    { board = board
+    , record = []
     , onMove = Black
     , stones = Dict.empty
     }
@@ -34,9 +42,15 @@ Illegal placements are skipped on the board but retained in the record.
 This is not a validator for externally submitted game histories.
 -}
 fromRecord : List Play -> Game
-fromRecord record =
-    { record = record
-    , stones = Play.replayPlacements (List.reverse record) Dict.empty
+fromRecord =
+    fromRecordOn Board.default
+
+
+fromRecordOn : Board -> List Play -> Game
+fromRecordOn board record =
+    { board = board
+    , record = record
+    , stones = Play.replayPlacementsOn board (List.reverse record) Dict.empty
     , onMove =
         List.head record
             |> Maybe.map (.color >> otherColor)
@@ -56,7 +70,8 @@ isFinished game =
 
 advance : Move -> Stones -> Game -> Game
 advance move stones game =
-    { record = { color = game.onMove, move = move } :: game.record
+    { board = game.board
+    , record = { color = game.onMove, move = move } :: game.record
     , onMove = otherColor game.onMove
     , stones = stones
     }
@@ -68,7 +83,7 @@ play spot game =
         Nothing
 
     else
-        Play.playIfLegal game.stones (createStone game.onMove spot)
+        Play.playIfLegalOn game.board game.stones (createStone game.onMove spot)
             |> Maybe.andThen
                 (\stones ->
                     Dict.get ( spot.x, spot.y ) stones

@@ -5,6 +5,7 @@ import Dict
 import Expect
 import Fixtures.Play as PlayFixtures
 import MovePreview
+import Rules.Board as Board
 import Rules.Play as Play
 import Rules.Position exposing (..)
 import Test exposing (..)
@@ -83,7 +84,7 @@ tests =
                 Expect.equal Nothing
                     (MovePreview.fromCandidates stones (Just (createStone White (Spot 510 500))) Nothing)
         , describe "Previewing captures and suicide uses the actual move rules"
-            (PlayFixtures.tests previewCase)
+            (PlayFixtures.testsOn Board.default previewCase)
         ]
 
 

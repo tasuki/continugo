@@ -1,7 +1,41 @@
-use continugo_rules::{Color, Game, Play, Spot, Stone, sgf};
+use continugo_rules::{Board, Color, Game, Play, Spot, Stone, sgf};
 
 fn restore(record: &str) -> Result<Game, String> {
     Game::from_record(&sgf::decode(record)?)
+}
+
+#[test]
+fn configured_boards_survive_placements_passes_and_record_import() {
+    for size in [7, 9, 11, 13, 19, 37] {
+        let board = Board::new(size).unwrap();
+        let radius = board.stone_radius();
+        let empty = Game::new(board);
+        assert!(
+            empty
+                .play(Spot {
+                    x: radius - 1,
+                    y: 500
+                })
+                .is_err()
+        );
+        let game = empty
+            .play(Spot { x: radius, y: 500 })
+            .unwrap()
+            .play(Spot {
+                x: radius + board.diameter(),
+                y: 500,
+            })
+            .unwrap()
+            .pass()
+            .unwrap();
+        assert_eq!(game.board(), board);
+        assert_eq!(game.position().board(), board);
+        assert_eq!(game.position().stones().len(), 2);
+        assert_eq!(Game::from_record_on(board, game.record()), Ok(game.clone()));
+        if size == 19 {
+            assert!(Game::from_record(game.record()).is_err());
+        }
+    }
 }
 
 #[test]

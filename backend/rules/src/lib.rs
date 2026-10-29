@@ -1,4 +1,5 @@
-//! ContinuGo rules for a 1000-unit board with radius-38 stones.
+//! ContinuGo rules for a 1000-unit board. The default is the 13x13 equivalent;
+//! `Board::new(size)` configures other sizes, deriving stone radius from size.
 //!
 //! `Position::default()` creates an empty board. `Position::play` returns
 //! `Some(new_position)` for a legal placement or `None` for an illegal one,
@@ -9,15 +10,14 @@
 //! Groups and liberties are recomputed directly; no neighbour caches or external
 //! dependencies are needed for this first implementation.
 
+pub mod board;
 pub mod game;
 pub mod sgf;
 
+pub use board::Board;
 pub use game::Game;
 
-pub const BOARD_SIZE: i32 = 1000;
-pub const STONE_RADIUS: i32 = 38;
-const DIAMETER: i32 = 2 * STONE_RADIUS;
-const DIAMETER_SQUARED: i64 = (DIAMETER * DIAMETER) as i64;
+pub const COORD_RANGE: i32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Spot {
@@ -26,23 +26,10 @@ pub struct Spot {
 }
 
 impl Spot {
-    pub fn is_within_board(self) -> bool {
-        let range = STONE_RADIUS..=BOARD_SIZE - STONE_RADIUS;
-        range.contains(&self.x) && range.contains(&self.y)
-    }
-
     fn distance_squared(self, other: Self) -> i64 {
         let dx = i64::from(self.x) - i64::from(other.x);
         let dy = i64::from(self.y) - i64::from(other.y);
         dx * dx + dy * dy
-    }
-
-    pub fn overlaps(self, other: Self) -> bool {
-        self.distance_squared(other) < DIAMETER_SQUARED
-    }
-
-    pub fn adjacent(self, other: Self) -> bool {
-        self.distance_squared(other) < 2 * DIAMETER_SQUARED
     }
 }
 
@@ -84,10 +71,22 @@ impl Play {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Position {
+    board: Board,
     stones: Vec<Stone>,
 }
 
 impl Position {
+    pub fn new(board: Board) -> Self {
+        Self {
+            board,
+            stones: Vec::new(),
+        }
+    }
+
+    pub fn board(&self) -> Board {
+        self.board
+    }
+
     pub fn stones(&self) -> &[Stone] {
         &self.stones
     }
@@ -110,7 +109,11 @@ impl Position {
     }
 
     fn can_place(&self, spot: Spot) -> bool {
-        spot.is_within_board() && self.stones.iter().all(|stone| !spot.overlaps(stone.spot))
+        self.board.contains(spot)
+            && self
+                .stones
+                .iter()
+                .all(|stone| !self.board.overlaps(spot, stone.spot))
     }
 
     fn groups(&self, color: Color) -> Vec<Vec<usize>> {
@@ -128,7 +131,8 @@ impl Position {
             while cursor < group.len() {
                 let spot = self.stones[group[cursor]].spot;
                 for (index, stone) in self.stones.iter().enumerate() {
-                    if !seen[index] && stone.color == color && spot.adjacent(stone.spot) {
+                    if !seen[index] && stone.color == color && self.board.adjacent(spot, stone.spot)
+                    {
                         seen[index] = true;
                         group.push(index);
                     }
@@ -157,7 +161,10 @@ impl Position {
     }
 
     fn has_liberty(&self, spot: Spot) -> bool {
-        for (dx, dy) in [(-DIAMETER, 0), (0, -DIAMETER), (0, DIAMETER), (DIAMETER, 0)] {
+        let radius = self.board.stone_radius();
+        let diameter = self.board.diameter();
+        let diameter_squared = i64::from(diameter).pow(2);
+        for (dx, dy) in [(-diameter, 0), (0, -diameter), (0, diameter), (diameter, 0)] {
             if self.can_place(Spot {
                 x: spot.x + dx,
                 y: spot.y + dy,
@@ -167,16 +174,16 @@ impl Position {
         }
 
         // Search the integer adjacency ring exactly, including touching spots.
-        let reach = 2 * DIAMETER;
-        let left = (spot.x - reach).max(STONE_RADIUS);
-        let right = (spot.x + reach).min(BOARD_SIZE - STONE_RADIUS);
-        let top = (spot.y - reach).max(STONE_RADIUS);
-        let bottom = (spot.y + reach).min(BOARD_SIZE - STONE_RADIUS);
+        let reach = 2 * diameter;
+        let left = (spot.x - reach).max(radius);
+        let right = (spot.x + reach).min(COORD_RANGE - radius);
+        let top = (spot.y - reach).max(radius);
+        let bottom = (spot.y + reach).min(COORD_RANGE - radius);
         for y in top..=bottom {
             for x in left..=right {
                 let candidate = Spot { x, y };
                 let distance = spot.distance_squared(candidate);
-                if (DIAMETER_SQUARED..2 * DIAMETER_SQUARED).contains(&distance)
+                if (diameter_squared..2 * diameter_squared).contains(&distance)
                     && self.can_place(candidate)
                 {
                     return true;
@@ -196,27 +203,6 @@ mod tests {
             color,
             spot: Spot { x, y },
         }
-    }
-
-    #[test]
-    fn geometry_keeps_touching_and_adjacency_boundaries_exact() {
-        let origin = Spot { x: 0, y: 0 };
-        assert!(origin.overlaps(Spot {
-            x: DIAMETER - 1,
-            y: 0
-        }));
-        assert!(!origin.overlaps(Spot { x: DIAMETER, y: 0 }));
-        assert!(origin.adjacent(Spot {
-            x: DIAMETER - 1,
-            y: DIAMETER
-        }));
-        assert!(!origin.adjacent(Spot {
-            x: DIAMETER,
-            y: DIAMETER
-        }));
-        assert!(Spot { x: 38, y: 962 }.is_within_board());
-        assert!(!Spot { x: 37, y: 962 }.is_within_board());
-        assert!(!Spot { x: 38, y: 963 }.is_within_board());
     }
 
     #[test]
@@ -240,6 +226,7 @@ mod tests {
                 stone(Color::White, 352, 200),
                 stone(Color::Black, 500, 500),
             ],
+            ..Position::default()
         };
         assert_eq!(position.groups(Color::Black), vec![vec![0, 1], vec![3]]);
         assert_eq!(position.groups(Color::White), vec![vec![2]]);
@@ -255,6 +242,7 @@ mod tests {
                 stone(Color::White, 500, 349),
                 stone(Color::White, 500, 651),
             ],
+            ..Position::default()
         };
         assert!(position.has_liberty(Spot { x: 500, y: 500 }));
     }
@@ -268,6 +256,7 @@ mod tests {
                 stone(Color::White, 38, 114),
                 stone(Color::White, 114, 114),
             ],
+            ..Position::default()
         };
         assert!(position.has_liberty(Spot { x: 38, y: 38 }));
     }

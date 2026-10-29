@@ -1,0 +1,5 @@
+board: 9
+name: Larger stones overlap at a distance legal on the default board
+record: B[dSdS]
+move: W[fudS]
+result: illegal

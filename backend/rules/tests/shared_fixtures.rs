@@ -1,5 +1,5 @@
 // Read the same files as Elm, but decode and check them independently.
-use continugo_rules::{Color, Game, Play, Position, sgf};
+use continugo_rules::{Board, Color, Game, Play, Position, sgf};
 use std::{fs, path::Path};
 
 fn field<'a>(line: &'a str, key: &str) -> Result<&'a str, String> {
@@ -9,7 +9,15 @@ fn field<'a>(line: &'a str, key: &str) -> Result<&'a str, String> {
 }
 
 fn check_fixture(contents: &str) -> Result<(), String> {
-    let lines: Vec<_> = contents.trim().lines().collect();
+    let mut lines: Vec<_> = contents.trim().lines().collect();
+    let board = if lines.first().is_some_and(|line| line.starts_with("board:")) {
+        let size = field(lines.remove(0), "board")?
+            .parse()
+            .map_err(|_| "Board size must be an integer".to_string())?;
+        Board::new(size)?
+    } else {
+        Board::default()
+    };
     let [name, record, attempted_move, result] = lines.as_slice() else {
         return Err("Expected exactly four lines: name, record, move, result".into());
     };
@@ -31,7 +39,7 @@ fn check_fixture(contents: &str) -> Result<(), String> {
     if sgf::encode(&plays)? != record {
         return Err("Record did not round-trip through SGF".into());
     }
-    let mut position = Position::default();
+    let mut position = Position::new(board);
     for play in plays {
         // Match Elm's replayPlacements: allow setup-like sequences and skip
         // passes and illegal placements, but never malformed record entries.
@@ -98,4 +106,8 @@ fn malformed_fixture_records_and_pass_attempts_are_rejected() {
     assert!(check_fixture("name: Bad\nrecord: B[bbbb];bad\nmove: W[mmmm]\nresult: 1").is_err());
     assert!(check_fixture("name: Bad\nrecord: B[bbbb];\nmove: W[mmmm]\nresult: 1").is_err());
     assert!(check_fixture("name: Bad\nrecord:\nmove: W[]\nresult: illegal").is_err());
+    assert_eq!(
+        check_fixture("board: 0\nname: Bad\nrecord:\nmove: B[bbbb]\nresult: 1"),
+        Err("Board size must be between 1 and 500, got: 0".into())
+    );
 }

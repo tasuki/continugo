@@ -1,4 +1,18 @@
-module Rules.Board exposing (boardSize, coordRange, stoneRadius)
+module Rules.Board exposing (Board, boardSize, coordRange, default, diameter, fromSize, radius, size, stoneRadius)
+
+{-| The coordinate space is always 1000 units. Positive integer board sizes
+must leave a stone radius of at least one. The frontend currently uses the
+13x13 default; explicit-board rules APIs support other sizes.
+-}
+
+
+type Board
+    = Board Int
+
+
+default : Board
+default =
+    Board 13
 
 
 coordRange : Int
@@ -8,15 +22,39 @@ coordRange =
     1000
 
 
+fromSize : Int -> Maybe Board
+fromSize value =
+    if value > 0 && value <= coordRange // 2 then
+        Just (Board value)
+
+    else
+        Nothing
+
+
+size : Board -> Int
+size (Board value) =
+    value
+
+
+radius : Board -> Int
+radius board =
+    -- 9x9: 55.55, 13x13: 38.46, 19x19: 26.31
+    -- this doesn't work as a float for a multitude of reasons
+    coordRange // (2 * size board)
+
+
+diameter : Board -> Int
+diameter board =
+    2 * radius board
+
+
 boardSize : Int
 boardSize =
     -- the number of "intersections"
     -- what was an intersection again?
-    13
+    size default
 
 
 stoneRadius : Int
 stoneRadius =
-    -- 9x9: 55.55, 13x13: 38.46, 19x19: 26.31
-    -- this doesn't work as a float for a multitude of reasons
-    coordRange // (2 * boardSize)
+    radius default

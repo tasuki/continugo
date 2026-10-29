@@ -12,6 +12,7 @@ example : Generated.Case
 example =
     { filename = "example.txt"
     , name = "Example"
+    , boardSize = 13
     , record = ""
     , move = "B[bbbb]"
     , stoneCountChange = Just 0
@@ -21,7 +22,7 @@ example =
 tests : Test
 tests =
     describe "Shared fixture decoding"
-        [ test "Fixtures use a 1000-unit board with radius 38" <|
+        [ test "Default fixtures use a 1000-unit board with radius 38" <|
             \_ ->
                 Expect.equal ( 1000, 38 ) ( Board.coordRange, Board.stoneRadius )
         , test "An empty record and a zero stone-count change are valid" <|
@@ -30,6 +31,7 @@ tests =
                     |> Expect.equal
                         (Ok
                             { name = "Example"
+                            , board = Board.default
                             , record = []
                             , playStone = createStone Black (Spot 53 53)
                             , stoneCountChange = Just 0
@@ -45,4 +47,7 @@ tests =
                         \_ -> Fixtures.decode fixture |> Expect.err
                 )
             |> describe "Invalid SGF"
+        , test "A size that would produce a zero-radius stone is rejected" <|
+            \_ ->
+                Fixtures.decode { example | boardSize = 501 } |> Expect.err
         ]

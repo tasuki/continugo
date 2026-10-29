@@ -1,44 +1,22 @@
-module Rules.Liberties exposing (candidateOffsets, hasLiberties, sampleLiberties)
+module Rules.Liberties exposing (candidateOffsets, candidateOffsetsOn, hasLiberties, hasLibertiesOn, sampleLiberties, sampleLibertiesOn)
 
 import Array exposing (Array)
+import Rules.Board as Board exposing (Board)
 import Rules.Position exposing (..)
 
 
-
--- settings and hardcoded things
-
-
-zero : Spot
-zero =
-    Spot 0 0
-
-
-
--- filtering and sorting liberties
-
-
-takeNonOverlapping : List Spot -> List Spot -> List Spot
-takeNonOverlapping acc queue =
-    -- take unique liberty spots
+takeNonOverlapping : Board -> List Spot -> List Spot -> List Spot
+takeNonOverlapping board acc queue =
     case queue of
         [] ->
             acc
 
         head :: tail ->
-            if overlapsAny head acc then
-                takeNonOverlapping acc tail
+            if overlapsAnyOn board head acc then
+                takeNonOverlapping board acc tail
 
             else
-                takeNonOverlapping (head :: acc) tail
-
-
-nonOverlappingLiberties : List Spot -> List Spot
-nonOverlappingLiberties =
-    takeNonOverlapping []
-
-
-
--- finding liberties
+                takeNonOverlapping board (head :: acc) tail
 
 
 {-| Walk each integer disc boundary once, storing its half-width at each row.
@@ -61,19 +39,42 @@ discRows widthBound squaredRadius =
     build 0 widthBound []
 
 
-adjacencyRows : Array Int
-adjacencyRows =
-    discRows (2 * diameter) (2 * diameter * diameter - 1)
+type alias Search =
+    { board : Board
+    , adjacencyRows : Array Int
+    , overlapRows : Array Int
+    , maxRowOffset : Int
+    }
 
 
-overlapRows : Array Int
-overlapRows =
-    discRows diameter (diameter * diameter - 1)
+buildSearch : Board -> Search
+buildSearch board =
+    let
+        d =
+            Board.diameter board
+
+        rows =
+            discRows (2 * d) (2 * d * d - 1)
+    in
+    { board = board
+    , adjacencyRows = rows
+    , overlapRows = discRows d (d * d - 1)
+    , maxRowOffset = Array.length rows - 1
+    }
 
 
-maxRowOffset : Int
-maxRowOffset =
-    Array.length adjacencyRows - 1
+defaultSearch : Search
+defaultSearch =
+    buildSearch Board.default
+
+
+searchOn : Board -> Search
+searchOn board =
+    if board == Board.default then
+        defaultSearch
+
+    else
+        buildSearch board
 
 
 {-| -1 denotes an empty row outside the disc.
@@ -85,74 +86,107 @@ rowHalfWidth rows offset =
 
 candidateOffsets : List Spot
 candidateOffsets =
-    -- precompute ring of candidates around zero: 18k spots
+    candidateOffsetsOn Board.default
+
+
+candidateOffsetsOn : Board -> List Spot
+candidateOffsetsOn board =
     let
+        maxOffset =
+            (searchOn board).maxRowOffset
+
         range =
-            List.range -maxRowOffset maxRowOffset
+            List.range -maxOffset maxOffset
+
+        zero =
+            Spot 0 0
     in
     List.concatMap (\x -> List.map (Spot x) range) range
-        |> List.filter (\s -> not <| overlaps s zero)
-        |> List.filter (adjacent zero)
+        |> List.filter (\s -> not <| overlapsOn board s zero)
+        |> List.filter (adjacentOn board zero)
         |> List.sortBy (distanceSquared zero)
 
 
-isLiberty : List Spot -> Spot -> Bool
-isLiberty nearbySpots suspect =
-    let
-        overlapsNearby : Bool
-        overlapsNearby =
-            overlapsAny suspect nearbySpots
-    in
-    isWithinBoard suspect && not overlapsNearby
+isLiberty : Board -> List Spot -> Spot -> Bool
+isLiberty board nearbySpots suspect =
+    isWithinBoardOn board suspect && not (overlapsAnyOn board suspect nearbySpots)
 
 
 {-| A greedy, non-overlapping sample, not the complete set of liberties.
 -}
 sampleLiberties : Stone -> List Spot -> List Spot
-sampleLiberties { spot } nearbySpots =
-    List.map (translate spot) candidateOffsets
-        |> List.filter (isLiberty nearbySpots)
-        |> nonOverlappingLiberties
+sampleLiberties =
+    sampleLibertiesOn Board.default
 
 
-libertyProbes : List Spot
-libertyProbes =
-    [ Spot -diameter 0, Spot 0 -diameter, Spot 0 diameter, Spot diameter 0 ]
+sampleLibertiesOn : Board -> Stone -> List Spot -> List Spot
+sampleLibertiesOn board { spot } nearbySpots =
+    let
+        offsets =
+            if board == Board.default then
+                candidateOffsets
+
+            else
+                candidateOffsetsOn board
+    in
+    List.map (translate spot) offsets
+        |> List.filter (isLiberty board nearbySpots)
+        |> takeNonOverlapping board []
 
 
 hasLiberties : Stone -> List Spot -> Bool
-hasLiberties { spot } nearbySpots =
-    -- Try the four closest candidates first: open groups usually stop here.
-    -- For enclosed groups, search whole integer intervals rather than testing
-    -- all ~18,000 points in the adjacency ring individually.
-    List.any (translate spot >> isLiberty nearbySpots) libertyProbes
-        || hasLibertyInRows spot
+hasLiberties =
+    hasLibertiesOn Board.default
+
+
+hasLibertiesOn : Board -> Stone -> List Spot -> Bool
+hasLibertiesOn board { spot } nearbySpots =
+    let
+        d =
+            Board.diameter board
+
+        r =
+            Board.radius board
+
+        search =
+            searchOn board
+
+        probes =
+            [ Spot -d 0, Spot 0 -d, Spot 0 d, Spot d 0 ]
+    in
+    -- Try the four closest candidates before searching whole integer intervals.
+    List.any (translate spot >> isLiberty board nearbySpots) probes
+        || hasLibertyInRows search
+            spot
             nearbySpots
-            (max boardMin (spot.y - maxRowOffset))
-            (min boardMax (spot.y + maxRowOffset))
+            (max r (spot.y - search.maxRowOffset))
+            (min (Board.coordRange - r) (spot.y + search.maxRowOffset))
 
 
-hasLibertyInRows : Spot -> List Spot -> Int -> Int -> Bool
-hasLibertyInRows spot nearbySpots y lastY =
+hasLibertyInRows : Search -> Spot -> List Spot -> Int -> Int -> Bool
+hasLibertyInRows search spot nearbySpots y lastY =
     if y > lastY then
         False
 
     else
         let
+            r =
+                Board.radius search.board
+
             dy =
                 y - spot.y
 
             outer =
-                rowHalfWidth adjacencyRows dy
+                rowHalfWidth search.adjacencyRows dy
 
             inner =
                 -- The first integer outside the overlap disc permits exact touching.
-                rowHalfWidth overlapRows dy + 1
+                rowHalfWidth search.overlapRows dy + 1
 
             blockedInterval other =
                 let
                     halfWidth =
-                        rowHalfWidth overlapRows (y - other.y)
+                        rowHalfWidth search.overlapRows (y - other.y)
                 in
                 if halfWidth < 0 then
                     Nothing
@@ -164,7 +198,7 @@ hasLibertyInRows spot nearbySpots y lastY =
                 List.filterMap blockedInterval nearbySpots |> List.sortBy Tuple.first
 
             openInterval left right =
-                intervalHasGap (max boardMin left) (min boardMax right) blocked
+                intervalHasGap (max r left) (min (Board.coordRange - r) right) blocked
         in
         (outer
             >= 0
@@ -172,7 +206,7 @@ hasLibertyInRows spot nearbySpots y lastY =
                     || openInterval (spot.x + inner) (spot.x + outer)
                )
         )
-            || hasLibertyInRows spot nearbySpots (y + 1) lastY
+            || hasLibertyInRows search spot nearbySpots (y + 1) lastY
 
 
 intervalHasGap : Int -> Int -> List ( Int, Int ) -> Bool

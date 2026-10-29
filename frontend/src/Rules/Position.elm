@@ -1,7 +1,12 @@
 module Rules.Position exposing (..)
 
+{-| Unqualified geometry helpers use the default board; `On` variants take a board.
+Use the same board for all operations on a Stones value: neighbour caches depend
+on its geometry. Rebuild from the record when changing boards.
+-}
+
 import Dict exposing (Dict)
-import Rules.Board exposing (coordRange, stoneRadius)
+import Rules.Board as Board exposing (Board, coordRange, stoneRadius)
 
 
 
@@ -10,8 +15,7 @@ import Rules.Board exposing (coordRange, stoneRadius)
 
 diameter : Int
 diameter =
-    -- stone diameter
-    2 * stoneRadius
+    Board.diameter Board.default
 
 
 
@@ -41,33 +45,73 @@ distanceSquared s1 s2 =
 
 
 isWithinStone : Spot -> Spot -> Bool
-isWithinStone s1 s2 =
-    distanceSquared s1 s2 < stoneRadius * stoneRadius
+isWithinStone =
+    isWithinStoneOn Board.default
+
+
+isWithinStoneOn : Board -> Spot -> Spot -> Bool
+isWithinStoneOn board s1 s2 =
+    let
+        r =
+            Board.radius board
+    in
+    distanceSquared s1 s2 < r * r
 
 
 overlaps : Spot -> Spot -> Bool
-overlaps s1 s2 =
-    distanceSquared s1 s2 < diameter * diameter
+overlaps =
+    overlapsOn Board.default
+
+
+overlapsOn : Board -> Spot -> Spot -> Bool
+overlapsOn board s1 s2 =
+    let
+        d =
+            Board.diameter board
+    in
+    distanceSquared s1 s2 < d * d
 
 
 overlapsAny : Spot -> List Spot -> Bool
-overlapsAny spot =
-    List.any (overlaps spot)
+overlapsAny =
+    overlapsAnyOn Board.default
+
+
+overlapsAnyOn : Board -> Spot -> List Spot -> Bool
+overlapsAnyOn board spot =
+    List.any (overlapsOn board spot)
 
 
 adjacent : Spot -> Spot -> Bool
-adjacent s1 s2 =
-    distanceSquared s1 s2 < 2 * diameter * diameter
+adjacent =
+    adjacentOn Board.default
+
+
+adjacentOn : Board -> Spot -> Spot -> Bool
+adjacentOn board s1 s2 =
+    let
+        d =
+            Board.diameter board
+    in
+    distanceSquared s1 s2 < 2 * d * d
 
 
 {-| For squared distance q and diameter d, nearby means q < (6 + 4√2)d².
 Subtract 6d², then square only a nonnegative remainder.
 -}
 isNearby : Spot -> Spot -> Bool
-isNearby a b =
+isNearby =
+    isNearbyOn Board.default
+
+
+isNearbyOn : Board -> Spot -> Spot -> Bool
+isNearbyOn board a b =
     let
+        d =
+            Board.diameter board
+
         diameterSquared =
-            diameter * diameter
+            d * d
 
         excess =
             distanceSquared a b - 6 * diameterSquared
@@ -86,11 +130,19 @@ boardMax =
 
 
 isWithinBoard : Spot -> Bool
-isWithinBoard spot =
+isWithinBoard =
+    isWithinBoardOn Board.default
+
+
+isWithinBoardOn : Board -> Spot -> Bool
+isWithinBoardOn board spot =
     let
+        r =
+            Board.radius board
+
         isWithin : Int -> Bool
         isWithin coord =
-            coord >= boardMin && coord <= boardMax
+            coord >= r && coord <= coordRange - r
     in
     isWithin spot.x && isWithin spot.y
 
@@ -156,22 +208,32 @@ removeAdjacent toRemove orig =
 
 
 nearbyStones : Stones -> Spot -> List Stone
-nearbyStones stones spot =
+nearbyStones =
+    nearbyStonesOn Board.default
+
+
+nearbyStonesOn : Board -> Stones -> Spot -> List Stone
+nearbyStonesOn board stones spot =
     stoneList stones
-        |> List.filter (\s -> isNearby spot s.spot)
+        |> List.filter (\s -> isNearbyOn board spot s.spot)
 
 
 withNeighbors : Stones -> Stone -> Stone
-withNeighbors stones stone =
+withNeighbors =
+    withNeighborsOn Board.default
+
+
+withNeighborsOn : Board -> Stones -> Stone -> Stone
+withNeighborsOn board stones stone =
     let
         nearby =
-            nearbyStones stones stone.spot
+            nearbyStonesOn board stones stone.spot
 
         adjacentStones : List Stone
         adjacentStones =
             nearby
                 |> List.filter (\s -> s.color == stone.color)
-                |> List.filter (\s -> adjacent stone.spot s.spot)
+                |> List.filter (\s -> adjacentOn board stone.spot s.spot)
     in
     { stone
         | nearby = List.map .spot nearby
