@@ -1,5 +1,5 @@
 // Read the same files as Elm, but decode and check them independently.
-use continugo_rules::{Play, Position, sgf};
+use continugo_rules::{Color, Game, Play, Position, sgf};
 use std::{fs, path::Path};
 
 fn field<'a>(line: &'a str, key: &str) -> Result<&'a str, String> {
@@ -73,6 +73,24 @@ fn shared_placement_fixtures() {
             panic!("{}: {error}", file.display());
         }
     }
+}
+
+#[test]
+fn a_shared_capture_survives_strict_game_restoration() {
+    let contents = include_str!("../../../fixtures/rules/capture-four.txt");
+    let lines: Vec<_> = contents.lines().collect();
+    let record = sgf::decode(field(lines[1], "record").unwrap()).unwrap();
+    let Play::Place(stone) = sgf::decode_play(field(lines[2], "move").unwrap()).unwrap() else {
+        panic!("Expected a placement in capture-four.txt");
+    };
+    let before = Game::from_record(&record).unwrap();
+    let after = before.play(stone.spot).unwrap();
+    assert_eq!(
+        after.position().stones().len() as isize - before.position().stones().len() as isize,
+        -3
+    );
+    assert_eq!(after.on_move(), Color::White);
+    assert_eq!(Game::from_record(after.record()), Ok(after));
 }
 
 #[test]

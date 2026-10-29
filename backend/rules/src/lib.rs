@@ -1,13 +1,18 @@
-//! Exact placement rules for a 1000-unit board with radius-38 stones.
+//! ContinuGo rules for a 1000-unit board with radius-38 stones.
 //!
 //! `Position::default()` creates an empty board. `Position::play` returns
 //! `Some(new_position)` for a legal placement or `None` for an illegal one,
-//! leaving the original unchanged. Like Elm's `Rules.Play`,
-//! this does not handle turn order, passes, ko, game completion, or scoring yet.
+//! leaving the original unchanged. Positions allow placements of either colour.
+//! `Game` adds alternating turns, records, and two-pass completion.
+//! Ko and scoring are not implemented yet.
+//!
 //! Groups and liberties are recomputed directly; no neighbour caches or external
 //! dependencies are needed for this first implementation.
 
+pub mod game;
 pub mod sgf;
+
+pub use game::Game;
 
 pub const BOARD_SIZE: i32 = 1000;
 pub const STONE_RADIUS: i32 = 38;
@@ -66,6 +71,15 @@ pub struct Stone {
 pub enum Play {
     Place(Stone),
     Pass(Color),
+}
+
+impl Play {
+    pub fn color(self) -> Color {
+        match self {
+            Self::Place(stone) => stone.color,
+            Self::Pass(color) => color,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
