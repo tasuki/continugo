@@ -36,7 +36,7 @@ fn check_fixture(contents: &str) -> Result<(), String> {
     };
 
     let plays = sgf::decode(record)?;
-    if sgf::encode(&plays)? != record {
+    if sgf::decode(&sgf::encode(&plays)?)? != plays {
         return Err("Record did not round-trip through SGF".into());
     }
     let mut position = Position::new(board);

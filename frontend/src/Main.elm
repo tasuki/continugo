@@ -21,7 +21,7 @@ import MovePreview
 import Placement
 import PointerInput
 import Process
-import Regex
+import RecordUrl
 import Rules.Board exposing (coordRange, stoneRadius)
 import Rules.Game as Game
 import Rules.Play as Play
@@ -56,6 +56,7 @@ main =
 
 type alias Model =
     { game : Game.Game
+    , sgfRoot : List Sgf.Property
     , ghostStone : Maybe MovePreview.Preview
     , highlightedGroup : List Spot
     , justPlayed : Maybe Spot
@@ -75,6 +76,7 @@ type alias Model =
 emptyModel : Nav.Key -> Model
 emptyModel navKey =
     { game = Game.empty
+    , sgfRoot = Sgf.empty.root
     , ghostStone = Nothing
     , highlightedGroup = []
     , justPlayed = Nothing
@@ -236,7 +238,7 @@ handlePlay model playSpot =
             in
             ( newModel
             , Cmd.batch
-                [ pushRecordUrl newModel.navKey newModel.game.record
+                [ pushRecordUrl newModel
                 , Process.sleep 500 |> Task.perform (\_ -> ClearCaptureAnimation)
                 ]
             )
@@ -529,32 +531,22 @@ update msg model =
 -- ROUTING / URL
 
 
-recordRegex : Regex.Regex
-recordRegex =
-    Maybe.withDefault Regex.never <|
-        Regex.fromString "^record=(.*)$"
-
-
 restoreFromUrl : Url.Url -> Model -> ( Model, Cmd Msg )
 restoreFromUrl url model =
     let
-        maybeRecord : Maybe (List Play)
+        maybeRecord : Maybe Sgf.Record
         maybeRecord =
-            Maybe.map (Regex.find recordRegex) url.query
-                |> Maybe.andThen List.head
-                |> Maybe.andThen (.submatches >> List.head)
-                |> Maybe.andThen identity
-                |> Maybe.andThen (Sgf.decode >> Result.toMaybe)
-                |> Maybe.map List.reverse
+            RecordUrl.decode url
 
-        createModel : List Play -> Model
+        createModel : Sgf.Record -> Model
         createModel record =
             let
                 game =
-                    Game.fromRecord record
+                    Game.fromRecord (List.reverse record.plays)
             in
             { model
                 | game = game
+                , sgfRoot = record.root
                 , pointer = PointerInput.cancel model.pointer
                 , analysis = Analysis.reconcile game.stones model.analysis
                 , highlightedGroup = []
@@ -583,23 +575,14 @@ restoreFromUrl url model =
 updatePosition : Model -> ( Model, Cmd Msg )
 updatePosition model =
     ( { model | ghostStone = Nothing, stagedMove = Nothing, highlightedGroup = [] }
-    , pushRecordUrl model.navKey model.game.record
+    , pushRecordUrl model
     )
 
 
-pushRecordUrl : Nav.Key -> List Play -> Cmd msg
-pushRecordUrl navKey record =
-    let
-        rec =
-            if List.length record > 0 then
-                -- Bravely go where no legal URL has gone before.
-                -- I prefer URLs to look nice rather than be valid.
-                "?record=" ++ (Sgf.encode <| List.reverse record)
-
-            else
-                "?"
-    in
-    Nav.pushUrl navKey rec
+pushRecordUrl : Model -> Cmd msg
+pushRecordUrl model =
+    Nav.pushUrl model.navKey <|
+        RecordUrl.encode { root = model.sgfRoot, plays = List.reverse model.game.record }
 
 
 

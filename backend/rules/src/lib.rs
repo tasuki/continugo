@@ -5,12 +5,14 @@
 //! turns, records, and two-pass completion. `territory` provides Voronoi area
 //! scoring. Ko is not implemented yet.
 
+pub mod action;
 pub mod board;
 pub mod game;
 pub mod position;
 pub mod sgf;
 pub mod territory;
 
+pub use action::{Action, COORDINATE_ACTIONS};
 pub use board::{Board, COORD_RANGE};
 pub use game::Game;
 pub use position::{Color, Play, Position, Spot, Stone};

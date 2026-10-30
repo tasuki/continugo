@@ -1,22 +1,44 @@
-//! Read and write ContinuGo's compact SGF-like records, in chronological order.
-//! This is not a full SGF document parser: only `B[xxxx]`, `W[xxxx]`, and passes
-//! (`B[]`, `W[]`), separated by semicolons, are supported. An empty string is an
-//! empty record. Malformed entries reject the entire record.
-//!
-//! Coordinates use two base-52 digits (`a-zA-Z`) per axis. Encoding rejects
-//! coordinates outside 0..=2703; decoding checks syntax, not placement legality.
+//! ContinuGo SGF: a move-free root followed by a single sequence of moves.
+//! `FF[9071]GM[9071]` identifies our format; coordinates use two base-52 digits
+//! (`a-zA-Z`) per axis, not Go's usual one. Variations are not supported.
+//! Root properties (including PB, PW, SZ and RE) are preserved by the record API.
+//! Empty PB, PW and RE properties are omitted when writing.
+//! The play-only API uses a 13x13 root. Decoding also
+//! accepts legacy compact records. Neither API checks move legality or applies
+//! board metadata: replay on the appropriate board separately.
 //!
 //! ```
 //! use continugo_rules::sgf;
 //!
 //! let plays = sgf::decode("B[bbbb];W[]")?;
-//! assert_eq!(sgf::encode(&plays)?, "B[bbbb];W[]");
+//! assert_eq!(sgf::encode(&plays)?,
+//!     "(;FF[9071]GM[9071]SZ[13]\n;B[bbbb]\n;W[]\n)");
 //! # Ok::<(), String>(())
 //! ```
 
 use crate::{Color, Play, Spot, Stone};
 
 const ALPHABET: &[u8; 52] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+pub type Property = (String, Vec<String>);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Record {
+    pub root: Vec<Property>,
+    pub plays: Vec<Play>,
+}
+
+impl Default for Record {
+    fn default() -> Self {
+        Self {
+            root: [("FF", "9071"), ("GM", "9071"), ("SZ", "13")]
+                .into_iter()
+                .map(|(name, value)| (name.into(), vec![value.into()]))
+                .collect(),
+            plays: Vec::new(),
+        }
+    }
+}
 
 pub fn decode_play(text: &str) -> Result<Play, String> {
     let invalid = || format!("Invalid SGF move: {text}");
@@ -49,15 +71,142 @@ pub fn decode_play(text: &str) -> Result<Play, String> {
 }
 
 pub fn decode(text: &str) -> Result<Vec<Play>, String> {
-    if text.is_empty() {
-        return Ok(Vec::new());
+    decode_record(text).map(|record| record.plays)
+}
+
+pub fn decode_record(text: &str) -> Result<Record, String> {
+    if !text.trim_start().starts_with('(') {
+        let plays = if text.is_empty() {
+            Vec::new()
+        } else {
+            text.split(';')
+                .enumerate()
+                .map(|(index, entry)| {
+                    decode_play(entry)
+                        .map_err(|_| format!("Invalid SGF entry {}: {entry}", index + 1))
+                })
+                .collect::<Result<_, _>>()?
+        };
+        return Ok(Record {
+            plays,
+            ..Record::default()
+        });
     }
-    text.split(';')
-        .enumerate()
-        .map(|(index, entry)| {
-            decode_play(entry).map_err(|_| format!("Invalid SGF entry {}: {entry}", index + 1))
-        })
-        .collect()
+
+    let mut parser = Parser { rest: text };
+    parser.expect('(')?;
+    parser.expect(';')?;
+    let root = parser.properties()?;
+    validate_root(&root)?;
+    let mut plays = Vec::new();
+    while parser.rest.trim_start().starts_with(';') {
+        parser.expect(';')?;
+        let properties = parser.properties()?;
+        let moves: Vec<_> = properties
+            .iter()
+            .filter(|(name, _)| name == "B" || name == "W")
+            .collect();
+        let [(name, values)] = moves.as_slice() else {
+            return Err("Each non-root SGF node must contain exactly one move".into());
+        };
+        let [value] = values.as_slice() else {
+            return Err("An SGF move must have exactly one value".into());
+        };
+        plays.push(decode_play(&format!("{name}[{value}]"))?);
+    }
+    parser.expect(')')?;
+    if !parser.rest.trim().is_empty() {
+        return Err("Unexpected content after SGF tree".into());
+    }
+    Ok(Record { root, plays })
+}
+
+fn validate_root(root: &[Property]) -> Result<(), String> {
+    for name in ["FF", "GM"] {
+        if !root
+            .iter()
+            .any(|(key, values)| key == name && values == &["9071"])
+        {
+            return Err(format!("Expected {name}[9071] in SGF root"));
+        }
+    }
+    if root.iter().any(|(name, _)| name == "B" || name == "W") {
+        return Err("SGF root must not contain a move".into());
+    }
+    Ok(())
+}
+
+struct Parser<'a> {
+    rest: &'a str,
+}
+
+impl Parser<'_> {
+    fn expect(&mut self, ch: char) -> Result<(), String> {
+        self.rest = self.rest.trim_start();
+        self.rest = self
+            .rest
+            .strip_prefix(ch)
+            .ok_or_else(|| format!("Expected '{ch}' in SGF"))?;
+        Ok(())
+    }
+
+    fn properties(&mut self) -> Result<Vec<Property>, String> {
+        let mut properties: Vec<Property> = Vec::new();
+        loop {
+            self.rest = self.rest.trim_start();
+            let length = self.rest.bytes().take_while(u8::is_ascii_uppercase).count();
+            if length == 0 {
+                break;
+            }
+            let name = self.rest[..length].to_string();
+            self.rest = &self.rest[length..];
+            if properties.iter().any(|(key, _)| key == &name) {
+                return Err(format!("Duplicate SGF property: {name}"));
+            }
+            let mut values = vec![self.value()?];
+            while self.rest.trim_start().starts_with('[') {
+                values.push(self.value()?);
+            }
+            properties.push((name, values));
+        }
+        Ok(properties)
+    }
+
+    fn value(&mut self) -> Result<String, String> {
+        self.expect('[')?;
+        let mut value = String::new();
+        let mut chars = self.rest.chars();
+        while let Some(ch) = chars.next() {
+            match ch {
+                ']' => {
+                    self.rest = chars.as_str();
+                    return Ok(value);
+                }
+                '\\' => match chars.next() {
+                    Some('\r') => {
+                        if chars.as_str().starts_with('\n') {
+                            chars.next();
+                        }
+                    }
+                    Some('\n') => {
+                        if chars.as_str().starts_with('\r') {
+                            chars.next();
+                        }
+                    }
+                    Some(escaped) => value.push(escaped),
+                    None => break,
+                },
+                '\r' => {
+                    if chars.as_str().starts_with('\n') {
+                        chars.next();
+                    }
+                    value.push('\n');
+                }
+                _ => value.push(ch),
+            }
+        }
+        Err("Unterminated SGF property value".into())
+    }
 }
 
 pub fn encode_play(play: Play) -> Result<String, String> {
@@ -83,11 +232,44 @@ pub fn encode_play(play: Play) -> Result<String, String> {
 }
 
 pub fn encode(plays: &[Play]) -> Result<String, String> {
-    plays
-        .iter()
-        .map(|&play| encode_play(play))
-        .collect::<Result<Vec<_>, _>>()
-        .map(|entries| entries.join(";"))
+    encode_record(&Record {
+        plays: plays.to_vec(),
+        ..Record::default()
+    })
+}
+
+pub fn encode_record(record: &Record) -> Result<String, String> {
+    validate_root(&record.root)?;
+    let mut text = String::from("(;FF[9071]GM[9071]");
+    let mut seen = Vec::new();
+    for (name, values) in &record.root {
+        if name.is_empty()
+            || !name.bytes().all(|ch| ch.is_ascii_uppercase())
+            || values.is_empty()
+            || seen.contains(&name)
+        {
+            return Err(format!("Invalid or duplicate SGF property: {name}"));
+        }
+        seen.push(name);
+        if name == "FF"
+            || name == "GM"
+            || (matches!(name.as_str(), "PB" | "PW" | "RE") && values.iter().all(String::is_empty))
+        {
+            continue;
+        }
+        text.push_str(name);
+        for value in values {
+            text.push('[');
+            text.push_str(&value.replace('\\', "\\\\").replace(']', "\\]"));
+            text.push(']');
+        }
+    }
+    for &play in &record.plays {
+        text.push_str("\n;");
+        text.push_str(&encode_play(play)?);
+    }
+    text.push_str("\n)");
+    Ok(text)
 }
 
 #[cfg(test)]
@@ -102,8 +284,8 @@ mod tests {
     }
 
     #[test]
-    fn known_coordinates_and_both_pass_colors_round_trip() {
-        let cases = [
+    fn legacy_records_become_sgf_documents() {
+        for (plays, compact) in [
             (vec![], ""),
             (
                 vec![place(Color::Black, 100, 200), place(Color::White, 300, 400)],
@@ -125,15 +307,47 @@ mod tests {
                 ],
                 "B[aaaz];W[aAaZ];B[baZZ]",
             ),
-        ];
-        for (plays, text) in cases {
-            assert_eq!(decode(text), Ok(plays.clone()), "{text}");
-            assert_eq!(encode(&plays), Ok(text.to_string()), "{plays:?}");
+        ] {
+            assert_eq!(decode(compact), Ok(plays.clone()));
+            let mut expected = String::from("(;FF[9071]GM[9071]SZ[13]");
+            for entry in compact.split(';').filter(|entry| !entry.is_empty()) {
+                expected.push_str(&format!("\n;{entry}"));
+            }
+            expected.push_str("\n)");
+            assert_eq!(encode(&plays), Ok(expected.clone()));
+            assert_eq!(decode(&expected), Ok(plays));
         }
     }
 
     #[test]
-    fn malformed_entries_reject_the_whole_record() {
+    fn empty_player_names_and_result_are_omitted() {
+        let record = decode_record("(;FF[9071]GM[9071]SZ[13]PB[]PW[]RE[]C[])").unwrap();
+        assert_eq!(
+            encode_record(&record).unwrap(),
+            "(;FF[9071]GM[9071]SZ[13]C[]\n)"
+        );
+    }
+
+    #[test]
+    fn root_metadata_and_escaped_values_round_trip() {
+        let text = "(;FF[9071]GM[9071]SZ[19]PB[A\\]lice]PW[白\\\\黒]RE[B+2.5]C[a; (b)\nline]XX[one][two]\n;B[bbbb]C[move comment]\n;W[]\n)";
+        let record = decode_record(text).unwrap();
+        assert_eq!(record.root[3].1, vec!["A]lice"]);
+        assert_eq!(record.root[4].1, vec!["白\\黒"]);
+        assert_eq!(record.root[5].1, vec!["B+2.5"]);
+        assert_eq!(decode_record(&encode_record(&record).unwrap()), Ok(record));
+        assert_eq!(
+            decode(" \n(; GM[9071] FF[9071] ; B [bbbb] ; W [] ) \n")
+                .unwrap()
+                .len(),
+            2
+        );
+        let continued = decode_record("(;FF[9071]GM[9071]PB[a\\\r\nb])").unwrap();
+        assert_eq!(continued.root[2].1, vec!["ab"]);
+    }
+
+    #[test]
+    fn malformed_records_are_rejected() {
         for text in [
             "invalid",
             "invalid;B[bbbb]",
@@ -149,6 +363,17 @@ mod tests {
             "B[bbbb];;W[mmmm]",
             "(;B[bbbb])",
             "B[ébb]",
+            "(;FF[4]GM[1];B[bbbb])",
+            "(;FF[9071]GM[9071]B[bbbb])",
+            "(;FF[9071]GM[9071];B[bbbb]W[])",
+            "(;FF[9071]GM[9071];B[bbbb][mmmm])",
+            "(;FF[9071]GM[9071];B[bbbb](;W[]))",
+            "(;FF[9071]GM[9071])garbage",
+            "(;FF[9071]GM[9071]PB[unfinished)",
+            "(;FF[9071]GM[9071]PB[a]PB[b])",
+            "(;FF[9071]GM[9071];)",
+            "(;FF[9071]GM[9071]",
+            "(;FF[9071]GM[9071])()",
         ] {
             assert!(decode(text).is_err(), "Accepted {text:?}");
         }

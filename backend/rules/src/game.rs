@@ -4,7 +4,7 @@
 //! illegal placements, and moves after two consecutive passes. Setup/handicap
 //! sequences belong at the `Position` level instead. Ko is not enforced yet.
 //! Use `Game::new(board)` and `from_record_on(board, record)` for non-default
-//! boards: the compact SGF record does not store board configuration.
+//! boards: a play list does not include the SGF root's board configuration.
 //!
 //! ```
 //! use continugo_rules::{Color, Game, Spot, sgf};
