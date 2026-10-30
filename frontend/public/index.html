@@ -22,7 +22,19 @@
     <p>Bugs to: https://github.com/tasuki/continugo</p>
 
     <script>
-        var app = Elm.Main.init();
+        let saved = null;
+        try {
+            const stored = JSON.parse(sessionStorage.getItem('continugo.session'));
+            // A different incoming URL should load its own game.
+            if (stored && stored.url === location.href) saved = stored;
+        } catch (_) {}
+
+        var app = Elm.Main.init({ flags: saved });
+        app.ports.saveSession.subscribe(function (state) {
+            try {
+                sessionStorage.setItem('continugo.session', JSON.stringify({ ...state, url: location.href }));
+            } catch (_) {}
+        });
     </script>
 </body>
 </html>

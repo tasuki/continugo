@@ -1,4 +1,4 @@
-module Main exposing (..)
+port module Main exposing (..)
 
 import Analysis
 import BoardView
@@ -39,11 +39,14 @@ import TerritoryView
 import Url exposing (Url)
 
 
-main : Program () Model Msg
+port saveSession : { sgf : String, move : Int } -> Cmd msg
+
+
+main : Program Decode.Value Model Msg
 main =
     Browser.application
         { init = init
-        , update = update
+        , update = updateAndSave
         , subscriptions =
             \model ->
                 if model.showMenu || model.showHelp then
@@ -106,9 +109,47 @@ emptyModel navKey =
     }
 
 
-init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
-init _ url navKey =
-    restoreFromUrl url (emptyModel navKey)
+init : Decode.Value -> Url -> Nav.Key -> ( Model, Cmd Msg )
+init flags url navKey =
+    let
+        fallback =
+            restoreFromUrl url (emptyModel navKey) |> Tuple.first
+
+        model =
+            readSession flags
+                |> Maybe.map
+                    (\( record, game ) ->
+                        { fallback | game = game, record = record.plays, sgfRoot = record.root }
+                    )
+                |> Maybe.withDefault fallback
+    in
+    ( model, persist model )
+
+
+readSession : Decode.Value -> Maybe ( Sgf.Record, Game.Game )
+readSession value =
+    Decode.decodeValue
+        (Decode.map2 Tuple.pair (Decode.field "sgf" Decode.string) (Decode.field "move" Decode.int))
+        value
+        |> Result.toMaybe
+        |> Maybe.andThen
+            (\( text, move ) ->
+                Sgf.decodeRecord text
+                    |> Result.toMaybe
+                    |> Maybe.andThen
+                        (\record ->
+                            Sgf.boardFromRoot record.root
+                                |> Maybe.map (\board -> ( record, gameAt board move record.plays ))
+                        )
+            )
+
+
+persist : Model -> Cmd msg
+persist model =
+    saveSession
+        { sgf = Sgf.encodeRecord { root = model.sgfRoot, plays = model.record }
+        , move = List.length model.game.record
+        }
 
 
 
@@ -435,6 +476,21 @@ handleBoardPointer action coords model =
 
         PointerInput.CancelGesture ->
             ( cancelBoardGesture model, Cmd.none )
+
+
+updateAndSave : Msg -> Model -> ( Model, Cmd Msg )
+updateAndSave msg model =
+    let
+        ( updated, command ) =
+            update msg model
+    in
+    ( updated
+    , if updated.record /= model.record || updated.sgfRoot /= model.sgfRoot || updated.game.record /= model.game.record then
+        Cmd.batch [ command, persist updated ]
+
+      else
+        command
+    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

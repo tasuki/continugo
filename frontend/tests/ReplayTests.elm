@@ -57,6 +57,35 @@ tests =
                             , after.onMove
                             , Game.isFinished after
                             )
+        , test "A saved session restores its board, metadata, cursor and future moves" <|
+            \_ ->
+                Main.readSession (snapshot "(;FF[9071]GM[9071]SZ[19]PB[Alice];B[bbbb];W[])" 1)
+                    |> Maybe.map
+                        (\( record, game ) ->
+                            ( ( Board.size game.board, List.length game.record )
+                            , List.length record.plays
+                            , List.member ( "PB", [ "Alice" ] ) record.root
+                            )
+                        )
+                    |> Expect.equal (Just ( ( 19, 1 ), 2, True ))
+        , test "Saved cursors are bounded by the game" <|
+            \_ ->
+                [ -1, 99 ]
+                    |> List.map
+                        (\move ->
+                            Main.readSession (snapshot "B[];W[]" move)
+                                |> Maybe.map (Tuple.second >> .record >> List.length)
+                        )
+                    |> Expect.equal [ Just 0, Just 2 ]
+        , test "Missing, malformed or invalid-board sessions are ignored" <|
+            \_ ->
+                [ Encode.null
+                , Encode.string "bad"
+                , snapshot "invalid" 0
+                , snapshot "(;FF[9071]GM[9071]SZ[0])" 0
+                ]
+                    |> List.map (Main.readSession >> Maybe.map (Tuple.second >> .record))
+                    |> Expect.equal [ Nothing, Nothing, Nothing, Nothing ]
         , test "Download includes all moves and root metadata" <|
             \_ ->
                 let
@@ -73,3 +102,8 @@ tests =
                         , Selector.attribute (HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord record)))
                         ]
         ]
+
+
+snapshot : String -> Int -> Encode.Value
+snapshot sgf move =
+    Encode.object [ ( "sgf", Encode.string sgf ), ( "move", Encode.int move ) ]
