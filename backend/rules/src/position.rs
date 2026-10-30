@@ -93,7 +93,8 @@ impl Position {
         }
     }
 
-    fn can_place(&self, spot: Spot) -> bool {
+    /// Check board bounds and overlap only, not captures or suicide.
+    pub fn can_place(&self, spot: Spot) -> bool {
         self.board.contains(spot)
             && self
                 .stones
@@ -101,7 +102,8 @@ impl Position {
                 .all(|stone| !self.board.overlaps(spot, stone.spot))
     }
 
-    fn groups(&self, color: Color) -> Vec<Vec<usize>> {
+    /// Same-color connected groups, expressed as indices into `stones()`.
+    pub fn groups(&self, color: Color) -> Vec<Vec<usize>> {
         let mut groups = Vec::new();
         let mut seen = vec![false; self.stones.len()];
 

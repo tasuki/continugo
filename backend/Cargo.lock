@@ -3,5 +3,12 @@
 version = 4
 
 [[package]]
+name = "continugo-analysis"
+version = "0.1.0"
+dependencies = [
+ "continugo-rules",
+]
+
+[[package]]
 name = "continugo-rules"
 version = "0.1.0"
