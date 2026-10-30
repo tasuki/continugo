@@ -1,8 +1,13 @@
 //! Positions, stones, and exact placement rules, independent of turn order.
 //! Placements return a new position or `None`, leaving the original unchanged.
-//! Groups and liberties are recomputed directly, without neighbour caches.
+//! Groups are recomputed directly; liberties use exact integer row intervals.
 
-use crate::{Board, COORD_RANGE};
+use crate::Board;
+use std::time::Instant;
+
+mod liberties;
+mod profile;
+pub use profile::PlayProfile;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Spot {
@@ -77,20 +82,62 @@ impl Position {
     }
 
     pub fn play(&self, stone: Stone) -> Option<Self> {
-        if !self.can_place(stone.spot) {
-            return None;
+        self.play_inner::<false>(stone, &mut PlayProfile::default(), Self::has_liberty)
+    }
+
+    pub fn play_profiled(&self, stone: Stone, profile: &mut PlayProfile) -> Option<Self> {
+        self.play_inner::<true>(stone, profile, Self::has_liberty)
+    }
+
+    /// Original exhaustive liberty search for differential tests and benchmarks.
+    #[cfg(any(test, feature = "reference"))]
+    pub fn play_reference(&self, stone: Stone) -> Option<Self> {
+        self.play_inner::<false>(
+            stone,
+            &mut PlayProfile::default(),
+            Self::has_liberty_reference,
+        )
+    }
+
+    #[cfg(any(test, feature = "reference"))]
+    pub fn play_reference_profiled(&self, stone: Stone, profile: &mut PlayProfile) -> Option<Self> {
+        self.play_inner::<true>(stone, profile, Self::has_liberty_reference)
+    }
+
+    fn play_inner<const PROFILE: bool>(
+        &self,
+        stone: Stone,
+        profile: &mut PlayProfile,
+        has_liberty: impl Fn(&Self, Spot) -> bool + Copy,
+    ) -> Option<Self> {
+        let total_started = PROFILE.then(Instant::now);
+        let started = PROFILE.then(Instant::now);
+        let possible = self.can_place(stone.spot);
+        if let Some(started) = started {
+            profile.calls += 1;
+            profile.geometry_seconds += started.elapsed().as_secs_f64();
         }
-
-        let mut next = self.clone();
-        next.stones.push(stone);
-        next.capture_groups_without_liberties(stone.color.other());
-        next.capture_groups_without_liberties(stone.color);
-
-        if next.stones.contains(&stone) {
-            Some(next)
+        let result = if possible {
+            let started = PROFILE.then(Instant::now);
+            let mut next = self.clone();
+            next.stones.push(stone);
+            if let Some(started) = started {
+                profile.cloning_seconds += started.elapsed().as_secs_f64();
+            }
+            next.capture_groups_without_liberties::<PROFILE>(
+                stone.color.other(),
+                profile,
+                has_liberty,
+            );
+            next.capture_groups_without_liberties::<PROFILE>(stone.color, profile, has_liberty);
+            next.stones.contains(&stone).then_some(next)
         } else {
             None
+        };
+        if let Some(started) = total_started {
+            profile.total_seconds += started.elapsed().as_secs_f64();
         }
+        result
     }
 
     /// Check board bounds and overlap only, not captures or suicide.
@@ -131,53 +178,41 @@ impl Position {
         groups
     }
 
-    fn capture_groups_without_liberties(&mut self, color: Color) {
+    fn capture_groups_without_liberties<const PROFILE: bool>(
+        &mut self,
+        color: Color,
+        profile: &mut PlayProfile,
+        has_liberty: impl Fn(&Self, Spot) -> bool,
+    ) {
+        let started = PROFILE.then(Instant::now);
+        let groups = self.groups(color);
+        if let Some(started) = started {
+            profile.group_builds += 1;
+            profile.groups_seconds += started.elapsed().as_secs_f64();
+        }
+        let started = PROFILE.then(Instant::now);
         let mut dead = Vec::new();
-        for group in self.groups(color) {
-            if !group
-                .iter()
-                .any(|&index| self.has_liberty(self.stones[index].spot))
-            {
+        for group in groups {
+            if !group.iter().any(|&index| {
+                if PROFILE {
+                    profile.liberty_queries += 1;
+                }
+                has_liberty(self, self.stones[index].spot)
+            }) {
                 for index in group {
                     dead.push(self.stones[index]);
                 }
             }
         }
+        if let Some(started) = started {
+            profile.liberties_seconds += started.elapsed().as_secs_f64();
+        }
+        let started = PROFILE.then(Instant::now);
         // Determine all dead groups before removing any: captures are simultaneous.
         self.stones.retain(|stone| !dead.contains(stone));
-    }
-
-    fn has_liberty(&self, spot: Spot) -> bool {
-        let radius = self.board.stone_radius();
-        let diameter = self.board.diameter();
-        let diameter_squared = i64::from(diameter).pow(2);
-        for (dx, dy) in [(-diameter, 0), (0, -diameter), (0, diameter), (diameter, 0)] {
-            if self.can_place(Spot {
-                x: spot.x + dx,
-                y: spot.y + dy,
-            }) {
-                return true;
-            }
+        if let Some(started) = started {
+            profile.removal_seconds += started.elapsed().as_secs_f64();
         }
-
-        // Search the integer adjacency ring exactly, including touching spots.
-        let reach = 2 * diameter;
-        let left = (spot.x - reach).max(radius);
-        let right = (spot.x + reach).min(COORD_RANGE - radius);
-        let top = (spot.y - reach).max(radius);
-        let bottom = (spot.y + reach).min(COORD_RANGE - radius);
-        for y in top..=bottom {
-            for x in left..=right {
-                let candidate = Spot { x, y };
-                let distance = spot.distance_squared(candidate);
-                if (diameter_squared..2 * diameter_squared).contains(&distance)
-                    && self.can_place(candidate)
-                {
-                    return true;
-                }
-            }
-        }
-        false
     }
 }
 
