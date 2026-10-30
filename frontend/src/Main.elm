@@ -932,6 +932,34 @@ viewNewGames error =
         ]
 
 
+viewMoveNumber : List Play -> H.Html msg
+viewMoveNumber record =
+    let
+        number =
+            String.fromInt (List.length record)
+
+        coordinates =
+            case List.head record |> Maybe.map .move of
+                Just (Place stone) ->
+                    Sgf.encodePlay { color = stone.color, move = Place stone }
+                        |> String.slice 2 6
+
+                Just Pass ->
+                    "pass"
+
+                Nothing ->
+                    "No moves yet"
+    in
+    H.div [ HA.class "item" ]
+        [ H.div
+            [ HA.id "move-number"
+            , HA.class "icon"
+            , HA.attribute "aria-label" ("Move " ++ number ++ ": " ++ coordinates)
+            ]
+            [ H.text number, H.span [ HA.class "tooltip" ] [ H.text (" " ++ coordinates) ] ]
+        ]
+
+
 viewDownload : List Sgf.Property -> List Play -> H.Html msg
 viewDownload root record =
     H.div [ HA.class "item" ]
@@ -1032,6 +1060,7 @@ view model =
                     ]
                     [ H.text "o", H.span [ HA.class "tooltip" ] [ H.text " analysis" ] ]
                 ]
+            , lazy viewMoveNumber model.game.record
             , menuLink Prev "‹" "prev"
             , menuLink Next "›" "next"
             , lazy2 viewDownload model.sgfRoot model.record

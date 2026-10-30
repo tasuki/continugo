@@ -57,6 +57,26 @@ tests =
                             , after.onMove
                             , Game.isFinished after
                             )
+        , describe "Current move badge"
+            ([ ( 0, "No moves yet" ), ( 1, "bWdS" ), ( 2, "pass" ) ]
+                |> List.map
+                    (\( move, coordinates ) ->
+                        test ("Shows move " ++ String.fromInt move ++ " and its coordinates") <|
+                            \_ ->
+                                let
+                                    game =
+                                        Main.gameAt Board.default move [ createPlay Black (Spot 100 200), createPass White ]
+                                in
+                                Main.viewMoveNumber game.record
+                                    |> Query.fromHtml
+                                    |> Expect.all
+                                        [ Query.find [ Selector.id "move-number" ]
+                                            >> Query.has [ Selector.text (String.fromInt move) ]
+                                        , Query.find [ Selector.class "tooltip" ]
+                                            >> Query.has [ Selector.text coordinates ]
+                                        ]
+                    )
+            )
         , test "A saved session restores its board, metadata, cursor and future moves" <|
             \_ ->
                 Main.readSession (snapshot "(;FF[9071]GM[9071]SZ[19]PB[Alice];B[bbbb];W[])" 1)

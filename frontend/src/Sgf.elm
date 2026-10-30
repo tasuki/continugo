@@ -1,4 +1,4 @@
-module Sgf exposing (Property, Record, boardFromRoot, decode, decodePlay, decodeRecord, empty, encode, encodeRecord, onBoard)
+module Sgf exposing (Property, Record, boardFromRoot, decode, decodePlay, decodeRecord, empty, encode, encodePlay, encodeRecord, onBoard)
 
 {-| Single-sequence ContinuGo SGF, with a move-free FF[9071]GM[9071] root.
 Coordinates use two base-52 digits per axis. Variations are not supported.
