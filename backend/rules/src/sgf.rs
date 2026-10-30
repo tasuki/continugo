@@ -18,7 +18,7 @@
 //! # Ok::<(), String>(())
 //! ```
 
-use crate::{Color, Play, Spot, Stone};
+use crate::{Board, Color, Play, Spot, Stone, territory::Outcome};
 
 const ALPHABET: &[u8; 52] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -220,6 +220,25 @@ impl Parser<'_> {
             }
         }
         Err("Unterminated SGF property value".into())
+    }
+}
+
+/// Format an authoritative scoring outcome for `RE`. Margins use stone-disc
+/// areas rounded to one decimal, as in the main viewer. A tiny win retains its
+/// winner prefix even when the displayed margin rounds to 0.0.
+/// Resignations can be represented directly as `RE[B+R]` / `RE[W+R]`.
+pub fn format_result(board: Board, outcome: Outcome) -> String {
+    match outcome {
+        Outcome::Draw => "0".into(),
+        Outcome::Win(color, margin) => {
+            let stone_area = std::f64::consts::PI * f64::from(board.stone_radius()).powi(2);
+            let winner = match color {
+                Color::Black => "B",
+                Color::White => "W",
+            };
+            let points = (margin / stone_area * 10.0).round() / 10.0;
+            format!("{winner}+{points:.1}")
+        }
     }
 }
 
@@ -452,6 +471,30 @@ mod tests {
         assert_eq!(
             decode("B[bbbb];invalid;W[mmmm]"),
             Err("Invalid SGF entry 2: invalid".into())
+        );
+    }
+
+    #[test]
+    fn scored_results_use_one_decimal_and_preserve_the_winner() {
+        let board = Board::default();
+        let stone_area = std::f64::consts::PI * f64::from(board.stone_radius()).powi(2);
+        assert_eq!(format_result(board, Outcome::Draw), "0");
+        for (color, winner) in [(Color::Black, "B"), (Color::White, "W")] {
+            for (points, displayed) in [
+                (6.1, "6.1"),
+                (6.14, "6.1"),
+                (6.16, "6.2"),
+                (6.0, "6.0"),
+                (0.00000001, "0.0"),
+            ] {
+                let text = format_result(board, Outcome::Win(color, points * stone_area));
+                assert_eq!(text, format!("{winner}+{displayed}"));
+            }
+        }
+        let resigned = decode_record("(;FF[9071]GM[9071]PB[random]PW[mcts]RE[W+R];B[])").unwrap();
+        assert_eq!(
+            decode_record(&encode_record(&resigned).unwrap()),
+            Ok(resigned)
         );
     }
 
