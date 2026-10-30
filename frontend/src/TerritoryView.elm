@@ -1,26 +1,26 @@
 module TerritoryView exposing (formatArea, resultString, view)
 
-import Rules.Board exposing (stoneRadius)
+import Rules.Board as Board exposing (Board)
 import Rules.Position exposing (Color(..), Stones)
 import Rules.Territory as Territory exposing (Areas, Outcome(..))
 import Svg exposing (Svg)
 import Svg.Attributes as SA
 
 
-stoneArea : Float
-stoneArea =
-    pi * toFloat stoneRadius ^ 2
+stoneArea : Board -> Float
+stoneArea board =
+    pi * toFloat (Board.radius board) ^ 2
 
 
 {-| Express board area in stone-disc areas, to one decimal place.
 -}
-formatArea : Float -> String
-formatArea area =
-    String.fromFloat (toFloat (round (area / stoneArea * 10)) / 10)
+formatArea : Board -> Float -> String
+formatArea board area =
+    String.fromFloat (toFloat (round (area / stoneArea board * 10)) / 10)
 
 
-resultString : Areas -> String
-resultString territory =
+resultString : Board -> Areas -> String
+resultString board territory =
     case Territory.result territory of
         Draw ->
             "jigo"
@@ -28,11 +28,11 @@ resultString territory =
         Win color margin ->
             let
                 displayedMargin =
-                    if margin / stoneArea < 0.1 then
+                    if margin / stoneArea board < 0.1 then
                         "<0.1"
 
                     else
-                        formatArea margin
+                        formatArea board margin
 
                 prefix =
                     case color of

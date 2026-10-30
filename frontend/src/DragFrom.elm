@@ -3,6 +3,7 @@ module DragFrom exposing (..)
 import BoardGeometry exposing (adjacentDistance, distance)
 import List.Extra
 import Placement
+import Rules.Board exposing (Board)
 import Rules.Position exposing (..)
 
 
@@ -12,12 +13,12 @@ type DragFrom
     | DragStone Stone
 
 
-getDragFrom : Stones -> Color -> Spot -> DragFrom
-getDragFrom stones onMove coords =
+getDragFrom : Board -> Stones -> Color -> Spot -> DragFrom
+getDragFrom board stones onMove coords =
     let
         isOverOwn : Stone -> Bool
         isOverOwn s =
-            s.color == onMove && isWithinStone s.spot coords
+            s.color == onMove && isWithinStoneOn board s.spot coords
 
         maybeOverStone : Maybe Stone
         maybeOverStone =
@@ -31,20 +32,23 @@ getDragFrom stones onMove coords =
             DragSpot coords
 
 
-desiredCenter : Spot -> Spot -> Spot
-desiredCenter from to =
+desiredCenter : Board -> Spot -> Spot -> Spot
+desiredCenter board from to =
     let
+        reach =
+            adjacentDistance board
+
         dragDistance =
             distance to from
     in
-    if dragDistance < adjacentDistance then
+    if dragDistance < reach then
         to
 
     else
         let
             ratio : Float
             ratio =
-                adjacentDistance / dragDistance
+                reach / dragDistance
 
             dx =
                 toFloat (to.x - from.x)
@@ -57,22 +61,22 @@ desiredCenter from to =
         }
 
 
-findDragged : Stones -> Color -> Stone -> Spot -> Stone
-findDragged stones onMove draggedFrom draggedTo =
-    findDraggedSpot (List.map .spot (stoneList stones)) draggedFrom.spot draggedTo
-        |> Maybe.withDefault (desiredCenter draggedFrom.spot draggedTo)
+findDragged : Board -> Stones -> Color -> Stone -> Spot -> Stone
+findDragged board stones onMove draggedFrom draggedTo =
+    findDraggedSpot board (List.map .spot (stoneList stones)) draggedFrom.spot draggedTo
+        |> Maybe.withDefault (desiredCenter board draggedFrom.spot draggedTo)
         |> createStone onMove
 
 
 {-| Geometry only: analysis circles obstruct placement just like real stones.
 Unlike a stone, a circle has no color or move-legality constraints.
 -}
-findDraggedSpot : List Spot -> Spot -> Spot -> Maybe Spot
-findDraggedSpot spotList from draggedTo =
+findDraggedSpot : Board -> List Spot -> Spot -> Spot -> Maybe Spot
+findDraggedSpot board spotList from draggedTo =
     let
         desiredSpot : Spot
         desiredSpot =
-            desiredCenter from draggedTo
+            desiredCenter board from draggedTo
 
         findNearest : Spot -> Maybe ( Spot, Float ) -> Maybe ( Spot, Float )
         findNearest zeroCandidate current =
@@ -92,15 +96,15 @@ findDraggedSpot spotList from draggedTo =
             in
             if
                 (candidateDistance < currentDistance)
-                    && isWithinBoard candidate
-                    && adjacent candidate from
+                    && isWithinBoardOn board candidate
+                    && adjacentOn board candidate from
                     -- the not overlapsAny here is the hot path
-                    && (not <| overlapsAny candidate spotList)
+                    && (not <| overlapsAnyOn board candidate spotList)
             then
                 Just ( candidate, candidateDistance )
 
             else
                 current
     in
-    List.foldl findNearest Nothing Placement.candidateOffsets
+    List.foldl findNearest Nothing (Placement.candidateOffsets board)
         |> Maybe.map Tuple.first

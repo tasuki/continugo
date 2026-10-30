@@ -1,4 +1,4 @@
-module Sgf exposing (Property, Record, decode, decodePlay, decodeRecord, empty, encode, encodeRecord)
+module Sgf exposing (Property, Record, boardFromRoot, decode, decodePlay, decodeRecord, empty, encode, encodeRecord, onBoard)
 
 {-| Single-sequence ContinuGo SGF, with a move-free FF[9071]GM[9071] root.
 Coordinates use two base-52 digits per axis. Variations are not supported.
@@ -10,6 +10,7 @@ Decoding checks syntax, not move legality, and does not apply board metadata.
 
 import List.Extra
 import Regex
+import Rules.Board as Board exposing (Board)
 import Rules.Position exposing (..)
 
 
@@ -25,13 +26,31 @@ type alias Record =
 
 empty : Record
 empty =
+    onBoard Board.default
+
+
+onBoard : Board -> Record
+onBoard board =
     { root =
         [ ( "FF", [ "9071" ] )
         , ( "GM", [ "9071" ] )
-        , ( "SZ", [ "13" ] )
+        , ( "SZ", [ String.fromInt (Board.size board) ] )
         ]
     , plays = []
     }
+
+
+boardFromRoot : List Property -> Maybe Board
+boardFromRoot root =
+    case List.Extra.find (Tuple.first >> (==) "SZ") root of
+        Nothing ->
+            Just Board.default
+
+        Just ( _, [ value ] ) ->
+            String.toInt value |> Maybe.andThen Board.fromSize
+
+        _ ->
+            Nothing
 
 
 lowercaseAlphabet =

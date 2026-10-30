@@ -1,6 +1,6 @@
 module MovePreviewTests exposing (tests)
 
-import Coverage exposing (Point, canCover, geometry, libertyGeometry)
+import Coverage exposing (Point, canCover)
 import Dict
 import Expect
 import Fixtures.Play as PlayFixtures
@@ -16,14 +16,14 @@ tests =
     describe "Move previews"
         [ test "No candidate leaves the position unpreviewed" <|
             \_ ->
-                Expect.equal Nothing (MovePreview.fromCandidates Dict.empty Nothing Nothing)
+                Expect.equal Nothing (MovePreview.fromCandidates Board.default Dict.empty Nothing Nothing)
         , test "A hovered move occupies space and shows its group's liberties" <|
             \_ ->
                 let
                     candidate =
                         createStone Black (Spot 500 500)
                 in
-                case MovePreview.fromCandidates Dict.empty (Just candidate) Nothing of
+                case MovePreview.fromCandidates Board.default Dict.empty (Just candidate) Nothing of
                     Nothing ->
                         Expect.fail "Expected a legal preview"
 
@@ -34,8 +34,8 @@ tests =
                         in
                         Expect.equal ( [ candidate.spot ], False, True )
                             ( preview.group
-                            , canCover (geometry spots) (Point 500 500)
-                            , canCover (libertyGeometry spots preview.group) (Point 600 500)
+                            , canCover (Coverage.geometry Board.default spots) (Point 500 500)
+                            , canCover (Coverage.libertyGeometry Board.default spots preview.group) (Point 600 500)
                             )
         , test "A staged move works without a hover, as after touch release" <|
             \_ ->
@@ -44,7 +44,7 @@ tests =
                         createStone Black (Spot 500 500)
                 in
                 Expect.equal (Just candidate.spot)
-                    (MovePreview.fromCandidates Dict.empty Nothing (Just candidate)
+                    (MovePreview.fromCandidates Board.default Dict.empty Nothing (Just candidate)
                         |> Maybe.map (.stone >> .spot)
                     )
         , test "Staging takes precedence over a different hovered stone" <|
@@ -57,7 +57,7 @@ tests =
                         createStone Black (Spot 700 500)
                 in
                 Expect.equal (Just [ staged.spot ])
-                    (MovePreview.fromCandidates Dict.empty (Just hovered) (Just staged)
+                    (MovePreview.fromCandidates Board.default Dict.empty (Just hovered) (Just staged)
                         |> Maybe.map (.stones >> stoneList >> List.map .spot)
                     )
         , test "The preview highlights the whole connected group" <|
@@ -72,7 +72,7 @@ tests =
                             Dict.empty
                 in
                 Expect.equal (Just [ Spot 400 500, Spot 500 500, Spot 600 500 ])
-                    (MovePreview.fromCandidates stones (Just (createStone Black (Spot 600 500))) Nothing
+                    (MovePreview.fromCandidates Board.default stones (Just (createStone Black (Spot 600 500))) Nothing
                         |> Maybe.map (.group >> List.sortBy .x)
                     )
         , test "An overlapping candidate is rejected rather than moved elsewhere" <|
@@ -82,9 +82,9 @@ tests =
                         Play.replayPlacements [ createPlay Black (Spot 500 500) ] Dict.empty
                 in
                 Expect.equal Nothing
-                    (MovePreview.fromCandidates stones (Just (createStone White (Spot 510 500))) Nothing)
+                    (MovePreview.fromCandidates Board.default stones (Just (createStone White (Spot 510 500))) Nothing)
         , describe "Previewing captures and suicide uses the actual move rules"
-            (PlayFixtures.testsOn Board.default previewCase)
+            (PlayFixtures.tests previewCase)
         ]
 
 
@@ -92,10 +92,10 @@ previewCase : PlayFixtures.Case -> Expect.Expectation
 previewCase tc =
     let
         stones =
-            Play.replayPlacements tc.record Dict.empty
+            Play.replayPlacementsOn tc.board tc.record Dict.empty
 
         expected =
-            Play.playIfLegal stones tc.playStone
+            Play.playIfLegalOn tc.board stones tc.playStone
 
         check preview =
             let
@@ -103,7 +103,7 @@ previewCase tc =
                     List.map .spot (stoneList preview.stones)
 
                 shape =
-                    geometry spots
+                    Coverage.geometry tc.board spots
 
                 capturedOpenings =
                     List.all
@@ -120,7 +120,7 @@ previewCase tc =
                 ]
                 ()
     in
-    case MovePreview.fromCandidates stones (Just tc.playStone) Nothing of
+    case MovePreview.fromCandidates tc.board stones (Just tc.playStone) Nothing of
         Nothing ->
             Expect.equal Nothing expected
 

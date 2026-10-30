@@ -7,6 +7,7 @@ import Html.Attributes as HA
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Main
+import Rules.Board as Board
 import Rules.Game as Game
 import Rules.Position exposing (..)
 import Sgf
@@ -36,7 +37,7 @@ tests =
                 in
                 Expect.equal
                     [ [], [], [ createPass Black ], List.reverse record, List.reverse record ]
-                    (List.map (\move -> (Main.gameAt move record).record) [ -1, 0, 1, 2, 3 ])
+                    (List.map (\move -> (Main.gameAt Board.default move record).record) [ -1, 0, 1, 2, 3 ])
         , test "Moving across a capture reconstructs the stones and turn" <|
             \_ ->
                 PlayFixtures.withCase "capture-four.txt" <|
@@ -46,10 +47,10 @@ tests =
                                 tc.record ++ [ createPlay tc.playStone.color tc.playStone.spot ]
 
                             before =
-                                Main.gameAt (List.length record - 1) record
+                                Main.gameAt tc.board (List.length record - 1) record
 
                             after =
-                                Main.gameAt (List.length record) record
+                                Main.gameAt tc.board (List.length record) record
                         in
                         Expect.equal ( -3, White, False )
                             ( Dict.size after.stones - Dict.size before.stones

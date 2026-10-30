@@ -2,6 +2,7 @@ module MovePreview exposing (Preview, fromCandidates, fromResult)
 
 import Dict
 import Maybe.Extra
+import Rules.Board exposing (Board)
 import Rules.Play as Play
 import Rules.Position exposing (Spot, Stone, Stones, removedStones, stoneKey)
 
@@ -17,12 +18,12 @@ type alias Preview =
 {-| A staged move takes precedence over hovering. Replay the exact candidate,
 not a nearby move, so captures and connections match what would be confirmed.
 -}
-fromCandidates : Stones -> Maybe Stone -> Maybe Stone -> Maybe Preview
-fromCandidates stones hovered staged =
+fromCandidates : Board -> Stones -> Maybe Stone -> Maybe Stone -> Maybe Preview
+fromCandidates board stones hovered staged =
     Maybe.Extra.or staged hovered
         |> Maybe.andThen
             (\candidate ->
-                Play.playIfLegal stones candidate
+                Play.playIfLegalOn board stones candidate
                     |> Maybe.andThen
                         (\result ->
                             Dict.get (stoneKey candidate) result

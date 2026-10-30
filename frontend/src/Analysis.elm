@@ -4,7 +4,7 @@ import Coverage
 import DragFrom
 import List.Extra
 import Placement
-import Rules.Board as Board
+import Rules.Board as Board exposing (Board)
 import Rules.Position exposing (..)
 import StoneView exposing (spotBorderNearestTo, viewLink)
 import Svg exposing (Svg)
@@ -52,28 +52,28 @@ occupied stones model =
     List.map .spot (stoneList stones) ++ model.circles
 
 
-fits : List Spot -> Spot -> Bool
-fits blockers spot =
-    isWithinBoard spot && not (overlapsAny spot blockers)
+fits : Board -> List Spot -> Spot -> Bool
+fits board blockers spot =
+    isWithinBoardOn board spot && not (overlapsAnyOn board spot blockers)
 
 
 {-| Retain annotations across toggles/history, dropping circles occupied by a
 newly played stone. A proposal alone never removes any circles.
 -}
-reconcile : Stones -> Model -> Model
-reconcile stones model =
+reconcile : Board -> Stones -> Model -> Model
+reconcile board stones model =
     let
         cleared =
             cancel model
     in
-    { cleared | circles = List.filter (fits (List.map .spot (stoneList stones))) model.circles }
+    { cleared | circles = List.filter (fits board (List.map .spot (stoneList stones))) model.circles }
 
 
-start : Stones -> Spot -> Model -> Model
-start stones coords model =
+start : Board -> Stones -> Spot -> Model -> Model
+start board stones coords model =
     let
         origin =
-            List.Extra.find (isWithinStone coords) (occupied stones model)
+            List.Extra.find (isWithinStoneOn board coords) (occupied stones model)
 
         repeated =
             Maybe.map Tuple.second model.pendingRemoval == origin && origin /= Nothing
@@ -109,8 +109,8 @@ clearHover model =
             model
 
 
-move : Stones -> Spot -> Model -> Model
-move stones coords model =
+move : Board -> Stones -> Spot -> Model -> Model
+move board stones coords model =
     case model.gesture of
         Nothing ->
             let
@@ -127,12 +127,12 @@ move stones coords model =
                             < 0
                             || coords.y
                             > Board.coordRange
-                            || List.any (isWithinStone coords) blockers
+                            || List.any (isWithinStoneOn board coords) blockers
                     then
                         Nothing
 
                     else
-                        Placement.nearestFreeSpot coords blockers
+                        Placement.nearestFreeSpot board coords blockers
             in
             if preview == model.preview then
                 model
@@ -152,19 +152,19 @@ move stones coords model =
                     else
                         case gesture.origin of
                             Just from ->
-                                DragFrom.findDraggedSpot (occupied stones model) from coords
+                                DragFrom.findDraggedSpot board (occupied stones model) from coords
 
                             Nothing ->
-                                Placement.nearestFreeSpot coords (occupied stones model)
+                                Placement.nearestFreeSpot board coords (occupied stones model)
             in
             { model | gesture = Just { gesture | dragged = dragged }, preview = preview }
 
 
-finish : Stones -> Spot -> Model -> ( Model, Effect )
-finish stones coords previous =
+finish : Board -> Stones -> Spot -> Model -> ( Model, Effect )
+finish board stones coords previous =
     let
         model =
-            move stones coords previous
+            move board stones coords previous
 
         cleared =
             { model | gesture = Nothing, preview = Nothing }
@@ -194,7 +194,7 @@ finish stones coords previous =
                             ( { cleared | serial = serial, pendingRemoval = Just ( serial, origin ) }, ScheduleRemoval serial )
 
                     Nothing ->
-                        case Placement.nearestFreeSpot coords (occupied stones model) of
+                        case Placement.nearestFreeSpot board coords (occupied stones model) of
                             Just spot ->
                                 ( { cleared | circles = model.circles ++ [ spot ] }, NoEffect )
 
@@ -216,8 +216,8 @@ expire serial model =
             model
 
 
-links : Stones -> List Spot -> List ( Spot, Spot )
-links stones circles =
+links : Board -> Stones -> List Spot -> List ( Spot, Spot )
+links board stones circles =
     let
         withRest remaining =
             case remaining of
@@ -225,7 +225,7 @@ links stones circles =
                     []
 
                 circle :: rest ->
-                    List.filter (adjacent circle) (List.map .spot (stoneList stones) ++ rest)
+                    List.filter (adjacentOn board circle) (List.map .spot (stoneList stones) ++ rest)
                         |> List.map (Tuple.pair circle)
                         |> (++) (withRest rest)
     in
@@ -237,13 +237,13 @@ visibleCircles circles preview =
     circles ++ Maybe.withDefault [] (Maybe.map List.singleton preview)
 
 
-viewDeadZones : Stones -> List Spot -> Maybe Spot -> Svg msg
-viewDeadZones stones circles preview =
-    Coverage.viewSpots (List.map .spot (stoneList stones) ++ visibleCircles circles preview)
+viewDeadZones : Board -> Stones -> List Spot -> Maybe Spot -> Svg msg
+viewDeadZones board stones circles preview =
+    Coverage.viewSpots board (List.map .spot (stoneList stones) ++ visibleCircles circles preview)
 
 
-view : Stones -> Model -> Svg msg
-view stones model =
+view : Board -> Stones -> Model -> Svg msg
+view board stones model =
     let
         circles =
             visibleCircles model.circles model.preview
@@ -252,7 +252,7 @@ view stones model =
             Svg.circle
                 [ SA.cx (String.fromInt spot.x)
                 , SA.cy (String.fromInt spot.y)
-                , SA.r (String.fromInt Board.stoneRadius)
+                , SA.r (String.fromInt (Board.radius board))
                 , SA.class
                     ((if Just spot == model.preview then
                         "preview "
@@ -271,9 +271,9 @@ view stones model =
                 []
 
         link ( a, b ) =
-            viewLink ( spotBorderNearestTo b a, spotBorderNearestTo a b )
+            viewLink ( spotBorderNearestTo board b a, spotBorderNearestTo board a b )
     in
     Svg.g [ SA.id "analysis-layer", SA.pointerEvents "none" ]
-        [ Svg.g [ SA.id "analysis-links" ] (List.map link (links stones circles))
+        [ Svg.g [ SA.id "analysis-links" ] (List.map link (links board stones circles))
         , Svg.g [ SA.id "analysis-circles" ] (List.map circle circles)
         ]

@@ -5,14 +5,35 @@ before asking the rules to validate the exact placement.
 -}
 
 import Dict
-import Rules.Board exposing (stoneRadius)
+import Rules.Board as Board exposing (Board)
 import Rules.Play as Play
 import Rules.Position exposing (..)
 
 
-candidateOffsets : List Spot
-candidateOffsets =
+candidateOffsets : Board -> List Spot
+candidateOffsets board =
+    case Dict.get (Board.size board) cachedOffsets of
+        Just offsets ->
+            offsets
+
+        Nothing ->
+            buildOffsets board
+
+
+cachedOffsets : Dict.Dict Int (List Spot)
+cachedOffsets =
+    [ 9, 13, 19 ]
+        |> List.filterMap Board.fromSize
+        |> List.map (\board -> ( Board.size board, buildOffsets board ))
+        |> Dict.fromList
+
+
+buildOffsets : Board -> List Spot
+buildOffsets board =
     let
+        stoneRadius =
+            Board.radius board
+
         range =
             List.range -stoneRadius stoneRadius
     in
@@ -21,8 +42,8 @@ candidateOffsets =
         |> List.sortBy (distanceSquared (Spot 0 0))
 
 
-firstFreeSpot : Spot -> List Spot -> List Spot -> Maybe Spot
-firstFreeSpot origin nearbySpots offsets =
+firstFreeSpot : Board -> Spot -> List Spot -> List Spot -> Maybe Spot
+firstFreeSpot board origin nearbySpots offsets =
     case offsets of
         [] ->
             Nothing
@@ -32,29 +53,29 @@ firstFreeSpot origin nearbySpots offsets =
                 candidate =
                     translate origin offset
             in
-            if isWithinBoard candidate && not (overlapsAny candidate nearbySpots) then
+            if isWithinBoardOn board candidate && not (overlapsAnyOn board candidate nearbySpots) then
                 Just candidate
 
             else
-                firstFreeSpot origin nearbySpots tail
+                firstFreeSpot board origin nearbySpots tail
 
 
-nearestFreeSpot : Spot -> List Spot -> Maybe Spot
-nearestFreeSpot origin nearbySpots =
-    firstFreeSpot origin nearbySpots candidateOffsets
+nearestFreeSpot : Board -> Spot -> List Spot -> Maybe Spot
+nearestFreeSpot board origin nearbySpots =
+    firstFreeSpot board origin nearbySpots (candidateOffsets board)
 
 
-nearbySpot : Stones -> Spot -> Maybe Spot
-nearbySpot stones spot =
-    nearestFreeSpot spot (List.map .spot (nearbyStones stones spot))
+nearbySpot : Board -> Stones -> Spot -> Maybe Spot
+nearbySpot board stones spot =
+    nearestFreeSpot board spot (List.map .spot (nearbyStonesOn board stones spot))
 
 
-playNearby : Color -> Stones -> Spot -> Maybe ( Stones, Stone )
-playNearby color stones spot =
-    nearbySpot stones spot
+playNearby : Board -> Color -> Stones -> Spot -> Maybe ( Stones, Stone )
+playNearby board color stones spot =
+    nearbySpot board stones spot
         |> Maybe.andThen
             (\target ->
-                Play.playIfLegal stones (createStone color target)
+                Play.playIfLegalOn board stones (createStone color target)
                     |> Maybe.andThen
                         (\result ->
                             Dict.get ( target.x, target.y ) result

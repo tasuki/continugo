@@ -23,7 +23,7 @@ import Placement
 import PointerInput
 import Process
 import RecordUrl
-import Rules.Board exposing (coordRange, stoneRadius)
+import Rules.Board as Board exposing (Board, coordRange)
 import Rules.Game as Game
 import Rules.Play as Play
 import Rules.Position exposing (..)
@@ -128,7 +128,7 @@ type Msg
     | ToggleAnalysis
     | AnalysisRemovalExpired Int
     | OpenMenu
-    | NewBoard
+    | NewBoard Board
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
 
@@ -156,7 +156,7 @@ handleHover model hoverSpot =
         maybeOverStone : Maybe Stone
         maybeOverStone =
             stoneList model.game.stones
-                |> List.Extra.find (\s -> isWithinStone hoverSpot s.spot)
+                |> List.Extra.find (\s -> isWithinStoneOn model.game.board hoverSpot s.spot)
 
         memberOfHighlighted : Stone -> Bool
         memberOfHighlighted stone =
@@ -203,7 +203,7 @@ handleDrag model draggedFrom draggedTo =
     let
         candidateStone : Stone
         candidateStone =
-            DF.findDragged model.game.stones model.game.onMove draggedFrom draggedTo
+            DF.findDragged model.game.board model.game.stones model.game.onMove draggedFrom draggedTo
 
         ghostStone : Maybe MovePreview.Preview
         ghostStone =
@@ -211,7 +211,7 @@ handleDrag model draggedFrom draggedTo =
                 model.ghostStone
 
             else
-                MovePreview.fromCandidates model.game.stones (Just candidateStone) Nothing
+                MovePreview.fromCandidates model.game.board model.game.stones (Just candidateStone) Nothing
     in
     { model
         | ghostStone = ghostStone
@@ -224,7 +224,7 @@ handleAnalysisFinished : Spot -> Model -> ( Model, Cmd Msg )
 handleAnalysisFinished coords model =
     let
         ( analysis, effect ) =
-            Analysis.finish model.game.stones coords model.analysis
+            Analysis.finish model.game.board model.game.stones coords model.analysis
 
         updated =
             { model | analysis = analysis }
@@ -237,7 +237,7 @@ handleAnalysisFinished coords model =
             ( updated, Process.sleep 300 |> Task.perform (\_ -> AnalysisRemovalExpired serial) )
 
         Analysis.Propose spot ->
-            case MovePreview.fromCandidates model.game.stones (Just (createStone model.game.onMove spot)) Nothing of
+            case MovePreview.fromCandidates model.game.board model.game.stones (Just (createStone model.game.onMove spot)) Nothing of
                 Just preview ->
                     if Game.isFinished model.game then
                         ( { updated | analysis = { analysis | invalid = Just spot } }, Cmd.none )
@@ -252,7 +252,7 @@ handleAnalysisFinished coords model =
 handlePlay : Model -> Spot -> ( Model, Cmd Msg )
 handlePlay model playSpot =
     case
-        Placement.nearbySpot model.game.stones playSpot
+        Placement.nearbySpot model.game.board model.game.stones playSpot
             |> Maybe.andThen (\spot -> Game.play spot model.game |> Maybe.map (Tuple.pair spot))
     of
         Just ( spot, game ) ->
@@ -279,7 +279,7 @@ handlePlay model playSpot =
 
 previewNearbyMove : Spot -> Model -> Maybe MovePreview.Preview
 previewNearbyMove coords model =
-    case Placement.playNearby model.game.onMove model.game.stones coords of
+    case Placement.playNearby model.game.board model.game.onMove model.game.stones coords of
         Nothing ->
             Nothing
 
@@ -301,7 +301,7 @@ previewNearbyMove coords model =
 stagedMoveAt : Spot -> Model -> Maybe MovePreview.Preview
 stagedMoveAt coords model =
     model.stagedMove
-        |> Maybe.Extra.filter (\preview -> isWithinStone coords preview.stone.spot)
+        |> Maybe.Extra.filter (\preview -> isWithinStoneOn model.game.board coords preview.stone.spot)
 
 
 withBoardCoords : PointerInput.Action -> Model -> DocumentCoords -> ( Model, Cmd Msg )
@@ -380,7 +380,7 @@ handleBoardPointer action coords model =
         PointerInput.StartAt _ ->
             if model.showAnalysis then
                 ( { model
-                    | analysis = Analysis.start model.game.stones coords model.analysis
+                    | analysis = Analysis.start model.game.board model.game.stones coords model.analysis
                     , dragFrom = DF.DragSpot coords
                   }
                 , Cmd.none
@@ -388,7 +388,7 @@ handleBoardPointer action coords model =
 
             else
                 ( { model
-                    | dragFrom = DF.getDragFrom model.game.stones model.game.onMove coords
+                    | dragFrom = DF.getDragFrom model.game.board model.game.stones model.game.onMove coords
                     , stagedMove = stagedMoveAt coords model
                   }
                 , Cmd.none
@@ -400,7 +400,7 @@ handleBoardPointer action coords model =
                     { m | lastPointer = Just coords }
             in
             if model.showAnalysis then
-                ( { model | analysis = Analysis.move model.game.stones coords model.analysis } |> setLastPointer, Cmd.none )
+                ( { model | analysis = Analysis.move model.game.board model.game.stones coords model.analysis } |> setLastPointer, Cmd.none )
 
             else
                 ( handleMoved coords model |> setLastPointer, Cmd.none )
@@ -494,7 +494,7 @@ update msg model =
             , Cmd.none
             )
 
-        NewBoard ->
+        NewBoard board ->
             let
                 fresh =
                     emptyModel model.navKey
@@ -503,7 +503,9 @@ update msg model =
                     fresh.analysis
             in
             ( { fresh
-                | pointer = PointerInput.cancel model.pointer
+                | game = Game.onBoard board
+                , sgfRoot = (Sgf.onBoard board).root
+                , pointer = PointerInput.cancel model.pointer
                 , analysis = { analysis | serial = model.analysis.serial }
               }
             , Cmd.none
@@ -544,7 +546,7 @@ update msg model =
                 | showAnalysis = not model.showAnalysis
                 , pointer = PointerInput.cancel model.pointer
                 , showScoring = False
-                , analysis = Analysis.reconcile model.game.stones model.analysis
+                , analysis = Analysis.reconcile model.game.board model.game.stones model.analysis
                 , ghostStone = Nothing
                 , stagedMove = Nothing
                 , highlightedGroup = []
@@ -572,22 +574,27 @@ update msg model =
 restoreFromUrl : Url.Url -> Model -> ( Model, Cmd Msg )
 restoreFromUrl url model =
     let
-        maybeRecord : Maybe Sgf.Record
+        maybeRecord : Maybe ( Board, Sgf.Record )
         maybeRecord =
             RecordUrl.decode url
+                |> Maybe.andThen
+                    (\record ->
+                        Sgf.boardFromRoot record.root
+                            |> Maybe.map (\board -> ( board, record ))
+                    )
 
-        createModel : Sgf.Record -> Model
-        createModel record =
+        createModel : ( Board, Sgf.Record ) -> Model
+        createModel ( board, record ) =
             let
                 game =
-                    Game.fromRecord (List.reverse record.plays)
+                    Game.fromRecordOn board (List.reverse record.plays)
             in
             { model
                 | game = game
                 , record = record.plays
                 , sgfRoot = record.root
                 , pointer = PointerInput.cancel model.pointer
-                , analysis = Analysis.reconcile game.stones model.analysis
+                , analysis = Analysis.reconcile game.board game.stones model.analysis
                 , highlightedGroup = []
                 , ghostStone = Nothing
                 , stagedMove = Nothing
@@ -605,7 +612,7 @@ restoreFromUrl url model =
                         | showScoring = model.showScoring
                         , pointer = PointerInput.cancel model.pointer
                         , showAnalysis = model.showAnalysis
-                        , analysis = Analysis.reconcile Dict.empty model.analysis
+                        , analysis = Analysis.reconcile Board.default Dict.empty model.analysis
                     }
     in
     ( { newModel | showMenu = url.path == "/menu" }, Cmd.none )
@@ -618,16 +625,16 @@ updatePosition model =
     )
 
 
-gameAt : Int -> List Play -> Game.Game
-gameAt move record =
-    Game.fromRecord (List.reverse (List.take move record))
+gameAt : Board -> Int -> List Play -> Game.Game
+gameAt board move record =
+    Game.fromRecordOn board (List.reverse (List.take move record))
 
 
 seek : Int -> Model -> ( Model, Cmd Msg )
 seek move model =
     let
         game =
-            gameAt move model.record
+            gameAt model.game.board move model.record
     in
     updatePosition
         { model
@@ -635,7 +642,7 @@ seek move model =
             , justPlayed = Nothing
             , justRemoved = []
             , pointer = PointerInput.cancel model.pointer
-            , analysis = Analysis.reconcile game.stones model.analysis
+            , analysis = Analysis.reconcile game.board game.stones model.analysis
         }
         |> Tuple.mapFirst cancelBoardGesture
 
@@ -652,17 +659,17 @@ isScoring model =
 {-| Keep the unchanged blur in a separate SVG. Promoting individual SVG groups
 can leave stale mask tiles after pinch zoom; the background needs no masks.
 -}
-viewBackground : Stones -> Svg Msg
-viewBackground stones =
+viewBackground : Board -> Stones -> Svg Msg
+viewBackground board stones =
     Svg.svg [ SA.id "board-background", SA.viewBox boardViewBox ]
         [ Svg.defs []
             [ Svg.filter [ SA.id "blur-filter" ]
                 [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
             ]
-        , lazy3 Svg.node "g" [ SA.id "lines" ] <| BoardView.viewLines
-        , lazy3 Svg.node "g" [ SA.id "stars" ] <| BoardView.viewStars
+        , lazy3 Svg.node "g" [ SA.id "lines" ] <| BoardView.viewLines board
+        , lazy3 Svg.node "g" [ SA.id "stars" ] <| BoardView.viewStars board
         , lazy3 Svg.Keyed.node "g" [ SA.id "hide-lines", SA.filter "url(#blur-filter)" ] <|
-            List.map viewKeyedLineCover (stoneList stones)
+            List.map (viewKeyedLineCover board) (stoneList stones)
         ]
 
 
@@ -671,17 +678,31 @@ boardViewBox =
     "0 0 " ++ String.fromInt coordRange ++ " " ++ String.fromInt coordRange
 
 
+type PositionMode
+    = Normal
+    | Staged
+    | Scoring
+
+
 viewSvg : Model -> Svg Msg
 viewSvg model =
     Svg.svg [ SA.id "board-position", SA.viewBox boardViewBox ]
         [ lazy8 viewPosition
+            model.game.board
             model.game.stones
             (Maybe.Extra.or model.stagedMove model.ghostStone)
             model.highlightedGroup
             model.justPlayed
             model.justRemoved
-            (isScoring model)
-            (Maybe.Extra.isJust model.stagedMove)
+            (if isScoring model then
+                Scoring
+
+             else if Maybe.Extra.isJust model.stagedMove then
+                Staged
+
+             else
+                Normal
+            )
             (if model.showAnalysis then
                 model.analysis
 
@@ -689,7 +710,7 @@ viewSvg model =
                 Analysis.empty
             )
         , if model.showAnalysis then
-            lazy2 Analysis.view model.game.stones model.analysis
+            lazy3 Analysis.view model.game.board model.game.stones model.analysis
 
           else
             Svg.g [] []
@@ -699,9 +720,12 @@ viewSvg model =
 {-| Pointer coordinates and drag bookkeeping do not change the position. Keep
 this whole subtree lazy so those updates cannot rebuild previews or SVG masks.
 -}
-viewPosition : Stones -> Maybe MovePreview.Preview -> List Spot -> Maybe Spot -> List Stone -> Bool -> Bool -> Analysis.Model -> Svg Msg
-viewPosition stones candidate group justPlayed justRemoved scoring staged analysis =
+viewPosition : Board -> Stones -> Maybe MovePreview.Preview -> List Spot -> Maybe Spot -> List Stone -> PositionMode -> Analysis.Model -> Svg Msg
+viewPosition board stones candidate group justPlayed justRemoved mode analysis =
     let
+        scoring =
+            mode == Scoring
+
         preview =
             if scoring then
                 Nothing
@@ -733,43 +757,43 @@ viewPosition stones candidate group justPlayed justRemoved scoring staged analys
             lazy TerritoryView.view stones
 
           else
-            lazy3 Analysis.viewDeadZones previewStones analysis.circles analysis.preview
+            lazy4 Analysis.viewDeadZones board previewStones analysis.circles analysis.preview
         , if scoring then
             Svg.g [] []
 
           else
-            lazy2 Coverage.viewLiberties previewStones highlightedGroup
+            lazy3 Coverage.viewLiberties board previewStones highlightedGroup
         , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
-            List.map viewGhostLink (Maybe.map getStoneLinks previewStone |> Maybe.withDefault [])
+            List.map (viewGhostLink board) (Maybe.map getStoneLinks previewStone |> Maybe.withDefault [])
         , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|
-            List.filterMap identity [ Maybe.map viewGhostStone previewStone ]
+            List.filterMap identity [ Maybe.map (viewGhostStone board) previewStone ]
         , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
             List.map viewKeyedLink (List.filter survivingLink (getUniqueLinks stones))
         , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
-            (stoneList stones |> List.map (\s -> viewKeyedStone (stoneClass s) s))
+            (stoneList stones |> List.map (\s -> viewKeyedStone board (stoneClass s) s))
         , lazy3 Svg.node "g" [ SA.id "staged-stone" ] <|
-            if staged then
-                List.filterMap identity [ Maybe.map viewStagedStone previewStone ]
+            if mode == Staged then
+                List.filterMap identity [ Maybe.map (viewStagedStone board) previewStone ]
 
             else
                 []
         , lazy3 Svg.node "g" [ SA.id "capture-preview", SA.pointerEvents "none" ] <|
-            List.map viewCapturePreview (Maybe.map .captured preview |> Maybe.withDefault [])
+            List.map (viewCapturePreview board) (Maybe.map .captured preview |> Maybe.withDefault [])
         , lazy3 Svg.node "g" [ SA.id "removed-stones" ] <|
-            (justRemoved |> List.map (viewStone "removed"))
+            (justRemoved |> List.map (viewStone board "removed"))
         , lazy3 Svg.node "g" [ SA.id "highlights" ] <|
             (highlightedGroup
                 |> List.filter (\spot -> Just spot /= Maybe.map .spot previewStone)
-                |> List.map viewHighlight
+                |> List.map (viewHighlight board)
             )
         ]
 
 
-viewCapturePreview : Stone -> Svg msg
-viewCapturePreview { spot } =
+viewCapturePreview : Board -> Stone -> Svg msg
+viewCapturePreview board { spot } =
     let
         offset =
-            stoneRadius // 2
+            Board.radius board // 2
     in
     Svg.g []
         [ viewLink ( Spot (spot.x - offset) (spot.y - offset), Spot (spot.x + offset) (spot.y + offset) )
@@ -789,7 +813,16 @@ viewNewGames : H.Html Msg
 viewNewGames =
     H.main_ []
         [ H.h1 [] [ H.text "ContinuGo" ]
-        , H.button [ HE.onClick NewBoard ] [ H.text "Open board" ]
+        , H.p [] [ H.text "New game" ]
+        , H.div []
+            ([ 9, 13, 19 ]
+                |> List.filterMap Board.fromSize
+                |> List.map
+                    (\board ->
+                        H.button [ HE.onClick (NewBoard board) ]
+                            [ H.text (String.fromInt (Board.size board) ++ "×" ++ String.fromInt (Board.size board)) ]
+                    )
+            )
         ]
 
 
@@ -825,9 +858,9 @@ view model =
                         Territory.areas model.game.stones
                 in
                 H.div [ HA.id "score" ]
-                    [ H.div [ HA.class "score-result" ] [ H.text (TerritoryView.resultString territory) ]
+                    [ H.div [ HA.class "score-result" ] [ H.text (TerritoryView.resultString model.game.board territory) ]
                     , H.div [ HA.class "score-areas" ]
-                        [ H.text ("Black " ++ TerritoryView.formatArea territory.black ++ " · White " ++ TerritoryView.formatArea territory.white) ]
+                        [ H.text ("Black " ++ TerritoryView.formatArea model.game.board territory.black ++ " · White " ++ TerritoryView.formatArea model.game.board territory.white) ]
                     ]
 
             else
@@ -848,7 +881,7 @@ view model =
                         , HA.classList [ ( "scoring", isScoring model ), ( "analysis", model.showAnalysis ) ]
                         , HE.on "pointerleave" <| Decode.succeed ClearAnalysisHover
                         ]
-                        [ lazy viewBackground model.game.stones
+                        [ lazy2 viewBackground model.game.board model.game.stones
                         , viewSvg model
                         , score
                         ]

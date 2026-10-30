@@ -14,9 +14,9 @@ of adjacency discs around its members. Both displays share the same sweep.
 
 -}
 
-import BoardGeometry exposing (adjacentDistance)
-import Rules.Board exposing (coordRange, stoneRadius)
-import Rules.Position exposing (Spot, Stones, diameter, stoneList)
+import BoardGeometry
+import Rules.Board as Board exposing (Board, coordRange)
+import Rules.Position exposing (Spot, Stones, stoneList)
 import StoneView exposing (spotKey)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
@@ -40,7 +40,8 @@ type alias Line =
 
 
 type alias Geometry =
-    { centers : List Point
+    { board : Board
+    , centers : List Point
     , reach : Maybe (List Point)
     , arcs : List Arc
     , lines : List Line
@@ -48,29 +49,9 @@ type alias Geometry =
     }
 
 
-radius : Float
-radius =
-    toFloat stoneRadius
-
-
-exclusionRadius : Float
-exclusionRadius =
-    toFloat diameter
-
-
 epsilon : Float
 epsilon =
     0.0000001
-
-
-low : Float
-low =
-    radius
-
-
-high : Float
-high =
-    toFloat coordRange - radius
 
 
 distance : Point -> Point -> Float
@@ -78,21 +59,28 @@ distance a b =
     sqrt ((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2)
 
 
-placeable : List Point -> Point -> Bool
-placeable centers p =
-    p.x >= low - epsilon && p.x <= high + epsilon && p.y >= low - epsilon && p.y <= high + epsilon && List.all (\c -> distance c p >= exclusionRadius - epsilon) centers
+placeable : Board -> List Point -> Point -> Bool
+placeable board centers p =
+    let
+        low =
+            toFloat (Board.radius board)
+
+        high =
+            toFloat coordRange - low
+    in
+    p.x >= low - epsilon && p.x <= high + epsilon && p.y >= low - epsilon && p.y <= high + epsilon && List.all (\c -> distance c p >= toFloat (Board.diameter board) - epsilon) centers
 
 
-inReach : Maybe (List Point) -> Point -> Bool
-inReach reach p =
+inReach : Board -> Maybe (List Point) -> Point -> Bool
+inReach board reach p =
     reach
-        |> Maybe.map (List.any (\c -> distance c p < adjacentDistance - epsilon))
+        |> Maybe.map (List.any (\c -> distance c p < BoardGeometry.adjacentDistance board - epsilon))
         |> Maybe.withDefault True
 
 
-validCenter : List Point -> Maybe (List Point) -> Point -> Bool
-validCenter centers reach p =
-    placeable centers p && inReach reach p
+validCenter : Board -> List Point -> Maybe (List Point) -> Point -> Bool
+validCenter board centers reach p =
+    placeable board centers p && inReach board reach p
 
 
 onCircle : { a | center : Point, radius : Float } -> Float -> Point
@@ -145,8 +133,15 @@ circleCrossings a b =
         [ Point (mx - h * uy) (my + h * ux), Point (mx + h * uy) (my - h * ux) ]
 
 
-boardEdges : List Line
-boardEdges =
+boardEdges : Board -> List Line
+boardEdges board =
+    let
+        low =
+            toFloat (Board.radius board)
+
+        high =
+            toFloat coordRange - low
+    in
     [ Line (Point low low) (Point high low)
     , Line (Point high low) (Point high high)
     , Line (Point high high) (Point low high)
@@ -202,17 +197,17 @@ intervals values =
         |> List.filter (\( a, b ) -> b - a > epsilon)
 
 
-geometry : List Spot -> Geometry
-geometry =
-    regionGeometry Nothing
+geometry : Board -> List Spot -> Geometry
+geometry board =
+    regionGeometry board Nothing
 
 
 {-| Restrict possible centres to spots adjacent to at least one group member,
 then expand by a stone radius, just like the deadzone's swept area.
 -}
-libertyGeometry : List Spot -> List Spot -> Geometry
-libertyGeometry stones group =
-    regionGeometry (Just group) stones
+libertyGeometry : Board -> List Spot -> List Spot -> Geometry
+libertyGeometry board stones group =
+    regionGeometry board (Just group) stones
 
 
 toPoint : Spot -> Point
@@ -220,9 +215,15 @@ toPoint p =
     Point (toFloat p.x) (toFloat p.y)
 
 
-regionGeometry : Maybe (List Spot) -> List Spot -> Geometry
-regionGeometry group spots =
+regionGeometry : Board -> Maybe (List Spot) -> List Spot -> Geometry
+regionGeometry board group spots =
     let
+        exclusionRadius =
+            toFloat (Board.diameter board)
+
+        adjacentDistance =
+            BoardGeometry.adjacentDistance board
+
         centers =
             case reach of
                 Nothing ->
@@ -251,7 +252,7 @@ regionGeometry group spots =
 
                 crossings =
                     List.concatMap (circleCrossings c) neighbours
-                        ++ List.concatMap (\edge -> List.map (along edge) (lineCrossings edge c)) boardEdges
+                        ++ List.concatMap (\edge -> List.map (along edge) (lineCrossings edge c)) (boardEdges board)
 
                 arcs =
                     (0 :: pi :: (2 * pi) :: List.map (angleOf c.center) crossings)
@@ -266,14 +267,14 @@ regionGeometry group spots =
                                     -- A nonzero reach arc bounds centres strictly
                                     -- inside adjacency. Keep that limiting sweep,
                                     -- but do not admit isolated boundary points.
-                                    placeable nearbyStones midpoint
+                                    placeable board nearbyStones midpoint
 
                                 else
-                                    validCenter nearbyStones reach midpoint
+                                    validCenter board nearbyStones reach midpoint
                             )
                         |> List.map (\( a, b ) -> Arc c.center c.radius a b)
             in
-            ( arcs, List.filter (validCenter nearbyStones reach) crossings )
+            ( arcs, List.filter (validCenter board nearbyStones reach) crossings )
 
         edgeBoundary edge =
             let
@@ -282,18 +283,19 @@ regionGeometry group spots =
 
                 lines =
                     intervals cuts
-                        |> List.filter (\( a, b ) -> validCenter centers reach (along edge ((a + b) / 2)))
+                        |> List.filter (\( a, b ) -> validCenter board centers reach (along edge ((a + b) / 2)))
                         |> List.map (\( a, b ) -> Line (along edge a) (along edge b))
             in
-            ( lines, List.map (along edge) cuts |> List.filter (validCenter centers reach) )
+            ( lines, List.map (along edge) cuts |> List.filter (validCenter board centers reach) )
 
         circleBoundaries =
             List.map circleBoundary circles
 
         edges =
-            List.map edgeBoundary boardEdges
+            List.map edgeBoundary (boardEdges board)
     in
-    { centers = centers
+    { board = board
+    , centers = centers
     , reach = reach
     , arcs = List.concatMap Tuple.first circleBoundaries
     , lines = List.concatMap Tuple.first edges
@@ -332,9 +334,9 @@ canCover shape p =
                 min (distance p (onCircle arc arc.start)) (distance p (onCircle arc arc.end))
 
         near d =
-            d <= radius + epsilon
+            d <= toFloat (Board.radius shape.board) + epsilon
     in
-    p.x >= 0 && p.x <= toFloat coordRange && p.y >= 0 && p.y <= toFloat coordRange && (validCenter shape.centers shape.reach p || List.any (arcDistance >> near) shape.arcs || List.any (lineDistance >> near) shape.lines || List.any (distance p >> near) shape.points)
+    p.x >= 0 && p.x <= toFloat coordRange && p.y >= 0 && p.y <= toFloat coordRange && (validCenter shape.board shape.centers shape.reach p || List.any (arcDistance >> near) shape.arcs || List.any (lineDistance >> near) shape.lines || List.any (distance p >> near) shape.points)
 
 
 pointString : Point -> String
@@ -352,25 +354,25 @@ circle r fill p =
     Svg.circle [ SA.cx (String.fromFloat p.x), SA.cy (String.fromFloat p.y), SA.r (String.fromFloat r), SA.fill fill ] []
 
 
-view : Stones -> Svg msg
-view stones =
-    viewSpots (List.map .spot (stoneList stones))
+view : Board -> Stones -> Svg msg
+view board stones =
+    viewSpots board (List.map .spot (stoneList stones))
 
 
 {-| Occupancy geometry is colour-independent, including neutral analysis circles.
 -}
-viewSpots : List Spot -> Svg msg
-viewSpots spots =
+viewSpots : Board -> List Spot -> Svg msg
+viewSpots board spots =
     let
         positionKey =
-            List.map spotKey spots |> String.join ""
+            String.fromInt (Board.size board) ++ "/" ++ (List.map spotKey spots |> String.join "")
     in
     -- Browsers can retain a stale image of nested SVG masks when only their
     -- contents change. Replace both masks and their painted rectangle whenever
     -- the occupied positions change, not just when the stone count changes.
     Svg.Keyed.node "g"
         [ SA.id "dead-zones", SA.pointerEvents "none" ]
-        [ ( positionKey, viewGeometry (geometry spots) ) ]
+        [ ( positionKey, viewGeometry (geometry board spots) ) ]
 
 
 {-| Liberty masks only need the group's reach, expanded by a stone radius.
@@ -383,7 +385,7 @@ regionBounds shape =
             Maybe.withDefault [] shape.reach
 
         extent =
-            adjacentDistance + radius
+            BoardGeometry.adjacentDistance shape.board + toFloat (Board.radius shape.board)
 
         lower field =
             List.map (\p -> field p - extent) centers |> List.minimum |> Maybe.withDefault 0 |> max 0
@@ -409,6 +411,21 @@ mask texture. Liberty areas use the positive sweep with a reach mask.
 sweptMasks : Bool -> String -> Geometry -> List (Svg msg)
 sweptMasks inverted name shape =
     let
+        radius =
+            toFloat (Board.radius shape.board)
+
+        exclusionRadius =
+            toFloat (Board.diameter shape.board)
+
+        adjacentDistance =
+            BoardGeometry.adjacentDistance shape.board
+
+        low =
+            radius
+
+        high =
+            toFloat coordRange - radius
+
         foreground =
             if inverted then
                 "black"
@@ -459,7 +476,7 @@ sweptMasks inverted name shape =
                     [ SA.d (String.join " " (List.map arcPath shape.arcs ++ List.map linePath shape.lines))
                     , SA.fill "none"
                     , SA.stroke foreground
-                    , SA.strokeWidth (String.fromInt diameter)
+                    , SA.strokeWidth (String.fromInt (Board.diameter shape.board))
                     , SA.strokeLinecap "round"
                     , SA.strokeLinejoin "round"
                     ]
@@ -477,14 +494,14 @@ viewGeometry shape =
         ]
 
 
-viewLiberties : Stones -> List Spot -> Svg msg
-viewLiberties stones group =
+viewLiberties : Board -> Stones -> List Spot -> Svg msg
+viewLiberties board stones group =
     let
         spots =
             List.map .spot (stoneList stones)
 
         positionKey =
-            (List.map spotKey spots |> String.join "") ++ "/" ++ (List.map spotKey group |> String.join "")
+            String.fromInt (Board.size board) ++ "/" ++ (List.map spotKey spots |> String.join "") ++ "/" ++ (List.map spotKey group |> String.join "")
     in
     Svg.Keyed.node "g"
         [ SA.id "liberties", SA.pointerEvents "none" ]
@@ -494,7 +511,7 @@ viewLiberties stones group =
          else
             let
                 shape =
-                    libertyGeometry spots group
+                    libertyGeometry board spots group
             in
             [ ( positionKey
               , Svg.g []

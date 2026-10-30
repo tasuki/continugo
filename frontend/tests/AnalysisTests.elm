@@ -1,12 +1,13 @@
 module AnalysisTests exposing (tests)
 
 import Analysis exposing (Effect(..))
-import Coverage exposing (Point, canCover, geometry)
+import Coverage exposing (Point, canCover)
 import Dict
 import DragFrom
 import Expect
 import Fixtures.Play as PlayFixtures
 import Fuzz
+import Rules.Board as Board
 import Rules.Play as Play
 import Rules.Position exposing (..)
 import Test exposing (..)
@@ -23,14 +24,14 @@ withCircles circles =
 
 tap : Stones -> Spot -> Analysis.Model -> ( Analysis.Model, Effect )
 tap stones spot model =
-    Analysis.start stones spot model |> Analysis.finish stones spot
+    Analysis.start Board.default stones spot model |> Analysis.finish Board.default stones spot
 
 
 drag : Stones -> Spot -> Spot -> Analysis.Model -> Analysis.Model
 drag stones from to model =
-    Analysis.start stones from model
-        |> Analysis.move stones to
-        |> Analysis.finish stones to
+    Analysis.start Board.default stones from model
+        |> Analysis.move Board.default stones to
+        |> Analysis.finish Board.default stones to
         |> Tuple.first
 
 
@@ -49,7 +50,7 @@ tests =
             \_ ->
                 let
                     coverage circles preview =
-                        geometry (Spot 300 500 :: Analysis.visibleCircles circles preview)
+                        Coverage.geometry Board.default (Spot 300 500 :: Analysis.visibleCircles circles preview)
                             |> (\shape -> List.map (canCover shape) [ Point 300 500, Point 500 500, Point 600 500 ])
                 in
                 Expect.equal
@@ -63,7 +64,7 @@ tests =
                 let
                     model =
                         withCircles [ Spot 500 500 ]
-                            |> Analysis.move Dict.empty (Spot 550 500)
+                            |> Analysis.move Board.default Dict.empty (Spot 550 500)
                 in
                 Expect.equal ( Just (Spot 576 500), [ Spot 500 500 ], Nothing )
                     ( model.preview, model.circles, model.gesture )
@@ -77,7 +78,7 @@ tests =
                         withCircles [ Spot 500 500 ]
                 in
                 [ Spot 350 500, Spot 550 500, Spot 650 500 ]
-                    |> List.map (\spot -> Analysis.move stones spot model |> .preview)
+                    |> List.map (\spot -> Analysis.move Board.default stones spot model |> .preview)
                     |> Expect.equal [ Just (Spot 376 500), Just (Spot 576 500), Just (Spot 624 500) ]
         , test "Hover hides the preview over occupied objects, blocked spots, and outside the board" <|
             \_ ->
@@ -86,10 +87,10 @@ tests =
                         Play.replayPlacements [ createPlay White (Spot 700 500) ] Dict.empty
 
                     model =
-                        withCircles [ Spot 500 500 ] |> Analysis.move stones (Spot 400 400)
+                        withCircles [ Spot 500 500 ] |> Analysis.move Board.default stones (Spot 400 400)
                 in
                 [ Spot 500 500, Spot 700 500, Spot 538 500, Spot -1 500, Spot 1001 500 ]
-                    |> List.map (\spot -> Analysis.move stones spot model |> .preview)
+                    |> List.map (\spot -> Analysis.move Board.default stones spot model |> .preview)
                     |> Expect.equal (List.repeat 5 Nothing)
         , test "Leaving the board clears hover without cancelling pending circle removal" <|
             \_ ->
@@ -97,14 +98,14 @@ tests =
                     model =
                         tap Dict.empty (Spot 500 500) (withCircles [ Spot 500 500 ])
                             |> Tuple.first
-                            |> Analysis.move Dict.empty (Spot 600 500)
+                            |> Analysis.move Board.default Dict.empty (Spot 600 500)
                             |> Analysis.clearHover
                 in
                 Expect.equal ( Nothing, Just ( 1, Spot 500 500 ) ) ( model.preview, model.pendingRemoval )
         , test "Hovering then releasing without a press cannot add a circle" <|
             \_ ->
-                Analysis.move Dict.empty (Spot 500 500) Analysis.empty
-                    |> Analysis.finish Dict.empty (Spot 500 500)
+                Analysis.move Board.default Dict.empty (Spot 500 500) Analysis.empty
+                    |> Analysis.finish Board.default Dict.empty (Spot 500 500)
                     |> Tuple.first
                     |> .circles
                     |> Expect.equal []
@@ -141,11 +142,11 @@ tests =
                 let
                     preview =
                         withCircles [ Spot 500 500 ]
-                            |> Analysis.start Dict.empty (Spot 300 300)
-                            |> Analysis.move Dict.empty (Spot 550 500)
+                            |> Analysis.start Board.default Dict.empty (Spot 300 300)
+                            |> Analysis.move Board.default Dict.empty (Spot 550 500)
 
                     committed =
-                        Analysis.finish Dict.empty (Spot 550 500) preview |> Tuple.first
+                        Analysis.finish Board.default Dict.empty (Spot 550 500) preview |> Tuple.first
                 in
                 Expect.equal ( Just (Spot 576 500), [ Spot 500 500, Spot 576 500 ] )
                     ( preview.preview, committed.circles )
@@ -157,7 +158,7 @@ tests =
                             [ createPlay Black (Spot 400 500), createPlay White (Spot 600 500) ]
                             Dict.empty
                 in
-                Analysis.links stones [ Spot 500 500, Spot 500 600, Spot 800 800 ]
+                Analysis.links Board.default stones [ Spot 500 500, Spot 500 600, Spot 800 800 ]
                     |> List.sortBy (\( a, b ) -> ( a.x, b.x, b.y ))
                     |> Expect.equal
                         [ ( Spot 500 500, Spot 400 500 )
@@ -196,7 +197,7 @@ tests =
                     [ added ] ->
                         Expect.equal True
                             (adjacent added (Spot 500 500)
-                                && Analysis.fits [ Spot 500 500, Spot 650 450, Spot 600 570 ] added
+                                && Analysis.fits Board.default [ Spot 500 500, Spot 650 450, Spot 600 570 ] added
                             )
 
                     _ ->
@@ -210,19 +211,19 @@ tests =
                 Expect.equal model.circles (drag Dict.empty (Spot 500 500) (Spot 900 500) model |> .circles)
         , fuzz2 (Fuzz.intRange -100 1100) (Fuzz.intRange -100 1100) "Dragged candidates always fit and stay connected" <|
             \x y ->
-                case DragFrom.findDraggedSpot [ Spot 500 500, Spot 600 570 ] (Spot 500 500) (Spot x y) of
+                case DragFrom.findDraggedSpot Board.default [ Spot 500 500, Spot 600 570 ] (Spot 500 500) (Spot x y) of
                     Nothing ->
                         Expect.pass
 
                     Just candidate ->
                         Expect.equal True
                             (adjacent candidate (Spot 500 500)
-                                && Analysis.fits [ Spot 500 500, Spot 600 570 ] candidate
+                                && Analysis.fits Board.default [ Spot 500 500, Spot 600 570 ] candidate
                             )
         , test "Small pointer jitter is a tap, not a drag" <|
             \_ ->
-                Analysis.start Dict.empty (Spot 500 500) (withCircles [ Spot 500 500 ])
-                    |> Analysis.finish Dict.empty (Spot 503 502)
+                Analysis.start Board.default Dict.empty (Spot 500 500) (withCircles [ Spot 500 500 ])
+                    |> Analysis.finish Board.default Dict.empty (Spot 503 502)
                     |> Tuple.second
                     |> Expect.equal (ScheduleRemoval 1)
         , test "Single-tap removal waits for its timer" <|
@@ -247,9 +248,9 @@ tests =
             \_ ->
                 tap Dict.empty (Spot 500 500) (withCircles [ Spot 500 500 ])
                     |> Tuple.first
-                    |> Analysis.start Dict.empty (Spot 500 500)
+                    |> Analysis.start Board.default Dict.empty (Spot 500 500)
                     |> Analysis.expire 1
-                    |> Analysis.finish Dict.empty (Spot 500 500)
+                    |> Analysis.finish Board.default Dict.empty (Spot 500 500)
                     |> Tuple.second
                     |> Expect.equal (Propose (Spot 500 500))
         , test "Dragging instead of a second tap extends the circle, not proposes or deletes it" <|
@@ -298,7 +299,7 @@ tests =
                     stones =
                         Play.replayPlacements [ createPlay Black (Spot 500 500) ] Dict.empty
                 in
-                Analysis.reconcile stones (withCircles [ Spot 500 500, Spot 700 500 ])
+                Analysis.reconcile Board.default stones (withCircles [ Spot 500 500, Spot 700 500 ])
                     |> .circles
                     |> Expect.equal [ Spot 700 500 ]
         , test "Analysis allows a physically fitting circle even when playing it would be suicide" <|

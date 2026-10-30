@@ -1,8 +1,8 @@
 module Rules.Board exposing (Board, boardSize, coordRange, default, diameter, fromSize, radius, size, stoneRadius)
 
 {-| The coordinate space is always 1000 units. Positive integer board sizes
-must leave a stone radius of at least one. The frontend currently uses the
-13x13 default; explicit-board rules APIs support other sizes.
+must leave a stone radius of at least one. The default is 13x13; the frontend
+passes its selected board explicitly to geometry and rules.
 -}
 
 

@@ -16,7 +16,7 @@ The [full rules are also available](rules.md), though I doubt you want to read '
 ### How to actually play
 
 - Currently, only taking turns on a single device is implemented.
-- Use **!** to open the menu and start a new game.
+- Use **!** to start a new **9×9**, **13×13**, or **19×19** game.
 - Use **‹ / ›** or the keyboard's left/right arrows to step through the game. Playing from an earlier position replaces the remaining moves.
 - Use **↓** to download the complete game as SGF, regardless of which move you're viewing. Moves no longer change the URL.
 - Tap groups/stones to highlight their liberties.

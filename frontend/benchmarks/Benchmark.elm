@@ -4,6 +4,7 @@ import Coverage
 import Dict
 import Placement
 import Platform
+import Rules.Board as Board
 import Rules.Liberties as Liberties
 import Rules.Play as Play
 import Rules.Position exposing (..)
@@ -70,16 +71,16 @@ benchmark board stone scenario iterations =
                                 |> Maybe.withDefault 0
 
                         "hover" ->
-                            Placement.playNearby Black board (Spot (850 + modBy 30 i) 850)
+                            Placement.playNearby Board.default Black board (Spot (850 + modBy 30 i) 850)
                                 |> Maybe.map (Tuple.first >> Dict.size)
                                 |> Maybe.withDefault 0
 
                         "coverage" ->
-                            Coverage.geometry (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList board))
+                            Coverage.geometry Board.default (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList board))
                                 |> (\g -> List.length g.arcs + List.length g.lines + List.length g.points)
 
                         "liberty-geometry" ->
-                            Coverage.libertyGeometry (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList board)) [ Spot (500 + modBy 30 i) 500 ]
+                            Coverage.libertyGeometry Board.default (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList board)) [ Spot (500 + modBy 30 i) 500 ]
                                 |> (\g -> List.length g.arcs + List.length g.lines + List.length g.points)
 
                         _ ->

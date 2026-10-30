@@ -2,11 +2,16 @@ module PlacementTests exposing (tests)
 
 import Dict
 import Expect
-import Placement exposing (nearestFreeSpot)
-import Rules.Board exposing (stoneRadius)
+import Placement
+import Rules.Board as Board exposing (stoneRadius)
 import Rules.Play as Play
 import Rules.Position exposing (..)
 import Test exposing (..)
+
+
+nearestFreeSpot : Spot -> List Spot -> Maybe Spot
+nearestFreeSpot =
+    Placement.nearestFreeSpot Board.default
 
 
 tests : Test
@@ -29,7 +34,7 @@ tests =
                             |> List.filter (\offset -> floatDistance offset < toFloat stoneRadius)
                             |> List.sortBy floatDistance
                 in
-                Expect.equal previousOffsets Placement.candidateOffsets
+                Expect.equal previousOffsets (Placement.candidateOffsets Board.default)
         , test "Basic: 200, hover 250 => 276" <|
             \_ ->
                 Expect.equal (Just <| Spot 276 200)
@@ -62,6 +67,6 @@ tests =
                 in
                 Expect.equal ( Nothing, Just (Spot 276 200) )
                     ( Play.playIfLegal stones (createStone White intended)
-                    , Placement.playNearby White stones intended |> Maybe.map (Tuple.second >> .spot)
+                    , Placement.playNearby Board.default White stones intended |> Maybe.map (Tuple.second >> .spot)
                     )
         ]

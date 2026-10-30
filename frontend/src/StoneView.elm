@@ -1,11 +1,11 @@
 module StoneView exposing (classJustPlayed, getStoneLinks, getUniqueLinks, spotBorderNearestTo, spotKey, viewGhostLink, viewGhostStone, viewHighlight, viewKeyedLineCover, viewKeyedLink, viewKeyedStone, viewLink, viewStagedStone, viewStone)
 
 import BoardGeometry exposing (distance)
-import Rules.Board exposing (stoneRadius)
+import Rules.Board as Board exposing (Board)
 import Rules.Position exposing (..)
 import Svg exposing (Svg)
 import Svg.Attributes as SA
-import Svg.Lazy exposing (lazy, lazy2)
+import Svg.Lazy exposing (lazy, lazy2, lazy3)
 
 
 getStoneLinks : Stone -> List ( Spot, Spot )
@@ -33,11 +33,11 @@ getUniqueLinks stones =
     List.filter isChosen allLinks
 
 
-spotBorderNearestTo : Spot -> Spot -> Spot
-spotBorderNearestTo otherSpot spot =
+spotBorderNearestTo : Board -> Spot -> Spot -> Spot
+spotBorderNearestTo board otherSpot spot =
     let
         factor =
-            toFloat stoneRadius / distance spot otherSpot
+            toFloat (Board.radius board) / distance spot otherSpot
 
         roundAwayFromZero x =
             if x < 0 then
@@ -52,18 +52,18 @@ spotBorderNearestTo otherSpot spot =
     Spot (coord spot.x otherSpot.x) (coord spot.y otherSpot.y)
 
 
-viewLineCover : Stone -> Svg msg
-viewLineCover { spot } =
+viewLineCover : Board -> Stone -> Svg msg
+viewLineCover board { spot } =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt <| stoneRadius * 7
+        , SA.r <| String.fromInt <| Board.radius board * 7
         ]
         []
 
 
-viewStone : String -> Stone -> Svg msg
-viewStone extraClass { color, spot } =
+viewStone : Board -> String -> Stone -> Svg msg
+viewStone board extraClass { color, spot } =
     let
         class =
             case color of
@@ -76,19 +76,19 @@ viewStone extraClass { color, spot } =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt stoneRadius
+        , SA.r <| String.fromInt (Board.radius board)
         , SA.class class
         , SA.class extraClass
         ]
         []
 
 
-viewHighlight : Spot -> Svg msg
-viewHighlight spot =
+viewHighlight : Board -> Spot -> Svg msg
+viewHighlight board spot =
     Svg.circle
         [ SA.cx <| String.fromInt spot.x
         , SA.cy <| String.fromInt spot.y
-        , SA.r <| String.fromInt stoneRadius
+        , SA.r <| String.fromInt (Board.radius board)
         ]
         []
 
@@ -104,19 +104,19 @@ viewLink ( s1, s2 ) =
         []
 
 
-viewStagedStone : Stone -> Svg msg
-viewStagedStone stone =
-    viewStone "" stone
+viewStagedStone : Board -> Stone -> Svg msg
+viewStagedStone board stone =
+    viewStone board "" stone
 
 
-viewGhostStone : Stone -> Svg msg
-viewGhostStone stone =
-    viewStone "" stone
+viewGhostStone : Board -> Stone -> Svg msg
+viewGhostStone board stone =
+    viewStone board "" stone
 
 
-viewGhostLink : ( Spot, Spot ) -> Svg msg
-viewGhostLink ( ghost, existing ) =
-    viewLink ( spotBorderNearestTo existing ghost, existing )
+viewGhostLink : Board -> ( Spot, Spot ) -> Svg msg
+viewGhostLink board ( ghost, existing ) =
+    viewLink ( spotBorderNearestTo board existing ghost, existing )
 
 
 spotKey : Spot -> String
@@ -124,17 +124,17 @@ spotKey s =
     "-" ++ String.fromInt s.x ++ "-" ++ String.fromInt s.y
 
 
-viewKeyedLineCover : Stone -> ( String, Svg msg )
-viewKeyedLineCover stone =
+viewKeyedLineCover : Board -> Stone -> ( String, Svg msg )
+viewKeyedLineCover board stone =
     ( "hide" ++ spotKey stone.spot
-    , lazy viewLineCover stone
+    , lazy2 viewLineCover board stone
     )
 
 
-viewKeyedStone : String -> Stone -> ( String, Svg msg )
-viewKeyedStone extraClass stone =
+viewKeyedStone : Board -> String -> Stone -> ( String, Svg msg )
+viewKeyedStone board extraClass stone =
     ( "stone" ++ spotKey stone.spot
-    , lazy2 viewStone extraClass stone
+    , lazy3 viewStone board extraClass stone
     )
 
 
