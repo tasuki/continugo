@@ -20,14 +20,17 @@ impl Action {
         self.0
     }
 
+    pub fn spot(self) -> Option<Spot> {
+        (self != Self::PASS).then(|| Spot {
+            x: (self.0 % COORD_RANGE as u32) as i32,
+            y: (self.0 / COORD_RANGE as u32) as i32,
+        })
+    }
+
     pub fn apply(self, game: &Game) -> Result<Game, String> {
-        if self == Self::PASS {
-            game.pass()
-        } else {
-            game.play(Spot {
-                x: (self.0 % COORD_RANGE as u32) as i32,
-                y: (self.0 / COORD_RANGE as u32) as i32,
-            })
+        match self.spot() {
+            Some(spot) => game.play(spot),
+            None => game.pass(),
         }
     }
 }

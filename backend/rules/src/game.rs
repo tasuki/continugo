@@ -18,7 +18,22 @@
 //! # Ok::<(), String>(())
 //! ```
 
+use crate::position::PreparedGroups;
 use crate::{Board, Color, Play, Position, Spot, Stone};
+
+/// Owned immutable snapshot for validating many candidates without stale caches.
+/// Children are ordinary games; preparing a child builds fresh analysis.
+pub struct PreparedGame {
+    game: Game,
+    groups: PreparedGroups,
+}
+
+impl PreparedGame {
+    pub fn play(&self, spot: Spot) -> Result<Game, String> {
+        self.game
+            .play_inner(spot, |stone| self.groups.play(&self.game.position, stone))
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Game {
@@ -56,7 +71,22 @@ impl Game {
         matches!(self.record.as_slice(), [.., Play::Pass(_), Play::Pass(_)])
     }
 
+    pub fn prepare(&self) -> PreparedGame {
+        PreparedGame {
+            game: self.clone(),
+            groups: PreparedGroups::new(&self.position),
+        }
+    }
+
     pub fn play(&self, spot: Spot) -> Result<Self, String> {
+        self.play_inner(spot, |stone| self.position.play(stone))
+    }
+
+    fn play_inner(
+        &self,
+        spot: Spot,
+        validate: impl FnOnce(Stone) -> Option<Position>,
+    ) -> Result<Self, String> {
         if self.is_finished() {
             return Err("Game is finished".into());
         }
@@ -64,9 +94,7 @@ impl Game {
             color: self.on_move(),
             spot,
         };
-        let position = self
-            .position
-            .play(stone)
+        let position = validate(stone)
             .ok_or_else(|| format!("Illegal placement at ({}, {})", spot.x, spot.y))?;
         Ok(self.advance(Play::Place(stone), position))
     }

@@ -41,31 +41,36 @@ fn half_width(rows: &[i32], dy: i32) -> i32 {
     rows.get(dy.unsigned_abs() as usize).copied().unwrap_or(-1)
 }
 
-fn interval_has_gap(mut left: i32, right: i32, blocked: &[(i32, i32)]) -> bool {
+fn first_gap(mut left: i32, right: i32, blocked: &[(i32, i32)]) -> Option<i32> {
     if left > right {
-        return false;
+        return None;
     }
     for &(start, end) in blocked {
         if start > left {
-            return true;
+            return Some(left);
         }
         left = left.max(end + 1);
         if left > right {
-            return false;
+            return None;
         }
     }
-    true
+    Some(left)
 }
 
 impl Position {
     pub(super) fn has_liberty(&self, spot: Spot) -> bool {
+        self.find_liberty(spot).is_some()
+    }
+
+    pub(super) fn find_liberty(&self, spot: Spot) -> Option<Spot> {
         let d = self.board.diameter();
         for (dx, dy) in [(-d, 0), (0, -d), (0, d), (d, 0)] {
-            if self.can_place(Spot {
+            let candidate = Spot {
                 x: spot.x + dx,
                 y: spot.y + dy,
-            }) {
-                return true;
+            };
+            if self.can_place(candidate) {
+                return Some(candidate);
             }
         }
         let rows = rows_on(self.board);
@@ -108,13 +113,13 @@ impl Position {
                 }
             }
             blocked.sort_unstable_by_key(|&(start, _)| start);
-            if interval_has_gap(left, (spot.x - inner).min(high), &blocked)
-                || interval_has_gap((spot.x + inner).max(low), right, &blocked)
+            if let Some(x) = first_gap(left, (spot.x - inner).min(high), &blocked)
+                .or_else(|| first_gap((spot.x + inner).max(low), right, &blocked))
             {
-                return true;
+                return Some(Spot { x, y });
             }
         }
-        false
+        None
     }
 
     // Slow original implementation retained only as a test/benchmark oracle.
@@ -211,11 +216,18 @@ mod tests {
                             }
                         }
                     }
+                    let witness = position.find_liberty(spot);
                     assert_eq!(
-                        position.has_liberty(spot),
+                        witness.is_some(),
                         position.has_liberty_reference(spot),
                         "size={size}, spot={spot:?}, gap={gap}"
                     );
+                    if let Some(liberty) = witness {
+                        assert!(position.can_place(liberty));
+                        let distance = spot.distance_squared(liberty);
+                        let squared = i64::from(d).pow(2);
+                        assert!((squared..2 * squared).contains(&distance));
+                    }
                 }
             }
         }

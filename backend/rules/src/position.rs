@@ -1,12 +1,16 @@
 //! Positions, stones, and exact placement rules, independent of turn order.
 //! Placements return a new position or `None`, leaving the original unchanged.
-//! Groups are recomputed directly; liberties use exact integer row intervals.
+//! Liberties use exact integer row intervals; `prepare` reuses group analysis
+//! and liberty witnesses across candidate placements.
 
 use crate::Board;
 use std::time::Instant;
 
 mod liberties;
+mod prepared;
 mod profile;
+pub(crate) use prepared::PreparedGroups;
+pub use prepared::PreparedPosition;
 pub use profile::PlayProfile;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,6 +83,13 @@ impl Position {
 
     pub fn stones(&self) -> &[Stone] {
         &self.stones
+    }
+
+    pub fn prepare(&self) -> PreparedPosition<'_> {
+        PreparedPosition {
+            position: self,
+            groups: PreparedGroups::new(self),
+        }
     }
 
     pub fn play(&self, stone: Stone) -> Option<Self> {
@@ -215,6 +226,9 @@ impl Position {
         }
     }
 }
+
+#[cfg(test)]
+mod prepared_tests;
 
 #[cfg(test)]
 mod tests {
