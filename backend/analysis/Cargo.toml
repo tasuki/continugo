@@ -4,5 +4,9 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+# Original eye flood fill, only for differential tests and benchmarks.
+reference = []
+
 [dependencies]
 continugo-rules = { path = "../rules" }

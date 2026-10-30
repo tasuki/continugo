@@ -57,19 +57,23 @@ impl GeometricAvailability {
         self.coverage(spot) == Some(0)
     }
 
+    pub(crate) fn matches(&self, position: &Position) -> bool {
+        self.board == position.board()
+            && self
+                .stones
+                .iter()
+                .copied()
+                .eq(position.stones().iter().map(|stone| stone.spot))
+    }
+
     /// Follow the actual resulting position, including every captured or otherwise
     /// removed stone. Passes are no-ops. Board configuration changes rebuild safely.
     pub fn sync(&mut self, position: &Position) {
-        if self.board != position.board() {
-            *self = Self::new(position);
+        if self.matches(position) {
             return;
         }
-        if self
-            .stones
-            .iter()
-            .copied()
-            .eq(position.stones().iter().map(|stone| stone.spot))
-        {
+        if self.board != position.board() {
+            *self = Self::new(position);
             return;
         }
         let removed: Vec<_> = self

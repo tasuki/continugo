@@ -5,4 +5,4 @@ pub mod availability;
 pub mod eyes;
 
 pub use availability::GeometricAvailability;
-pub use eyes::fills_small_eye;
+pub use eyes::{SmallEyeAnalysis, fills_small_eye};
