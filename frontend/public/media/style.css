@@ -15,7 +15,7 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 #menu { position: absolute; left: 0px; top: 0px; z-index: 9; }
 #menu .item { float: left; padding: 1px 0 0 1px; }
 @media screen and (min-aspect-ratio: 1/1) { #menu .item { float: none; } }
-#menu .icon { display: block; cursor: pointer; background-color: #222; color: #fff;
+#menu .icon { display: block; cursor: pointer; background-color: #222; color: #fff; text-decoration: none;
     border-radius: 30px; line-height: 30px; width: 30px; height: 30px; text-align: center; }
 
 #score-toggle, #analysis-toggle { border: 0; padding: 0; font: inherit; line-height: 30px; }

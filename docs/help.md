@@ -16,7 +16,9 @@ The [full rules are also available](rules.md), though I doubt you want to read '
 ### How to actually play
 
 - Currently, only taking turns on a single device is implemented.
-- The url holds the game record - you can bookmark the current position, share it to play by email, use the browser back button to undo, etc.
+- Use **!** to open the menu and start a new game.
+- Use **‹ / ›** or the keyboard's left/right arrows to step through the game. Playing from an earlier position replaces the remaining moves.
+- Use **↓** to download the complete game as SGF, regardless of which move you're viewing. Moves no longer change the URL.
 - Tap groups/stones to highlight their liberties.
 - Drag to stage a move, then tap the staged move to confirm it.
 - Drag from your own stone to place a stone as far as possible while remaining connected.

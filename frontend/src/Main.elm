@@ -4,6 +4,7 @@ import Analysis
 import BoardView
 import Browser
 import Browser.Dom as BD
+import Browser.Events
 import Browser.Navigation as Nav
 import Coverage
 import Dict
@@ -43,7 +44,13 @@ main =
     Browser.application
         { init = init
         , update = update
-        , subscriptions = \_ -> Sub.none
+        , subscriptions =
+            \model ->
+                if model.showMenu || model.showHelp then
+                    Sub.none
+
+                else
+                    Browser.Events.onKeyDown replayKey
         , view = view
         , onUrlRequest = LinkClicked
         , onUrlChange = UrlChanged
@@ -54,8 +61,11 @@ main =
 -- MODEL
 
 
+{-| record is the complete chronological game; game is its displayed prefix.
+-}
 type alias Model =
     { game : Game.Game
+    , record : List Play
     , sgfRoot : List Sgf.Property
     , ghostStone : Maybe MovePreview.Preview
     , highlightedGroup : List Spot
@@ -65,6 +75,7 @@ type alias Model =
     , pointer : PointerInput.State
     , stagedMove : Maybe MovePreview.Preview
     , lastPointer : Maybe Spot
+    , showMenu : Bool
     , showHelp : Bool
     , showScoring : Bool
     , showAnalysis : Bool
@@ -76,6 +87,7 @@ type alias Model =
 emptyModel : Nav.Key -> Model
 emptyModel navKey =
     { game = Game.empty
+    , record = []
     , sgfRoot = Sgf.empty.root
     , ghostStone = Nothing
     , highlightedGroup = []
@@ -85,6 +97,7 @@ emptyModel navKey =
     , pointer = PointerInput.empty
     , stagedMove = Nothing
     , lastPointer = Nothing
+    , showMenu = False
     , showHelp = False
     , showScoring = False
     , showAnalysis = False
@@ -108,15 +121,33 @@ type Msg
     | ClearAnalysisHover
     | PassTurn
     | ClearCaptureAnimation
-    | Undo
-    | Redo
+    | Prev
+    | Next
     | ToggleHelp
     | ToggleScoring
     | ToggleAnalysis
     | AnalysisRemovalExpired Int
-    | NewGame
+    | OpenMenu
+    | NewBoard
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
+
+
+replayKey : Decode.Decoder Msg
+replayKey =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\key ->
+                case key of
+                    "ArrowLeft" ->
+                        Decode.succeed Prev
+
+                    "ArrowRight" ->
+                        Decode.succeed Next
+
+                    _ ->
+                        Decode.fail "Not a replay key"
+            )
 
 
 handleHover : Model -> Spot -> Model
@@ -229,6 +260,7 @@ handlePlay model playSpot =
                 newModel =
                     { model
                         | game = game
+                        , record = List.reverse game.record
                         , justPlayed = Just spot
                         , justRemoved = removedStones model.game.stones game.stones
                         , highlightedGroup = []
@@ -237,10 +269,7 @@ handlePlay model playSpot =
                     }
             in
             ( newModel
-            , Cmd.batch
-                [ pushRecordUrl newModel
-                , Process.sleep 500 |> Task.perform (\_ -> ClearCaptureAnimation)
-                ]
+            , Process.sleep 500 |> Task.perform (\_ -> ClearCaptureAnimation)
             )
 
         _ ->
@@ -443,7 +472,7 @@ update msg model =
             else
                 case Game.pass model.game of
                     Just game ->
-                        updatePosition { model | game = game }
+                        updatePosition { model | game = game, record = List.reverse game.record }
 
                     Nothing ->
                         ( model, Cmd.none )
@@ -453,17 +482,19 @@ update msg model =
             , Cmd.none
             )
 
-        Undo ->
-            ( model
-            , Nav.back model.navKey 1
+        Prev ->
+            seek (List.length model.game.record - 1) model
+
+        Next ->
+            seek (List.length model.game.record + 1) model
+
+        OpenMenu ->
+            ( { model | showMenu = True, pointer = PointerInput.cancel model.pointer }
+                |> cancelBoardGesture
+            , Cmd.none
             )
 
-        Redo ->
-            ( model
-            , Nav.forward model.navKey 1
-            )
-
-        NewGame ->
+        NewBoard ->
             let
                 fresh =
                     emptyModel model.navKey
@@ -471,11 +502,18 @@ update msg model =
                 analysis =
                     fresh.analysis
             in
-            updatePosition
-                { fresh
-                    | analysis = { analysis | serial = model.analysis.serial }
-                    , pointer = PointerInput.cancel model.pointer
-                }
+            ( { fresh
+                | pointer = PointerInput.cancel model.pointer
+                , analysis = { analysis | serial = model.analysis.serial }
+              }
+            , Cmd.none
+            )
+
+        LinkClicked (Browser.Internal url) ->
+            ( model, Nav.pushUrl model.navKey (Url.toString url) )
+
+        LinkClicked (Browser.External href) ->
+            ( model, Nav.load href )
 
         ToggleHelp ->
             ( { model
@@ -546,6 +584,7 @@ restoreFromUrl url model =
             in
             { model
                 | game = game
+                , record = record.plays
                 , sgfRoot = record.root
                 , pointer = PointerInput.cancel model.pointer
                 , analysis = Analysis.reconcile game.stones model.analysis
@@ -569,20 +608,36 @@ restoreFromUrl url model =
                         , analysis = Analysis.reconcile Dict.empty model.analysis
                     }
     in
-    ( newModel, Cmd.none )
+    ( { newModel | showMenu = url.path == "/menu" }, Cmd.none )
 
 
 updatePosition : Model -> ( Model, Cmd Msg )
 updatePosition model =
     ( { model | ghostStone = Nothing, stagedMove = Nothing, highlightedGroup = [] }
-    , pushRecordUrl model
+    , Cmd.none
     )
 
 
-pushRecordUrl : Model -> Cmd msg
-pushRecordUrl model =
-    Nav.pushUrl model.navKey <|
-        RecordUrl.encode { root = model.sgfRoot, plays = List.reverse model.game.record }
+gameAt : Int -> List Play -> Game.Game
+gameAt move record =
+    Game.fromRecord (List.reverse (List.take move record))
+
+
+seek : Int -> Model -> ( Model, Cmd Msg )
+seek move model =
+    let
+        game =
+            gameAt move model.record
+    in
+    updatePosition
+        { model
+            | game = game
+            , justPlayed = Nothing
+            , justRemoved = []
+            , pointer = PointerInput.cancel model.pointer
+            , analysis = Analysis.reconcile game.stones model.analysis
+        }
+        |> Tuple.mapFirst cancelBoardGesture
 
 
 
@@ -730,6 +785,27 @@ menuLink action iconText tooltip =
         ]
 
 
+viewNewGames : H.Html Msg
+viewNewGames =
+    H.main_ []
+        [ H.h1 [] [ H.text "ContinuGo" ]
+        , H.button [ HE.onClick NewBoard ] [ H.text "Open board" ]
+        ]
+
+
+viewDownload : List Sgf.Property -> List Play -> H.Html msg
+viewDownload root record =
+    H.div [ HA.class "item" ]
+        [ H.a
+            [ HA.class "icon"
+            , HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord { root = root, plays = record }))
+            , HA.download "continugo.sgf"
+            , HA.attribute "aria-label" "Download SGF"
+            ]
+            [ H.text "↓", H.span [ HA.class "tooltip" ] [ H.text " download SGF" ] ]
+        ]
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -758,7 +834,10 @@ view model =
                 H.div [] []
 
         content =
-            if model.showHelp then
+            if model.showMenu then
+                viewNewGames
+
+            else if model.showHelp then
                 H.div [ HA.id "help" ] [ Markdown.toHtml [] HelpContent.markdown ]
 
             else
@@ -777,8 +856,8 @@ view model =
     in
     { title = title
     , body =
-        [ H.div [ HA.id "menu" ]
-            [ menuLink NewGame "!" "new"
+        [ H.div [ HA.id "menu", HA.hidden model.showMenu ]
+            [ menuLink OpenMenu "!" "menu"
             , menuLink ToggleHelp "?" "help"
             , menuLink PassTurn "*" "pass"
             , H.div [ HA.class "item" ]
@@ -814,8 +893,9 @@ view model =
                     ]
                     [ H.text "o", H.span [ HA.class "tooltip" ] [ H.text " analysis" ] ]
                 ]
-            , menuLink Undo "‹" "undo"
-            , menuLink Redo "︎︎›︎" "redo"
+            , menuLink Prev "‹" "prev"
+            , menuLink Next "›" "next"
+            , lazy2 viewDownload model.sgfRoot model.record
             ]
         , content
         ]
