@@ -2,6 +2,7 @@ module Rules.LibertiesTests exposing (..)
 
 import Expect
 import Fuzz
+import Rules.Board as Board
 import Rules.Liberties exposing (..)
 import Rules.Position exposing (..)
 import Test exposing (..)
@@ -82,6 +83,48 @@ sampleLibertiesTest =
                 \_ -> Expect.equal 0 (List.length <| libs ())
             ]
         ]
+
+
+openRowsTest : Test
+openRowsTest =
+    fuzz3
+        (Fuzz.oneOfValues [ 9, 13, 19, 500 ])
+        (Fuzz.listOfLength 12 (Fuzz.map2 Spot (Fuzz.intRange 0 1000) (Fuzz.intRange 0 1000)))
+        (Fuzz.intRange 0 1000)
+        "Free row spans match the integer rules, with and without group reach"
+    <|
+        \size spots y ->
+            let
+                board =
+                    Board.fromSize size |> Maybe.withDefault Board.default
+
+                group =
+                    List.take 3 spots
+
+                check reach =
+                    let
+                        spans =
+                            openRowsOn board spots reach |> List.filter (\span -> span.y == y)
+
+                        actual =
+                            List.concatMap (\span -> List.range span.left span.right) spans
+
+                        expected =
+                            List.range 0 1000
+                                |> List.filter
+                                    (\x ->
+                                        let
+                                            spot =
+                                                Spot x y
+                                        in
+                                        isWithinBoardOn board spot
+                                            && not (overlapsAnyOn board spot spots)
+                                            && (reach |> Maybe.map (List.any (adjacentOn board spot)) |> Maybe.withDefault True)
+                                    )
+                    in
+                    Expect.equal expected actual
+            in
+            Expect.all [ \_ -> check Nothing, \_ -> check (Just group) ] ()
 
 
 hasLibertiesTest : Test

@@ -93,6 +93,22 @@ tests =
                             [ Spot (500 - gap) 500, Spot (500 + gap) 500, Spot 500 (500 - gap), Spot 500 (500 + gap) ]
                 in
                 Expect.equal True (canCover shape (Point (500 + r + 0.5) 500))
+        , test "B[sjbR];B[rBes] has no integer centre in the tiny right-wall pocket" <|
+            \_ ->
+                let
+                    spots =
+                        Play.replayPlacements (decodeRecord "B[sjbR];B[rBes]") Dict.empty
+                            |> Position.stoneList
+                            |> List.map .spot
+
+                    pocket =
+                        Point 990 169
+                in
+                Expect.equal ( False, False, True )
+                    ( canCover (geometry spots) pocket
+                    , canCover (libertyGeometry spots spots) pocket
+                    , canCover (geometry [ Spot 944 95, Spot 911 226 ]) pocket
+                    )
         , test "A stone against the wall blocks coverage until a touching neighbour fits" <|
             \_ ->
                 let
@@ -117,8 +133,8 @@ tests =
                     shape =
                         geometry spots
                 in
-                Expect.equal ( ( [], [], [] ), False )
-                    ( ( shape.arcs, shape.lines, shape.points ), canCover shape (Point 500 500) )
+                Expect.equal ( [], False )
+                    ( shape.spans, canCover shape (Point 500 500) )
         , test "Removing a stone restores the swept area (capture or undo)" <|
             \_ ->
                 Expect.equal ( False, True )
@@ -256,8 +272,8 @@ tests =
             ]
         , fuzz2
             (Fuzz.listOfLength 12 (Fuzz.map2 Spot (Fuzz.intRange 38 962) (Fuzz.intRange 38 962)))
-            (Fuzz.map2 Point (Fuzz.floatRange 38 962) (Fuzz.floatRange 38 962))
-            "Every physically valid centre sweeps out an entire stone"
+            (Fuzz.map2 (\x y -> Point (toFloat x) (toFloat y)) (Fuzz.intRange 38 962) (Fuzz.intRange 38 962))
+            "Every physically valid integer centre sweeps out an entire stone"
           <|
             \spots center ->
                 let
@@ -279,21 +295,21 @@ tests =
                                 )
                 in
                 Expect.equal True (not valid || List.all (canCover shape) samples)
-        , fuzz (Fuzz.listOfLength 12 (Fuzz.map2 Spot (Fuzz.intRange 38 962) (Fuzz.intRange 38 962))) "Every exposed arc midpoint is a physically valid centre" <|
+        , fuzz (Fuzz.listOfLength 12 (Fuzz.map2 Spot (Fuzz.intRange 38 962) (Fuzz.intRange 38 962))) "Every sweep span has physically valid integer endpoints" <|
             \spots ->
                 let
                     shape =
                         geometry spots
 
-                    valid p =
-                        p.x >= r - 0.000001 && p.x <= 1000 - r + 0.000001 && p.y >= r - 0.000001 && p.y <= 1000 - r + 0.000001 && List.all (\s -> sqrt ((p.x - toFloat s.x) ^ 2 + (p.y - toFloat s.y) ^ 2) >= toFloat d - 0.000001) spots
+                    valid spot =
+                        Position.isWithinBoardOn Board.default spot
+                            && not (Position.overlapsAnyOn Board.default spot spots)
 
-                    midpoint arc =
-                        let
-                            angle =
-                                (arc.start + arc.end) / 2
-                        in
-                        Point (arc.center.x + toFloat d * cos angle) (arc.center.y + toFloat d * sin angle)
+                    validSpan span =
+                        span.left
+                            <= span.right
+                            && valid (Spot span.left span.y)
+                            && valid (Spot span.right span.y)
                 in
-                Expect.equal True (List.all (midpoint >> valid) shape.arcs)
+                Expect.equal True (List.all validSpan shape.spans)
         ]

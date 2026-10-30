@@ -40,10 +40,12 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   };
   await c('Runtime.enable');
   await c('Page.enable');
+  await c('Page.addScriptToEvaluateOnNewDocument', { source: "sessionStorage.removeItem('continugo.session')" });
   await c('Performance.enable');
   await c('Network.enable');
   await c('Network.setCacheDisabled', { cacheDisabled: true });
   await c('Network.setBypassServiceWorker', { bypass: true });
+  await c('Emulation.setScrollbarsHidden', { hidden: true });
   await c('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 1, mobile: false });
   const urls = { before: process.env.BEFORE_URL, after: process.env.AFTER_URL || 'http://localhost:9071/' };
   const navigate = async (build, record = '') => {
@@ -51,6 +53,13 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await wait("!!document.querySelector('#board svg')");
     await evaluate(`
       window.frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
+      window.sweptCovers = (x, y) => {
+        const path = document.querySelector('#stone-swept-area path');
+        const context = document.createElement('canvas').getContext('2d');
+        context.lineWidth = +path.getAttribute('stroke-width');
+        context.lineCap = 'round';
+        return context.isPointInStroke(new Path2D(path.getAttribute('d')), x, y);
+      };
       window.pointerPressed = false;
       window.move = async (x, y, type = 'mousemove') => {
         const b = document.querySelector('#board').getBoundingClientRect();
@@ -142,6 +151,25 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 45);
       assert.equal(await evaluate('location.search'), '?record=' + record);
     }
+    // Fractional-only pockets must disappear, while a single integer spot remains.
+    const pocketAlpha = () => evaluate(`(async () => {
+      const mask = document.querySelector('#stone-swept-area').outerHTML;
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000">'
+        + '<defs>' + mask + '</defs><rect width="1000" height="1000" fill="red" mask="url(#stone-swept-area)"/></svg>';
+      const image = new Image();
+      image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1000;
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      return context.getImageData(990, 169, 1, 1).data[3];
+    })()`);
+    await navigate('after', 'B[sjbR];B[rBes]');
+    assert.equal(await pocketAlpha(), 255);
+    await navigate('after', 'B[sibR];B[rBes]');
+    assert.equal(await pocketAlpha(), 0);
+
     await navigate('after');
     await evaluate('move(500,500)');
     assert.equal(await evaluate("document.querySelectorAll('#ghost-stone circle').length"), 1);
@@ -157,7 +185,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await evaluate('move(650,500)');
     await evaluate("move(650,500,'mouseup')");
     assert.equal(await evaluate("document.querySelectorAll('#staged-stone circle').length"), 1);
-    assert.equal(await evaluate("document.querySelector('#stone-swept-area g circle').getAttribute('cx')"), '650');
+    assert.equal(await evaluate('sweptCovers(650,500)'), false);
+    assert.equal(await evaluate('sweptCovers(500,500)'), true);
     await evaluate("document.querySelector('#score-toggle').click();frame()");
     assert.equal(await evaluate("document.querySelectorAll('#ghost-stone circle,#staged-stone circle,#liberty-area-fill,#capture-preview line').length"), 0);
     await evaluate("document.querySelector('#score-toggle').click();frame()");
@@ -173,8 +202,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await evaluate('tap(200,800)'); // Add a white stone, so both colours can be pulled.
     const positionUrl = await evaluate('location.search');
     const checkAnalysisDeadzones = async () => {
-      const centers = selector => evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(selector)}),c=>[+c.getAttribute('cx'),+c.getAttribute('cy')]).sort()`);
-      assert.deepEqual(await centers('#stone-swept-area > g > g > circle'), await centers('#stones circle, #analysis-circles circle'));
+      assert.equal(await evaluate(`Array.from(document.querySelectorAll('#stones circle, #analysis-circles circle'),
+        c => sweptCovers(+c.getAttribute('cx'), +c.getAttribute('cy'))).every(covered => !covered)`), true);
     };
     await evaluate("document.querySelector('#analysis-toggle').click();frame()");
     const realStoneDeadzones = await evaluate("document.querySelector('#dead-zones').innerHTML");
@@ -205,7 +234,11 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert.equal(await evaluate("document.querySelector('#analysis-toggle').getAttribute('aria-pressed')"), 'false');
     assert.equal(await evaluate("document.querySelectorAll('#analysis-layer').length"), 0);
     assert.equal(await evaluate("document.querySelector('#staged-stone circle').getAttribute('cx')"), proposedX);
-    assert.equal(await evaluate("document.querySelectorAll('#stone-swept-area > g > g > circle').length"), 3);
+    await checkAnalysisDeadzones();
+    assert.equal(await evaluate(`(() => {
+      const staged = document.querySelector('#staged-stone circle');
+      return sweptCovers(+staged.getAttribute('cx'), +staged.getAttribute('cy'));
+    })()`), false);
     assert.equal(await evaluate('location.search'), positionUrl);
     await sleep(400); // The first tap's removal timer must not play or delete anything.
     assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 2);
@@ -213,7 +246,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 4);
     await evaluate('(async()=>{await tap(500,500);await tap(500,500);await tap(500,500);})()');
     await wait("document.querySelectorAll('#stones circle').length===3");
-    assert.notEqual(await evaluate('location.search'), positionUrl);
+    assert.equal(await evaluate('location.search'), positionUrl);
     await evaluate("document.querySelector('#analysis-toggle').click();frame()");
     assert.equal(await evaluate("document.querySelectorAll('#analysis-circles circle').length"), 3);
     await evaluate("document.querySelector('#score-toggle').click();frame()");

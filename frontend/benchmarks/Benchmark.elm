@@ -77,11 +77,11 @@ benchmark board stone scenario iterations =
 
                         "coverage" ->
                             Coverage.geometry Board.default (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList board))
-                                |> (\g -> List.length g.arcs + List.length g.lines + List.length g.points)
+                                |> (\g -> List.length g.spans)
 
                         "liberty-geometry" ->
                             Coverage.libertyGeometry Board.default (Spot (500 + modBy 30 i) 500 :: List.map .spot (stoneList board)) [ Spot (500 + modBy 30 i) 500 ]
-                                |> (\g -> List.length g.arcs + List.length g.lines + List.length g.points)
+                                |> (\g -> List.length g.spans)
 
                         _ ->
                             0

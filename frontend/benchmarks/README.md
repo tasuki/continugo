@@ -66,6 +66,18 @@ requires computing/rendering their SVG masks; nearest-playable snapping still
 uses the original exhaustive search. Plain open-space move legality was already
 cheap, so it was not the priority.
 
+## Integer-centre coverage correction
+
+Coverage now sweeps the rules' free integer row intervals, rather than continuous
+circle boundaries. This removes fractional-only pockets such as
+`B[sjbR];B[rBes]`, while preserving isolated touching spots. Adjacent centres on
+each row share a round stroke, smoothing only sub-coordinate scallops.
+
+One local optimized run: full-board geometry 3.65 ms, local liberty geometry
+0.37 ms; browser capture-hover scripting 7.9 ms/event and total main-thread
+9.0 ms/event. Browser checks also rasterize the reported pocket and a nearby
+single-integer-spot opening, and compare zoomed masks after repaint.
+
 ## Reproduce
 
 Run these commands from the repository root after `mise install`.

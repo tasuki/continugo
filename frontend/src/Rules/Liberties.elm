@@ -1,4 +1,4 @@
-module Rules.Liberties exposing (candidateOffsets, candidateOffsetsOn, hasLiberties, hasLibertiesOn, sampleLiberties, sampleLibertiesOn)
+module Rules.Liberties exposing (Span, candidateOffsets, candidateOffsetsOn, hasLiberties, hasLibertiesOn, openRowsOn, sampleLiberties, sampleLibertiesOn)
 
 import Array exposing (Array)
 import Rules.Board as Board exposing (Board)
@@ -183,19 +183,8 @@ hasLibertyInRows search spot nearbySpots y lastY =
                 -- The first integer outside the overlap disc permits exact touching.
                 rowHalfWidth search.overlapRows dy + 1
 
-            blockedInterval other =
-                let
-                    halfWidth =
-                        rowHalfWidth search.overlapRows (y - other.y)
-                in
-                if halfWidth < 0 then
-                    Nothing
-
-                else
-                    Just ( other.x - halfWidth, other.x + halfWidth )
-
             blocked =
-                List.filterMap blockedInterval nearbySpots |> List.sortBy Tuple.first
+                blockedIntervals search y nearbySpots
 
             openInterval left right =
                 intervalHasGap (max r left) (min (Board.coordRange - r) right) blocked
@@ -207,6 +196,121 @@ hasLibertyInRows search spot nearbySpots y lastY =
                )
         )
             || hasLibertyInRows search spot nearbySpots (y + 1) lastY
+
+
+blockedIntervals : Search -> Int -> List Spot -> List ( Int, Int )
+blockedIntervals search y spots =
+    spots
+        |> List.filterMap
+            (\other ->
+                let
+                    halfWidth =
+                        rowHalfWidth search.overlapRows (y - other.y)
+                in
+                if halfWidth < 0 then
+                    Nothing
+
+                else
+                    Just ( other.x - halfWidth, other.x + halfWidth )
+            )
+        |> List.sortBy Tuple.first
+
+
+type alias Span =
+    { y : Int, left : Int, right : Int }
+
+
+{-| All physically free integer centres, optionally restricted to a group's
+adjacency discs. Each span includes both endpoints. No suicide/ko checking.
+-}
+openRowsOn : Board -> List Spot -> Maybe (List Spot) -> List Span
+openRowsOn board spots group =
+    let
+        search =
+            searchOn board
+
+        low =
+            Board.radius board
+
+        high =
+            Board.coordRange - low
+
+        row y =
+            let
+                reachable =
+                    case group of
+                        Nothing ->
+                            [ ( low, high ) ]
+
+                        Just members ->
+                            members
+                                |> List.filterMap
+                                    (\member ->
+                                        let
+                                            width =
+                                                rowHalfWidth search.adjacencyRows (y - member.y)
+                                        in
+                                        if width < 0 then
+                                            Nothing
+
+                                        else
+                                            Just ( max low (member.x - width), min high (member.x + width) )
+                                    )
+                                |> List.sortBy Tuple.first
+                                |> mergeIntervals
+
+                blocked =
+                    blockedIntervals search y spots
+            in
+            List.concatMap (\( left, right ) -> openIntervals left right blocked) reachable
+                |> List.map (\( left, right ) -> Span y left right)
+
+        firstY =
+            group
+                |> Maybe.map (List.map (.y >> (\y -> y - search.maxRowOffset)) >> List.minimum >> Maybe.withDefault high >> max low)
+                |> Maybe.withDefault low
+
+        lastY =
+            group
+                |> Maybe.map (List.map (.y >> (\y -> y + search.maxRowOffset)) >> List.maximum >> Maybe.withDefault low >> min high)
+                |> Maybe.withDefault high
+    in
+    List.range firstY lastY |> List.concatMap row
+
+
+mergeIntervals : List ( Int, Int ) -> List ( Int, Int )
+mergeIntervals intervals =
+    case intervals of
+        ( a, b ) :: ( c, d ) :: rest ->
+            if c <= b + 1 then
+                mergeIntervals (( a, max b d ) :: rest)
+
+            else
+                ( a, b ) :: mergeIntervals (( c, d ) :: rest)
+
+        _ ->
+            intervals
+
+
+openIntervals : Int -> Int -> List ( Int, Int ) -> List ( Int, Int )
+openIntervals left right blocked =
+    if left > right then
+        []
+
+    else
+        case blocked of
+            [] ->
+                [ ( left, right ) ]
+
+            ( start, end ) :: rest ->
+                if start > right then
+                    [ ( left, right ) ]
+
+                else if start > left then
+                    ( left, start - 1 ) :: openIntervals (max left (end + 1)) right rest
+
+                else
+                    openIntervals (max left (end + 1)) right rest
 
 
 intervalHasGap : Int -> Int -> List ( Int, Int ) -> Bool
