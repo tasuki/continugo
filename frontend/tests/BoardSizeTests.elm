@@ -52,7 +52,7 @@ configuredTests board =
     describe (String.fromInt size ++ "×" ++ String.fromInt size)
         [ test "The menu button selects this board" <|
             \_ ->
-                Main.viewNewGames
+                Main.viewNewGames Nothing
                     |> Query.fromHtml
                     |> Query.find [ Selector.tag "button", Selector.containing [ Selector.text (String.fromInt size ++ "×" ++ String.fromInt size) ] ]
                     |> Event.simulate Event.click

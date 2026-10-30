@@ -35,6 +35,27 @@
                 sessionStorage.setItem('continugo.session', JSON.stringify({ ...state, url: location.href }));
             } catch (_) {}
         });
+
+        document.addEventListener('dragover', function (event) {
+            if (document.getElementById('sgf-dropzone')?.contains(event.target)) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+            }
+        });
+        document.addEventListener('drop', async function (event) {
+            if (!document.getElementById('sgf-dropzone')?.contains(event.target)) return;
+            event.preventDefault();
+            const files = event.dataTransfer.files;
+            if (files.length !== 1) {
+                app.ports.sgfLoadFailed.send('Drop one SGF file at a time.');
+                return;
+            }
+            try {
+                app.ports.sgfLoaded.send(await files[0].text());
+            } catch (_) {
+                app.ports.sgfLoadFailed.send('Could not read the SGF file.');
+            }
+        });
     </script>
 </body>
 </html>

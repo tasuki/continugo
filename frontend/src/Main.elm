@@ -42,6 +42,12 @@ import Url exposing (Url)
 port saveSession : { sgf : String, move : Int } -> Cmd msg
 
 
+port sgfLoaded : (String -> msg) -> Sub msg
+
+
+port sgfLoadFailed : (String -> msg) -> Sub msg
+
+
 main : Program Decode.Value Model Msg
 main =
     Browser.application
@@ -49,11 +55,15 @@ main =
         , update = updateAndSave
         , subscriptions =
             \model ->
-                if model.showMenu || model.showHelp then
-                    Sub.none
+                Sub.batch
+                    [ sgfLoaded SgfLoaded
+                    , sgfLoadFailed SgfLoadFailed
+                    , if model.showMenu || model.showHelp then
+                        Sub.none
 
-                else
-                    Browser.Events.onKeyDown replayKey
+                      else
+                        Browser.Events.onKeyDown replayKey
+                    ]
         , view = view
         , onUrlRequest = LinkClicked
         , onUrlChange = UrlChanged
@@ -78,6 +88,7 @@ type alias Model =
     , pointer : PointerInput.State
     , stagedMove : Maybe MovePreview.Preview
     , lastPointer : Maybe Spot
+    , sgfError : Maybe String
     , showMenu : Bool
     , showHelp : Bool
     , showScoring : Bool
@@ -100,6 +111,7 @@ emptyModel navKey =
     , pointer = PointerInput.empty
     , stagedMove = Nothing
     , lastPointer = Nothing
+    , sgfError = Nothing
     , showMenu = False
     , showHelp = False
     , showScoring = False
@@ -170,6 +182,8 @@ type Msg
     | AnalysisRemovalExpired Int
     | OpenMenu
     | NewBoard Board
+    | SgfLoaded String
+    | SgfLoadFailed String
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
 
@@ -545,27 +559,28 @@ update msg model =
             seek (List.length model.game.record + 1) model
 
         OpenMenu ->
-            ( { model | showMenu = True, pointer = PointerInput.cancel model.pointer }
+            ( { model | showMenu = True, sgfError = Nothing, pointer = PointerInput.cancel model.pointer }
                 |> cancelBoardGesture
             , Cmd.none
             )
 
         NewBoard board ->
-            let
-                fresh =
-                    emptyModel model.navKey
+            ( newBoard board model, Cmd.none )
 
-                analysis =
-                    fresh.analysis
-            in
-            ( { fresh
-                | game = Game.onBoard board
-                , sgfRoot = (Sgf.onBoard board).root
-                , pointer = PointerInput.cancel model.pointer
-                , analysis = { analysis | serial = model.analysis.serial }
-              }
-            , Cmd.none
-            )
+        SgfLoaded text ->
+            case decodeImport text of
+                Ok ( board, record ) ->
+                    let
+                        fresh =
+                            newBoard board model
+                    in
+                    ( { fresh | record = record.plays, sgfRoot = record.root }, Cmd.none )
+
+                Err error ->
+                    ( { model | sgfError = Just error }, Cmd.none )
+
+        SgfLoadFailed error ->
+            ( { model | sgfError = Just error }, Cmd.none )
 
         LinkClicked (Browser.Internal url) ->
             ( model, Nav.pushUrl model.navKey (Url.toString url) )
@@ -625,6 +640,34 @@ update msg model =
 
 
 -- ROUTING / URL
+
+
+newBoard : Board -> Model -> Model
+newBoard board model =
+    let
+        fresh =
+            emptyModel model.navKey
+
+        analysis =
+            fresh.analysis
+    in
+    { fresh
+        | game = Game.onBoard board
+        , sgfRoot = (Sgf.onBoard board).root
+        , pointer = PointerInput.cancel model.pointer
+        , analysis = { analysis | serial = model.analysis.serial }
+    }
+
+
+decodeImport : String -> Result String ( Board, Sgf.Record )
+decodeImport text =
+    Sgf.decodeRecord text
+        |> Result.andThen
+            (\record ->
+                Sgf.boardFromRoot record.root
+                    |> Result.fromMaybe "Invalid SGF board size"
+                    |> Result.map (\board -> ( board, record ))
+            )
 
 
 restoreFromUrl : Url.Url -> Model -> ( Model, Cmd Msg )
@@ -865,8 +908,8 @@ menuLink action iconText tooltip =
         ]
 
 
-viewNewGames : H.Html Msg
-viewNewGames =
+viewNewGames : Maybe String -> H.Html Msg
+viewNewGames error =
     H.main_ []
         [ H.h1 [] [ H.text "ContinuGo" ]
         , H.p [] [ H.text "New game" ]
@@ -879,6 +922,13 @@ viewNewGames =
                             [ H.text (String.fromInt (Board.size board) ++ "×" ++ String.fromInt (Board.size board)) ]
                     )
             )
+        , H.div [ HA.id "sgf-dropzone" ] [ H.text "Drop an SGF file here" ]
+        , case error of
+            Just message ->
+                H.p [ HA.attribute "role" "alert" ] [ H.text message ]
+
+            Nothing ->
+                H.text ""
         ]
 
 
@@ -924,7 +974,7 @@ view model =
 
         content =
             if model.showMenu then
-                viewNewGames
+                viewNewGames model.sgfError
 
             else if model.showHelp then
                 H.div [ HA.id "help" ] [ Markdown.toHtml [] HelpContent.markdown ]
