@@ -1,5 +1,10 @@
 [tasks.build]
-description = "Build the frontend with debugging enabled"
+description = "Build the frontend without the Elm debugger"
+depends = [":_help"]
+run = "elm make src/Main.elm --output=public/continugo.js"
+
+[tasks.build-debug]
+description = "Build the frontend with the Elm debugger (opt-in)"
 depends = [":_help"]
 run = "elm make src/Main.elm --debug --output=public/continugo.js"
 

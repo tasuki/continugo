@@ -553,10 +553,15 @@ update msg model =
             )
 
         Prev ->
-            seek (List.length model.game.record - 1) model
+            showGame (Game.previous model.game) model
 
         Next ->
-            seek (List.length model.game.record + 1) model
+            case List.drop (List.length model.game.record) model.record of
+                recorded :: _ ->
+                    showGame (Game.replay recorded model.game) model
+
+                [] ->
+                    ( model, Cmd.none )
 
         OpenMenu ->
             ( { model | showMenu = True, sgfError = Nothing, pointer = PointerInput.cancel model.pointer }
@@ -729,12 +734,8 @@ gameAt board move record =
     Game.fromRecordOn board (List.reverse (List.take move record))
 
 
-seek : Int -> Model -> ( Model, Cmd Msg )
-seek move model =
-    let
-        game =
-            gameAt model.game.board move model.record
-    in
+showGame : Game.Game -> Model -> ( Model, Cmd Msg )
+showGame game model =
     updatePosition
         { model
             | game = game
