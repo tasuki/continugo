@@ -1,9 +1,11 @@
 //! ContinuGo SGF: a move-free root followed by a single sequence of moves.
 //! `FF[9071]GM[9071]` identifies our format; coordinates use two base-52 digits
 //! (`a-zA-Z`) per axis, not Go's usual one. Variations are not supported.
-//! Root properties (including PB, PW, SZ and RE) are preserved by the record API.
+//! Root and per-move properties (including comments) are preserved by the record API.
+//! Move properties exclude B/W, which are represented separately by `plays`.
 //! Empty PB, PW and RE properties are omitted when writing.
-//! The play-only API uses a 13x13 root. Decoding also
+//! The play-only API discards annotations and uses a 13x13 root when writing.
+//! Use the record API to round-trip comments. Decoding also
 //! accepts legacy compact records. Neither API checks move legality or applies
 //! board metadata: replay on the appropriate board separately.
 //!
@@ -26,6 +28,9 @@ pub type Property = (String, Vec<String>);
 pub struct Record {
     pub root: Vec<Property>,
     pub plays: Vec<Play>,
+    /// Non-move properties for each play. Decoding always aligns these with
+    /// `plays`; encoding also accepts an empty vector for unannotated records.
+    pub move_properties: Vec<Vec<Property>>,
 }
 
 impl Default for Record {
@@ -36,6 +41,7 @@ impl Default for Record {
                 .map(|(name, value)| (name.into(), vec![value.into()]))
                 .collect(),
             plays: Vec::new(),
+            move_properties: Vec::new(),
         }
     }
 }
@@ -88,6 +94,7 @@ pub fn decode_record(text: &str) -> Result<Record, String> {
                 .collect::<Result<_, _>>()?
         };
         return Ok(Record {
+            move_properties: vec![Vec::new(); plays.len()],
             plays,
             ..Record::default()
         });
@@ -99,9 +106,10 @@ pub fn decode_record(text: &str) -> Result<Record, String> {
     let root = parser.properties()?;
     validate_root(&root)?;
     let mut plays = Vec::new();
+    let mut move_properties = Vec::new();
     while parser.rest.trim_start().starts_with(';') {
         parser.expect(';')?;
-        let properties = parser.properties()?;
+        let mut properties = parser.properties()?;
         let moves: Vec<_> = properties
             .iter()
             .filter(|(name, _)| name == "B" || name == "W")
@@ -113,12 +121,18 @@ pub fn decode_record(text: &str) -> Result<Record, String> {
             return Err("An SGF move must have exactly one value".into());
         };
         plays.push(decode_play(&format!("{name}[{value}]"))?);
+        properties.retain(|(name, _)| name != "B" && name != "W");
+        move_properties.push(properties);
     }
     parser.expect(')')?;
     if !parser.rest.trim().is_empty() {
         return Err("Unexpected content after SGF tree".into());
     }
-    Ok(Record { root, plays })
+    Ok(Record {
+        root,
+        plays,
+        move_properties,
+    })
 }
 
 fn validate_root(root: &[Property]) -> Result<(), String> {
@@ -240,20 +254,39 @@ pub fn encode(plays: &[Play]) -> Result<String, String> {
 
 pub fn encode_record(record: &Record) -> Result<String, String> {
     validate_root(&record.root)?;
+    if !record.move_properties.is_empty() && record.move_properties.len() != record.plays.len() {
+        return Err("SGF move properties must align with plays".into());
+    }
     let mut text = String::from("(;FF[9071]GM[9071]");
+    write_properties(&mut text, &record.root, true)?;
+    for (index, &play) in record.plays.iter().enumerate() {
+        text.push_str("\n;");
+        text.push_str(&encode_play(play)?);
+        if let Some(properties) = record.move_properties.get(index) {
+            write_properties(&mut text, properties, false)?;
+        }
+    }
+    text.push_str("\n)");
+    Ok(text)
+}
+
+fn write_properties(text: &mut String, properties: &[Property], root: bool) -> Result<(), String> {
     let mut seen = Vec::new();
-    for (name, values) in &record.root {
+    for (name, values) in properties {
         if name.is_empty()
             || !name.bytes().all(|ch| ch.is_ascii_uppercase())
             || values.is_empty()
             || seen.contains(&name)
+            || (!root && matches!(name.as_str(), "B" | "W"))
         {
             return Err(format!("Invalid or duplicate SGF property: {name}"));
         }
         seen.push(name);
-        if name == "FF"
-            || name == "GM"
-            || (matches!(name.as_str(), "PB" | "PW" | "RE") && values.iter().all(String::is_empty))
+        if root
+            && (name == "FF"
+                || name == "GM"
+                || (matches!(name.as_str(), "PB" | "PW" | "RE")
+                    && values.iter().all(String::is_empty)))
         {
             continue;
         }
@@ -264,12 +297,7 @@ pub fn encode_record(record: &Record) -> Result<String, String> {
             text.push(']');
         }
     }
-    for &play in &record.plays {
-        text.push_str("\n;");
-        text.push_str(&encode_play(play)?);
-    }
-    text.push_str("\n)");
-    Ok(text)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -335,6 +363,10 @@ mod tests {
         assert_eq!(record.root[3].1, vec!["A]lice"]);
         assert_eq!(record.root[4].1, vec!["白\\黒"]);
         assert_eq!(record.root[5].1, vec!["B+2.5"]);
+        assert_eq!(
+            record.move_properties,
+            vec![vec![("C".into(), vec!["move comment".into()])], vec![]]
+        );
         assert_eq!(decode_record(&encode_record(&record).unwrap()), Ok(record));
         assert_eq!(
             decode(" \n(; GM[9071] FF[9071] ; B [bbbb] ; W [] ) \n")
@@ -344,6 +376,46 @@ mod tests {
         );
         let continued = decode_record("(;FF[9071]GM[9071]PB[a\\\r\nb])").unwrap();
         assert_eq!(continued.root[2].1, vec!["ab"]);
+    }
+
+    #[test]
+    fn move_comments_and_unknown_properties_round_trip_including_passes() {
+        let mut record = decode_record("B[bbbb];W[]").unwrap();
+        record.move_properties = vec![
+            vec![
+                (
+                    "C".into(),
+                    vec!["雪; (note) [x] \\ path\n{\"policy\":[1,2]}".into()],
+                ),
+                ("XX".into(), vec!["one".into(), "two".into()]),
+            ],
+            vec![("C".into(), vec![String::new()])],
+        ];
+        let encoded = encode_record(&record).unwrap();
+        assert_eq!(decode_record(&encoded), Ok(record.clone()));
+        assert_eq!(decode(&encoded), Ok(record.plays));
+        let before_move = decode_record("(;FF[9071]GM[9071];C[before]B[bbbb])").unwrap();
+        assert_eq!(before_move.move_properties[0][0].1, vec!["before"]);
+    }
+
+    #[test]
+    fn encoding_rejects_misaligned_or_invalid_move_properties() {
+        let mut record = decode_record("B[bbbb]").unwrap();
+        for properties in [
+            vec![("B".into(), vec!["mmmm".into()])],
+            vec![("W".into(), vec![String::new()])],
+            vec![
+                ("C".into(), vec![String::new()]),
+                ("C".into(), vec![String::new()]),
+            ],
+            vec![("comment".into(), vec![String::new()])],
+            vec![("C".into(), vec![])],
+        ] {
+            record.move_properties = vec![properties];
+            assert!(encode_record(&record).is_err());
+        }
+        record.move_properties = vec![vec![], vec![]];
+        assert!(encode_record(&record).is_err());
     }
 
     #[test]
