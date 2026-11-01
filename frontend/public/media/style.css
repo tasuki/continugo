@@ -44,8 +44,8 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 
 #liberty-area-fill { fill: #9003; }
 #ghost-links, #ghost-stone { opacity: 0.4; }
-#staged-stone circle { stroke: #900; fill:transparent; stroke-width: 4; }
-#stones, #links, #ghost-stone, #ghost-links, #removed-stones { stroke: #222; stroke-width: 4; }
+#staged-stone circle { stroke: #900; fill:transparent; stroke-width: var(--stone-stroke-width); }
+#stones, #links, #ghost-stone, #ghost-links, #removed-stones { stroke: #222; stroke-width: var(--stone-stroke-width); }
 .black { fill: #222; transform-origin: center left; }
 .white { fill: #FFF; transform-origin: center right; }
 
@@ -61,16 +61,16 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
     30% { transform: scale(1.1); }
     100% { transform: scale(0); }
 }
-#highlights circle { stroke: #900; fill: transparent; stroke-width: 4; }
+#highlights circle { stroke: #900; fill: transparent; stroke-width: var(--stone-stroke-width); }
 #stones .pending-capture { opacity: 0.25; }
-#capture-preview { stroke: #900; stroke-width: 4; }
+#capture-preview { stroke: #900; stroke-width: var(--stone-stroke-width); }
 
-#analysis-layer { stroke: #176B72; stroke-width: 4; }
+#analysis-layer { stroke: #176B72; stroke-width: var(--stone-stroke-width); }
 #analysis-circles circle { fill: none; }
 #analysis-circles .preview { opacity: 0.5; }
-#analysis-links { stroke-width: 3; stroke-dasharray: 7 5; }
+#analysis-links { stroke-width: calc(var(--stone-stroke-width) * 0.75); stroke-dasharray: 7 5; }
 #analysis-circles .invalid { animation: invalidCircle 0.7s; }
-@keyframes invalidCircle { 0%, 60% { stroke: #C00; stroke-width: 7; } }
+@keyframes invalidCircle { 0%, 60% { stroke: #C00; stroke-width: calc(var(--stone-stroke-width) * 1.75); } }
 
 #score { position: absolute; inset: 0; z-index: 1;
     display: flex; flex-direction: column; align-items: center; justify-content: center;

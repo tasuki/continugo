@@ -786,7 +786,11 @@ type PositionMode
 
 viewSvg : Model -> Svg Msg
 viewSvg model =
-    Svg.svg [ SA.id "board-position", SA.viewBox boardViewBox ]
+    Svg.svg
+        [ SA.id "board-position"
+        , SA.viewBox boardViewBox
+        , SA.style ("--stone-stroke-width: " ++ String.fromFloat (toFloat (Board.radius model.game.board) / 10) ++ "px")
+        ]
         [ lazy8 viewPosition
             model.game.board
             model.game.stones
