@@ -1,4 +1,4 @@
 # A workspace groups Rust crates (libraries or programs) under one build.
 [workspace]
-members = ["rules", "analysis"]
+members = ["rules", "analysis", "rating"]
 resolver = "3"

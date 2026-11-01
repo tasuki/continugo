@@ -10,5 +10,9 @@ dependencies = [
 ]
 
 [[package]]
+name = "continugo-rating"
+version = "0.1.0"
+
+[[package]]
 name = "continugo-rules"
 version = "0.1.0"
