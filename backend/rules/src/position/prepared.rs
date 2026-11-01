@@ -3,7 +3,7 @@
 //! witnesses per group; search again only when both are blocked. Enemy captures
 //! precede friendly suicide, both simultaneous.
 
-use super::{Color, Position, Spot, Stone};
+use super::{Color, LibertySpan, Position, Spot, Stone};
 
 struct Group {
     color: Color,
@@ -22,9 +22,118 @@ pub struct PreparedPosition<'a> {
     pub(crate) groups: PreparedGroups,
 }
 
+/// Rule-derived facts about a legal placement. `liberties` is min(actual, cap)
+/// for the resulting merged group, not the number of validation witnesses.
+#[derive(Debug)]
+pub struct MoveAnalysis {
+    pub position: Position,
+    pub connected_groups: usize,
+    pub connected_stones: usize,
+    pub captured_groups: usize,
+    pub captured_stones: usize,
+    pub group_size: usize,
+    pub liberties: usize,
+}
+
+/// Geometry plus an exact one-placement capture witness for a complete group.
+/// The attacker is the group's opposite color, regardless of the actual turn.
+#[derive(Debug)]
+pub struct GroupAnalysis {
+    pub liberty_spans: Vec<LibertySpan>,
+    pub capture_in_one: Option<Spot>,
+}
+
 impl PreparedPosition<'_> {
     pub fn play(&self, stone: Stone) -> Option<Position> {
         self.groups.play(self.position, stone)
+    }
+
+    /// Members must be a complete group from this position's `groups` output.
+    /// This is unchanged-board capturability, not a forced capture after replies.
+    pub fn analyze_group(&self, members: &[usize]) -> GroupAnalysis {
+        let liberty_spans = self.position.liberty_spans(members);
+        let mut capture_in_one = None;
+        if let Some(&first) = members.first() {
+            let attacker = self.position.stones[first].color.other();
+            self.position.visit_liberty_covers(&liberty_spans, |spot| {
+                if let Some(next) = self.play(Stone {
+                    color: attacker,
+                    spot,
+                }) && members
+                    .iter()
+                    .all(|&i| !next.stones.contains(&self.position.stones[i]))
+                {
+                    capture_in_one = Some(spot);
+                    return false;
+                }
+                true
+            });
+        }
+        GroupAnalysis {
+            liberty_spans,
+            capture_in_one,
+        }
+    }
+
+    /// Uses the same validator as `play`; optional analysis never changes rules.
+    pub fn analyze_move(&self, stone: Stone, liberty_cap: usize) -> Option<MoveAnalysis> {
+        let next = self.play(stone)?;
+        let source = self.position;
+        let joined: Vec<_> = self
+            .groups
+            .groups
+            .iter()
+            .filter(|group| {
+                group.color == stone.color
+                    && group
+                        .members
+                        .iter()
+                        .any(|&i| source.board.adjacent(source.stones[i].spot, stone.spot))
+            })
+            .collect();
+        let connected_stones = joined.iter().map(|g| g.members.len()).sum::<usize>();
+        let enemy_count = |position: &Position| {
+            position
+                .stones
+                .iter()
+                .filter(|s| s.color != stone.color)
+                .count()
+        };
+        let captured_stones = enemy_count(source) - enemy_count(&next);
+        let captured_groups = if captured_stones == 0 {
+            0
+        } else {
+            self.groups
+                .groups
+                .iter()
+                .filter(|g| {
+                    g.color != stone.color && !next.stones.contains(&source.stones[g.members[0]])
+                })
+                .count()
+        };
+        let mut witnesses = Vec::new();
+        for group in &joined {
+            for &liberty in &group.liberties {
+                if !source.board.overlaps(liberty, stone.spot) && !witnesses.contains(&liberty) {
+                    witnesses.push(liberty);
+                }
+            }
+        }
+        let spots = std::iter::once(stone.spot).chain(
+            joined
+                .iter()
+                .flat_map(|g| g.members.iter().map(|&i| source.stones[i].spot)),
+        );
+        let liberties = next.collect_liberties(spots, liberty_cap, witnesses).len();
+        Some(MoveAnalysis {
+            position: next,
+            connected_groups: joined.len(),
+            connected_stones,
+            captured_groups,
+            captured_stones,
+            group_size: connected_stones + 1,
+            liberties,
+        })
     }
 }
 

@@ -7,6 +7,15 @@ use super::{Position, Spot};
 use crate::{Board, COORD_RANGE};
 use std::sync::OnceLock;
 
+/// Inclusive run of physically free integer liberty centers on one row.
+/// Runs are ordered by (y, left), disjoint and nonadjacent on each row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LibertySpan {
+    pub y: i32,
+    pub left: i32,
+    pub right: i32,
+}
+
 struct DiscRows {
     overlap: Vec<i32>,
     adjacency: Vec<i32>,
@@ -57,20 +66,180 @@ fn first_gap(mut left: i32, right: i32, blocked: &[(i32, i32)]) -> Option<i32> {
     Some(left)
 }
 
+// Visit the unblocked intervals of a clipped row. False stops iteration early.
+fn open_intervals(
+    mut left: i32,
+    right: i32,
+    blocked: &[(i32, i32)],
+    mut visit: impl FnMut(i32, i32) -> bool,
+) -> bool {
+    if left > right {
+        return true;
+    }
+    for &(start, end) in blocked {
+        if start > right {
+            break;
+        }
+        if start > left && !visit(left, start - 1) {
+            return false;
+        }
+        left = left.max(end + 1);
+        if left > right {
+            return true;
+        }
+    }
+    visit(left, right)
+}
+
 impl Position {
+    /// All geometric liberties of a group, as exact integer row intervals.
+    /// Members are indices from this position's `groups` output. This matches
+    /// frontend Rules.Liberties.openRowsOn: no suicide, ko, or eye filtering.
+    pub fn liberty_spans(&self, members: &[usize]) -> Vec<LibertySpan> {
+        let Some(first) = members.first() else {
+            return Vec::new();
+        };
+        let rows = rows_on(self.board);
+        let reach = rows.adjacency.len() as i32 - 1;
+        let low = self.board.stone_radius();
+        let high = COORD_RANGE - low;
+        let mut first_y = self.stones[*first].spot.y;
+        let mut last_y = first_y;
+        for &i in members {
+            first_y = first_y.min(self.stones[i].spot.y);
+            last_y = last_y.max(self.stones[i].spot.y);
+        }
+        let mut reachable: Vec<(i32, i32)> = Vec::with_capacity(members.len());
+        let mut blocked: Vec<(i32, i32)> = Vec::with_capacity(self.stones.len());
+        let mut spans = Vec::new();
+        for y in (first_y - reach).max(low)..=(last_y + reach).min(high) {
+            reachable.clear();
+            for &i in members {
+                let spot = self.stones[i].spot;
+                let width = half_width(&rows.adjacency, y - spot.y);
+                if width >= 0 {
+                    let left = (spot.x - width).max(low);
+                    let right = (spot.x + width).min(high);
+                    if left <= right {
+                        reachable.push((left, right));
+                    }
+                }
+            }
+            reachable.sort_unstable();
+            // Merge the union of adjacency discs before subtracting blockers.
+            let mut merged = 0;
+            for i in 0..reachable.len() {
+                let (left, right) = reachable[i];
+                if merged > 0 && left <= reachable[merged - 1].1 + 1 {
+                    reachable[merged - 1].1 = reachable[merged - 1].1.max(right);
+                } else {
+                    reachable[merged] = (left, right);
+                    merged += 1;
+                }
+            }
+            reachable.truncate(merged);
+            blocked.clear();
+            for stone in &self.stones {
+                let width = half_width(&rows.overlap, y - stone.spot.y);
+                if width >= 0 {
+                    blocked.push((stone.spot.x - width, stone.spot.x + width));
+                }
+            }
+            blocked.sort_unstable();
+            for &(left, right) in &reachable {
+                open_intervals(left, right, &blocked, |left, right| {
+                    spans.push(LibertySpan { y, left, right });
+                    true
+                });
+            }
+        }
+        spans
+    }
+
+    /// Geometrically free placements whose strict exclusion disc covers every
+    /// liberty center. Span endpoints suffice: squared distance is convex in x.
+    /// This is only a candidate filter; the caller must validate captures/suicide.
+    pub(super) fn visit_liberty_covers(
+        &self,
+        spans: &[LibertySpan],
+        mut visit: impl FnMut(Spot) -> bool,
+    ) {
+        let d = self.board.diameter();
+        let low = self.board.stone_radius();
+        let high = COORD_RANGE - low;
+        let (mut x_low, mut x_high, mut y_low, mut y_high) = (low, high, low, high);
+        if let Some(first) = spans.first() {
+            let (mut min_x, mut max_x, mut min_y, mut max_y) =
+                (first.left, first.right, first.y, first.y);
+            for span in spans {
+                min_x = min_x.min(span.left);
+                max_x = max_x.max(span.right);
+                min_y = min_y.min(span.y);
+                max_y = max_y.max(span.y);
+            }
+            x_low = low.max(max_x - d + 1);
+            x_high = high.min(min_x + d - 1);
+            y_low = low.max(max_y - d + 1);
+            y_high = high.min(min_y + d - 1);
+        }
+        if x_low > x_high || y_low > y_high {
+            return;
+        }
+        let rows = rows_on(self.board);
+        let mut blocked = Vec::with_capacity(self.stones.len());
+        'rows: for y in y_low..=y_high {
+            let (mut left, mut right) = (x_low, x_high);
+            for span in spans {
+                let width = half_width(&rows.overlap, y - span.y);
+                if width < 0 {
+                    continue 'rows;
+                }
+                left = left.max(span.right - width);
+                right = right.min(span.left + width);
+                if left > right {
+                    continue 'rows;
+                }
+            }
+            blocked.clear();
+            for stone in &self.stones {
+                let width = half_width(&rows.overlap, y - stone.spot.y);
+                if width >= 0 {
+                    blocked.push((stone.spot.x - width, stone.spot.x + width));
+                }
+            }
+            blocked.sort_unstable();
+            if !open_intervals(left, right, &blocked, |left, right| {
+                (left..=right).all(|x| visit(Spot { x, y }))
+            }) {
+                return;
+            }
+        }
+    }
+
     pub(super) fn has_liberty(&self, spot: Spot) -> bool {
         self.find_liberty(spot).is_some()
     }
 
     pub(super) fn find_liberty(&self, spot: Spot) -> Option<Spot> {
+        let mut found = None;
+        self.visit_liberties(spot, |liberty| {
+            found = Some(liberty);
+            false
+        });
+        found
+    }
+
+    /// Visit exact integer liberties, stopping when the callback returns false.
+    /// Quick probes may be visited again by scanlines; collectors deduplicate.
+    pub(super) fn visit_liberties(&self, spot: Spot, mut visit: impl FnMut(Spot) -> bool) {
         let d = self.board.diameter();
         for (dx, dy) in [(-d, 0), (0, -d), (0, d), (d, 0)] {
             let candidate = Spot {
                 x: spot.x + dx,
                 y: spot.y + dy,
             };
-            if self.can_place(candidate) {
-                return Some(candidate);
+            if self.can_place(candidate) && !visit(candidate) {
+                return;
             }
         }
         let rows = rows_on(self.board);
@@ -113,13 +282,18 @@ impl Position {
                 }
             }
             blocked.sort_unstable_by_key(|&(start, _)| start);
-            if let Some(x) = first_gap(left, (spot.x - inner).min(high), &blocked)
-                .or_else(|| first_gap((spot.x + inner).max(low), right, &blocked))
-            {
-                return Some(Spot { x, y });
+            for (mut start, end) in [
+                (left, (spot.x - inner).min(high)),
+                ((spot.x + inner).max(low), right),
+            ] {
+                while let Some(x) = first_gap(start, end, &blocked) {
+                    if !visit(Spot { x, y }) {
+                        return;
+                    }
+                    start = x + 1;
+                }
             }
         }
-        None
     }
 
     // Slow original implementation retained only as a test/benchmark oracle.
@@ -160,6 +334,133 @@ impl Position {
 mod tests {
     use super::*;
     use crate::{Color, Stone};
+
+    #[test]
+    fn capture_cover_filter_matches_exhaustive_geometry_including_strict_touching() {
+        let empty = Position::default();
+        let occupied = empty
+            .play(Stone {
+                color: Color::Black,
+                spot: Spot { x: 500, y: 500 },
+            })
+            .unwrap();
+        let cases = [
+            vec![LibertySpan {
+                y: 500,
+                left: 576,
+                right: 576,
+            }],
+            vec![
+                LibertySpan {
+                    y: 500,
+                    left: 576,
+                    right: 607,
+                },
+                LibertySpan {
+                    y: 576,
+                    left: 500,
+                    right: 520,
+                },
+            ],
+            // Separation exactly 2*d: no strict exclusion disc can cover both.
+            vec![
+                LibertySpan {
+                    y: 500,
+                    left: 424,
+                    right: 424,
+                },
+                LibertySpan {
+                    y: 500,
+                    left: 576,
+                    right: 576,
+                },
+            ],
+        ];
+        for position in [&empty, &occupied] {
+            for spans in &cases {
+                let mut mask = vec![false; 1_000_000];
+                position.visit_liberty_covers(spans, |spot| {
+                    mask[(spot.y * 1000 + spot.x) as usize] = true;
+                    true
+                });
+                for y in 0..1000 {
+                    for x in 0..1000 {
+                        let spot = Spot { x, y };
+                        let expected = position.can_place(spot)
+                            && spans.iter().all(|s| {
+                                (s.left..=s.right)
+                                    .all(|x| position.board.overlaps(spot, Spot { x, y: s.y }))
+                            });
+                        assert_eq!(
+                            mask[(y * 1000 + x) as usize],
+                            expected,
+                            "{spot:?}, {spans:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn group_spans_match_pointwise_geometry_at_edges_and_touching_stones() {
+        for size in [3, 9, 13, 19] {
+            let board = Board::new(size).unwrap();
+            let r = board.stone_radius();
+            let d = board.diameter();
+            let mut position = Position::new(board);
+            for (color, x, y) in [
+                (Color::Black, r, r),
+                (Color::White, r + d, r),
+                (Color::Black, r + d, r + d),
+            ] {
+                position = position
+                    .play(Stone {
+                        color,
+                        spot: Spot { x, y },
+                    })
+                    .unwrap();
+            }
+            for color in [Color::Black, Color::White] {
+                for members in position.groups(color) {
+                    let spans = position.liberty_spans(&members);
+                    let mut mask = vec![false; 1_000_000];
+                    let mut last: Option<LibertySpan> = None;
+                    for &span in &spans {
+                        assert!(span.left >= r && span.right <= 1000 - r);
+                        if let Some(previous) = last {
+                            assert!(
+                                span.y > previous.y
+                                    || (span.y == previous.y && span.left > previous.right + 1)
+                            );
+                        }
+                        for x in span.left..=span.right {
+                            mask[(span.y * 1000 + x) as usize] = true;
+                        }
+                        last = Some(span);
+                    }
+                    for y in 0..1000 {
+                        for x in 0..1000 {
+                            let spot = Spot { x, y };
+                            let expected = position.can_place(spot)
+                                && members
+                                    .iter()
+                                    .any(|&i| board.adjacent(position.stones[i].spot, spot));
+                            assert_eq!(
+                                mask[(y * 1000 + x) as usize],
+                                expected,
+                                "size={size}, {spot:?}"
+                            );
+                        }
+                    }
+                    assert_eq!(
+                        position.group_liberties(&members, 4).len(),
+                        mask.iter().filter(|&&v| v).count().min(4)
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn row_widths_preserve_strict_integer_disc_boundaries() {

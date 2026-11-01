@@ -15,4 +15,6 @@ pub mod territory;
 pub use action::{Action, COORDINATE_ACTIONS};
 pub use board::{Board, COORD_RANGE};
 pub use game::{Game, PreparedGame};
-pub use position::{Color, Play, Position, PreparedPosition, Spot, Stone};
+pub use position::{
+    Color, GroupAnalysis, LibertySpan, MoveAnalysis, Play, Position, PreparedPosition, Spot, Stone,
+};

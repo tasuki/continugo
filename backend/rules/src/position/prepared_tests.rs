@@ -1,6 +1,117 @@
 use super::*;
 
 #[test]
+fn capped_liberties_are_distinct_exact_coordinates_not_cached_witness_counts() {
+    let board = Board::new(3).unwrap();
+    let mut position = Position::new(board);
+    for y in [166, 498, 830] {
+        for x in [166, 498, 830] {
+            if (x, y) != (166, 166) {
+                position.stones.push(Stone {
+                    color: Color::Black,
+                    spot: Spot { x, y },
+                });
+            }
+        }
+    }
+    let members = position.groups(Color::Black).remove(0);
+    let mut oracle = Vec::new();
+    for y in 0..1000 {
+        for x in 0..1000 {
+            let spot = Spot { x, y };
+            if position.can_place(spot)
+                && members
+                    .iter()
+                    .any(|&i| board.adjacent(position.stones[i].spot, spot))
+            {
+                oracle.push(spot);
+            }
+        }
+    }
+    assert_eq!(oracle, vec![Spot { x: 166, y: 166 }]);
+    for cap in [0, 1, 2, 4, 8] {
+        assert_eq!(
+            position.group_liberties(&members, cap).len(),
+            oracle.len().min(cap)
+        );
+    }
+    assert!(
+        position
+            .prepare()
+            .analyze_move(
+                Stone {
+                    color: Color::Black,
+                    spot: oracle[0]
+                },
+                4
+            )
+            .is_none()
+    );
+}
+
+#[test]
+fn one_move_capturability_matches_exhaustive_legal_placements_on_dense_positions() {
+    let board = Board::new(3).unwrap();
+    for pattern in [0u16, 0x155, 0x54] {
+        for holes in [vec![0], vec![4], vec![8], vec![0, 8]] {
+            let stones = (0..9)
+                .filter(|i| !holes.contains(i))
+                .map(|i| Stone {
+                    color: if pattern & (1 << i) == 0 {
+                        Color::Black
+                    } else {
+                        Color::White
+                    },
+                    spot: Spot {
+                        x: 166 + 332 * (i % 3),
+                        y: 166 + 332 * (i / 3),
+                    },
+                })
+                .collect();
+            let position = Position { board, stones };
+            let prepared = position.prepare();
+            let free: Vec<_> = (0..1000)
+                .flat_map(|y| (0..1000).map(move |x| Spot { x, y }))
+                .filter(|&spot| position.can_place(spot))
+                .collect();
+            for color in [Color::Black, Color::White] {
+                for members in position.groups(color) {
+                    let removes_group = |next: &Position| {
+                        members
+                            .iter()
+                            .all(|&i| !next.stones.contains(&position.stones[i]))
+                    };
+                    let oracle = free.iter().copied().find(|&spot| {
+                        position
+                            .play(Stone {
+                                color: color.other(),
+                                spot,
+                            })
+                            .is_some_and(|next| removes_group(&next))
+                    });
+                    let analysis = prepared.analyze_group(&members);
+                    assert_eq!(
+                        analysis.capture_in_one.is_some(),
+                        oracle.is_some(),
+                        "pattern={pattern}, holes={holes:?}, group={members:?}"
+                    );
+                    if let Some(spot) = analysis.capture_in_one {
+                        assert!(removes_group(
+                            &position
+                                .play(Stone {
+                                    color: color.other(),
+                                    spot
+                                })
+                                .unwrap()
+                        ));
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn dense_groups_connections_and_simultaneous_captures_match_the_uncached_validator() {
     let board = Board::new(3).unwrap();
     for pattern in [0u16, 0x155, 0x54, 0x1ff] {

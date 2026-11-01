@@ -9,8 +9,9 @@ use std::time::Instant;
 mod liberties;
 mod prepared;
 mod profile;
+pub use liberties::LibertySpan;
 pub(crate) use prepared::PreparedGroups;
-pub use prepared::PreparedPosition;
+pub use prepared::{GroupAnalysis, MoveAnalysis, PreparedPosition};
 pub use profile::PlayProfile;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -187,6 +188,41 @@ impl Position {
             groups.push(group);
         }
         groups
+    }
+
+    /// Distinct geometric liberty coordinates, capped at `limit`. This is the
+    /// exact rule liberty definition (not legal moves or cached witness counts).
+    /// Members must be indices from this position's `groups` output.
+    pub fn group_liberties(&self, members: &[usize], limit: usize) -> Vec<Spot> {
+        self.collect_liberties(
+            members.iter().map(|&i| self.stones[i].spot),
+            limit,
+            Vec::new(),
+        )
+    }
+
+    fn collect_liberties(
+        &self,
+        spots: impl IntoIterator<Item = Spot>,
+        limit: usize,
+        mut found: Vec<Spot>,
+    ) -> Vec<Spot> {
+        found.truncate(limit);
+        if found.len() == limit {
+            return found;
+        }
+        for spot in spots {
+            self.visit_liberties(spot, |liberty| {
+                if !found.contains(&liberty) {
+                    found.push(liberty);
+                }
+                found.len() < limit
+            });
+            if found.len() == limit {
+                break;
+            }
+        }
+        found
     }
 
     fn capture_groups_without_liberties<const PROFILE: bool>(

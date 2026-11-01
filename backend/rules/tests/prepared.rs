@@ -19,6 +19,22 @@ fn prepared_candidates_match_both_colors_across_sizes_and_preserve_the_source() 
                     let stone = Stone { color, spot };
                     let next = prepared.play(stone);
                     assert_eq!(next, position.play(stone), "size={size}, {stone:?}");
+                    let analysis = prepared.analyze_move(stone, 4);
+                    assert_eq!(analysis.as_ref().map(|a| &a.position), next.as_ref());
+                    if let Some(analysis) = analysis {
+                        let next = &analysis.position;
+                        let new_index = next.stones().len() - 1;
+                        let group = next
+                            .groups(color)
+                            .into_iter()
+                            .find(|g| g.contains(&new_index))
+                            .unwrap();
+                        assert_eq!(analysis.group_size, group.len());
+                        assert_eq!(analysis.liberties, next.group_liberties(&group, 4).len());
+                        let enemies =
+                            |p: &Position| p.stones().iter().filter(|s| s.color != color).count();
+                        assert_eq!(analysis.captured_stones, enemies(&position) - enemies(next));
+                    }
                     if next.is_some() {
                         chosen = next;
                     }
