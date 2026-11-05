@@ -868,11 +868,21 @@ viewPosition board stones candidate group justPlayed justRemoved mode analysis =
           else
             lazy3 Coverage.viewLiberties board previewStones highlightedGroup
         , lazy3 Svg.node "g" [ SA.id "ghost-links" ] <|
-            List.map (viewGhostLink board) (Maybe.map getStoneLinks previewStone |> Maybe.withDefault [])
+            (previewStone
+                |> Maybe.map (\stone -> getStoneLinks stone ++ getBorderLinks board stone)
+                |> Maybe.withDefault []
+                |> List.map (viewGhostLink board)
+            )
         , lazy3 Svg.node "g" [ SA.id "ghost-stone" ] <|
             List.filterMap identity [ Maybe.map (viewGhostStone board) previewStone ]
         , lazy3 Svg.Keyed.node "g" [ SA.id "links" ] <|
-            List.map viewKeyedLink (List.filter survivingLink (getUniqueLinks stones))
+            List.map viewKeyedLink
+                (List.filter survivingLink (getUniqueLinks stones)
+                    ++ (stoneList stones
+                            |> List.filter (\stone -> Dict.member (stoneKey stone) previewStones)
+                            |> List.concatMap (getBorderLinks board)
+                       )
+                )
         , lazy3 Svg.Keyed.node "g" [ SA.id "stones" ] <|
             (stoneList stones |> List.map (\s -> viewKeyedStone board (stoneClass s) s))
         , lazy3 Svg.node "g" [ SA.id "staged-stone" ] <|

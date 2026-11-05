@@ -1,4 +1,4 @@
-module StoneView exposing (classJustPlayed, getStoneLinks, getUniqueLinks, spotBorderNearestTo, spotKey, viewGhostLink, viewGhostStone, viewHighlight, viewKeyedLineCover, viewKeyedLink, viewKeyedStone, viewLink, viewStagedStone, viewStone)
+module StoneView exposing (classJustPlayed, getBorderLinks, getStoneLinks, getUniqueLinks, spotBorderNearestTo, spotKey, viewGhostLink, viewGhostStone, viewHighlight, viewKeyedLineCover, viewKeyedLink, viewKeyedStone, viewLink, viewStagedStone, viewStone)
 
 import BoardGeometry exposing (distance)
 import Rules.Board as Board exposing (Board)
@@ -11,6 +11,37 @@ import Svg.Lazy exposing (lazy, lazy2, lazy3)
 getStoneLinks : Stone -> List ( Spot, Spot )
 getStoneLinks stone =
     List.map (\spots -> ( stone.spot, spots )) stone.adjacent
+
+
+{-| Link an edge when the closest fitting enemy stones on either side cannot
+connect beneath this stone. Use integer centres and strict adjacency, as in play.
+-}
+getBorderLinks : Board -> Stone -> List ( Spot, Spot )
+getBorderLinks board { spot } =
+    let
+        r =
+            Board.radius board
+
+        d =
+            Board.diameter board
+
+        blocks distanceToEdge =
+            let
+                offset =
+                    distanceToEdge - r
+
+                halfGap =
+                    ceiling (sqrt (toFloat (max 0 (d * d - offset * offset))))
+            in
+            2 * halfGap * halfGap >= d * d
+    in
+    [ ( spot.x, Spot 0 spot.y )
+    , ( Board.coordRange - spot.x, Spot Board.coordRange spot.y )
+    , ( spot.y, Spot spot.x 0 )
+    , ( Board.coordRange - spot.y, Spot spot.x Board.coordRange )
+    ]
+        |> List.filter (Tuple.first >> blocks)
+        |> List.map (\( _, edge ) -> ( spot, edge ))
 
 
 getUniqueLinks : Stones -> List ( Spot, Spot )
