@@ -91,11 +91,61 @@ fn open_intervals(
     visit(left, right)
 }
 
+/// Lazily owned by a prepared position, never built for move validation alone.
+/// Each row is the sorted disjoint union of all existing exclusion discs.
+#[derive(Debug)]
+pub(super) struct RowBlockers {
+    rows: Vec<Vec<(i32, i32)>>,
+}
+
+impl RowBlockers {
+    pub(super) fn new(position: &Position) -> Self {
+        let mut rows = vec![Vec::new(); COORD_RANGE as usize];
+        let geometry = rows_on(position.board);
+        let reach = geometry.overlap.len() as i32 - 1;
+        let low = position.board.stone_radius();
+        let high = COORD_RANGE - low;
+        for stone in &position.stones {
+            for y in (stone.spot.y - reach).max(low)..=(stone.spot.y + reach).min(high) {
+                let width = half_width(&geometry.overlap, y - stone.spot.y);
+                rows[y as usize].push((stone.spot.x - width, stone.spot.x + width));
+            }
+        }
+        for row in &mut rows {
+            row.sort_unstable();
+            let mut merged = 0;
+            for i in 0..row.len() {
+                let (left, right) = row[i];
+                if merged > 0 && left <= row[merged - 1].1 + 1 {
+                    row[merged - 1].1 = row[merged - 1].1.max(right);
+                } else {
+                    row[merged] = (left, right);
+                    merged += 1;
+                }
+            }
+            row.truncate(merged);
+        }
+        Self { rows }
+    }
+
+    fn row(&self, y: i32) -> &[(i32, i32)] {
+        &self.rows[y as usize]
+    }
+}
+
 impl Position {
     /// All geometric liberties of a group, as exact integer row intervals.
     /// Members are indices from this position's `groups` output. This matches
     /// frontend Rules.Liberties.openRowsOn: no suicide, ko, or eye filtering.
     pub fn liberty_spans(&self, members: &[usize]) -> Vec<LibertySpan> {
+        self.liberty_spans_with_blockers(members, None)
+    }
+
+    pub(super) fn liberty_spans_with_blockers(
+        &self,
+        members: &[usize],
+        cached: Option<&RowBlockers>,
+    ) -> Vec<LibertySpan> {
         let Some(first) = members.first() else {
             return Vec::new();
         };
@@ -110,7 +160,11 @@ impl Position {
             last_y = last_y.max(self.stones[i].spot.y);
         }
         let mut reachable: Vec<(i32, i32)> = Vec::with_capacity(members.len());
-        let mut blocked: Vec<(i32, i32)> = Vec::with_capacity(self.stones.len());
+        let mut blocked: Vec<(i32, i32)> = Vec::with_capacity(if cached.is_none() {
+            self.stones.len()
+        } else {
+            0
+        });
         let mut spans = Vec::new();
         for y in (first_y - reach).max(low)..=(last_y + reach).min(high) {
             reachable.clear();
@@ -138,16 +192,21 @@ impl Position {
                 }
             }
             reachable.truncate(merged);
-            blocked.clear();
-            for stone in &self.stones {
-                let width = half_width(&rows.overlap, y - stone.spot.y);
-                if width >= 0 {
-                    blocked.push((stone.spot.x - width, stone.spot.x + width));
+            let blockers = if let Some(cached) = cached {
+                cached.row(y)
+            } else {
+                blocked.clear();
+                for stone in &self.stones {
+                    let width = half_width(&rows.overlap, y - stone.spot.y);
+                    if width >= 0 {
+                        blocked.push((stone.spot.x - width, stone.spot.x + width));
+                    }
                 }
-            }
-            blocked.sort_unstable();
+                blocked.sort_unstable();
+                &blocked
+            };
             for &(left, right) in &reachable {
-                open_intervals(left, right, &blocked, |left, right| {
+                open_intervals(left, right, blockers, |left, right| {
                     spans.push(LibertySpan { y, left, right });
                     true
                 });
@@ -159,9 +218,19 @@ impl Position {
     /// Geometrically free placements whose strict exclusion disc covers every
     /// liberty center. Span endpoints suffice: squared distance is convex in x.
     /// This is only a candidate filter; the caller must validate captures/suicide.
+    #[cfg(test)]
     pub(super) fn visit_liberty_covers(
         &self,
         spans: &[LibertySpan],
+        visit: impl FnMut(Spot) -> bool,
+    ) {
+        self.visit_liberty_covers_with_blockers(spans, None, visit);
+    }
+
+    pub(super) fn visit_liberty_covers_with_blockers(
+        &self,
+        spans: &[LibertySpan],
+        cached: Option<&RowBlockers>,
         mut visit: impl FnMut(Spot) -> bool,
     ) {
         let d = self.board.diameter();
@@ -186,7 +255,11 @@ impl Position {
             return;
         }
         let rows = rows_on(self.board);
-        let mut blocked = Vec::with_capacity(self.stones.len());
+        let mut blocked = Vec::with_capacity(if cached.is_none() {
+            self.stones.len()
+        } else {
+            0
+        });
         'rows: for y in y_low..=y_high {
             let (mut left, mut right) = (x_low, x_high);
             for span in spans {
@@ -200,15 +273,20 @@ impl Position {
                     continue 'rows;
                 }
             }
-            blocked.clear();
-            for stone in &self.stones {
-                let width = half_width(&rows.overlap, y - stone.spot.y);
-                if width >= 0 {
-                    blocked.push((stone.spot.x - width, stone.spot.x + width));
+            let blockers = if let Some(cached) = cached {
+                cached.row(y)
+            } else {
+                blocked.clear();
+                for stone in &self.stones {
+                    let width = half_width(&rows.overlap, y - stone.spot.y);
+                    if width >= 0 {
+                        blocked.push((stone.spot.x - width, stone.spot.x + width));
+                    }
                 }
-            }
-            blocked.sort_unstable();
-            if !open_intervals(left, right, &blocked, |left, right| {
+                blocked.sort_unstable();
+                &blocked
+            };
+            if !open_intervals(left, right, blockers, |left, right| {
                 (left..=right).all(|x| visit(Spot { x, y }))
             }) {
                 return;
@@ -383,6 +461,13 @@ mod tests {
                     mask[(spot.y * 1000 + spot.x) as usize] = true;
                     true
                 });
+                let mut cached_mask = vec![false; 1_000_000];
+                let blockers = RowBlockers::new(position);
+                position.visit_liberty_covers_with_blockers(spans, Some(&blockers), |spot| {
+                    cached_mask[(spot.y * 1000 + spot.x) as usize] = true;
+                    true
+                });
+                assert_eq!(mask, cached_mask);
                 for y in 0..1000 {
                     for x in 0..1000 {
                         let spot = Spot { x, y };
@@ -424,6 +509,13 @@ mod tests {
             for color in [Color::Black, Color::White] {
                 for members in position.groups(color) {
                     let spans = position.liberty_spans(&members);
+                    assert_eq!(
+                        spans,
+                        position.liberty_spans_with_blockers(
+                            &members,
+                            Some(&RowBlockers::new(&position))
+                        )
+                    );
                     let mut mask = vec![false; 1_000_000];
                     let mut last: Option<LibertySpan> = None;
                     for &span in &spans {

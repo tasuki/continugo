@@ -3,7 +3,9 @@
 //! witnesses per group; search again only when both are blocked. Enemy captures
 //! precede friendly suicide, both simultaneous.
 
+use super::liberties::RowBlockers;
 use super::{Color, LibertySpan, Position, Spot, Stone};
+use std::{sync::OnceLock, time::Instant};
 
 struct Group {
     color: Color,
@@ -20,6 +22,7 @@ pub(crate) struct PreparedGroups {
 pub struct PreparedPosition<'a> {
     pub(super) position: &'a Position,
     pub(crate) groups: PreparedGroups,
+    pub(super) blockers: OnceLock<RowBlockers>,
 }
 
 /// Rule-derived facts about a legal placement. `liberties` is min(actual, cap)
@@ -43,36 +46,85 @@ pub struct GroupAnalysis {
     pub capture_in_one: Option<Spot>,
 }
 
+/// Disjoint diagnostic durations; ordinary group analysis reads no clocks.
+/// The first span measurement includes lazy blocker-row construction.
+#[derive(Debug, Default)]
+pub struct GroupAnalysisProfile {
+    pub liberty_spans_seconds: f64,
+    pub capturability_seconds: f64,
+}
+
 impl PreparedPosition<'_> {
     pub fn play(&self, stone: Stone) -> Option<Position> {
         self.groups.play(self.position, stone)
     }
 
-    /// Members must be a complete group from this position's `groups` output.
+    /// Borrow the groups already constructed for candidate validation.
+    pub fn groups(&self, color: Color) -> impl Iterator<Item = &[usize]> {
+        self.groups
+            .groups
+            .iter()
+            .filter(move |group| group.color == color)
+            .map(|group| group.members.as_slice())
+    }
+
+    /// Members must be a complete group from this position's or this view's `groups` output.
     /// This is unchanged-board capturability, not a forced capture after replies.
     pub fn analyze_group(&self, members: &[usize]) -> GroupAnalysis {
-        let liberty_spans = self.position.liberty_spans(members);
+        self.analyze_group_inner::<false>(members).0
+    }
+
+    /// Same analysis, with separate span and validated capture-search clocks.
+    pub fn analyze_group_profiled(
+        &self,
+        members: &[usize],
+    ) -> (GroupAnalysis, GroupAnalysisProfile) {
+        self.analyze_group_inner::<true>(members)
+    }
+
+    fn analyze_group_inner<const PROFILE: bool>(
+        &self,
+        members: &[usize],
+    ) -> (GroupAnalysis, GroupAnalysisProfile) {
+        let mut profile = GroupAnalysisProfile::default();
+        let tick = PROFILE.then(Instant::now);
+        let blockers = (!members.is_empty()).then(|| {
+            self.blockers
+                .get_or_init(|| RowBlockers::new(self.position))
+        });
+        let liberty_spans = self.position.liberty_spans_with_blockers(members, blockers);
+        if let Some(tick) = tick {
+            profile.liberty_spans_seconds = tick.elapsed().as_secs_f64();
+        }
+        let tick = PROFILE.then(Instant::now);
         let mut capture_in_one = None;
         if let Some(&first) = members.first() {
             let attacker = self.position.stones[first].color.other();
-            self.position.visit_liberty_covers(&liberty_spans, |spot| {
-                if let Some(next) = self.play(Stone {
-                    color: attacker,
-                    spot,
-                }) && members
-                    .iter()
-                    .all(|&i| !next.stones.contains(&self.position.stones[i]))
-                {
-                    capture_in_one = Some(spot);
-                    return false;
-                }
-                true
-            });
+            self.position
+                .visit_liberty_covers_with_blockers(&liberty_spans, blockers, |spot| {
+                    if let Some(next) = self.play(Stone {
+                        color: attacker,
+                        spot,
+                    }) && members
+                        .iter()
+                        .all(|&i| !next.stones.contains(&self.position.stones[i]))
+                    {
+                        capture_in_one = Some(spot);
+                        return false;
+                    }
+                    true
+                });
         }
-        GroupAnalysis {
-            liberty_spans,
-            capture_in_one,
+        if let Some(tick) = tick {
+            profile.capturability_seconds = tick.elapsed().as_secs_f64();
         }
+        (
+            GroupAnalysis {
+                liberty_spans,
+                capture_in_one,
+            },
+            profile,
+        )
     }
 
     /// Uses the same validator as `play`; optional analysis never changes rules.

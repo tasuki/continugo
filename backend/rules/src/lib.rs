@@ -16,5 +16,6 @@ pub use action::{Action, COORDINATE_ACTIONS};
 pub use board::{Board, COORD_RANGE};
 pub use game::{Game, PreparedGame};
 pub use position::{
-    Color, GroupAnalysis, LibertySpan, MoveAnalysis, Play, Position, PreparedPosition, Spot, Stone,
+    Color, GroupAnalysis, GroupAnalysisProfile, LibertySpan, MoveAnalysis, Play, Position,
+    PreparedPosition, Spot, Stone,
 };

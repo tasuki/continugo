@@ -1,6 +1,41 @@
 use super::*;
 
 #[test]
+fn group_blockers_are_lazy_reused_and_do_not_change_move_or_profile_results() {
+    let position = Position::default()
+        .play(Stone {
+            color: Color::Black,
+            spot: Spot { x: 38, y: 38 },
+        })
+        .unwrap();
+    let prepared = position.prepare();
+    let empty = prepared.analyze_group(&[]);
+    assert!(empty.liberty_spans.is_empty());
+    assert!(empty.capture_in_one.is_none());
+    assert!(prepared.blockers.get().is_none());
+    let stone = Stone {
+        color: Color::White,
+        spot: Spot { x: 500, y: 500 },
+    };
+    let before = prepared.analyze_move(stone, 4).unwrap();
+    assert!(prepared.blockers.get().is_none());
+    let members = position.groups(Color::Black).remove(0);
+    let ordinary = prepared.analyze_group(&members);
+    let blockers = prepared.blockers.get().unwrap() as *const _;
+    let (profiled, timings) = prepared.analyze_group_profiled(&members);
+    assert_eq!(blockers, prepared.blockers.get().unwrap() as *const _);
+    assert_eq!(ordinary.liberty_spans, position.liberty_spans(&members));
+    assert_eq!(ordinary.liberty_spans, profiled.liberty_spans);
+    assert_eq!(ordinary.capture_in_one, profiled.capture_in_one);
+    assert!(timings.liberty_spans_seconds >= 0.0);
+    assert!(timings.capturability_seconds >= 0.0);
+    let after = prepared.analyze_move(stone, 4).unwrap();
+    assert_eq!(before.position, after.position);
+    assert_eq!(before.liberties, after.liberties);
+    assert_eq!(Some(after.position), position.play(stone));
+}
+
+#[test]
 fn capped_liberties_are_distinct_exact_coordinates_not_cached_witness_counts() {
     let board = Board::new(3).unwrap();
     let mut position = Position::new(board);
@@ -134,6 +169,13 @@ fn dense_groups_connections_and_simultaneous_captures_match_the_uncached_validat
             let position = Position { board, stones };
             let prepared = position.prepare();
             for color in [Color::Black, Color::White] {
+                assert_eq!(
+                    prepared
+                        .groups(color)
+                        .map(<[usize]>::to_vec)
+                        .collect::<Vec<_>>(),
+                    position.groups(color)
+                );
                 for dx in [-1, 0, 1] {
                     let stone = Stone {
                         color,

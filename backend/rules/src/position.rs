@@ -4,14 +4,14 @@
 //! and liberty witnesses across candidate placements.
 
 use crate::Board;
-use std::time::Instant;
+use std::{sync::OnceLock, time::Instant};
 
 mod liberties;
 mod prepared;
 mod profile;
 pub use liberties::LibertySpan;
 pub(crate) use prepared::PreparedGroups;
-pub use prepared::{GroupAnalysis, MoveAnalysis, PreparedPosition};
+pub use prepared::{GroupAnalysis, GroupAnalysisProfile, MoveAnalysis, PreparedPosition};
 pub use profile::PlayProfile;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -90,6 +90,7 @@ impl Position {
         PreparedPosition {
             position: self,
             groups: PreparedGroups::new(self),
+            blockers: OnceLock::new(),
         }
     }
 
