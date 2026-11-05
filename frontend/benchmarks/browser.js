@@ -170,6 +170,25 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await navigate('after', 'B[sibR];B[rBes]');
     assert.equal(await pocketAlpha(), 0);
 
+    // Edge/corner drags stay connected, stage normally, and confirm by tapping.
+    for (const [x, y, toX, toY, expectedX, expectedY, links] of [
+      [38, 500, 500, 700, 92, 700, 1],
+      [38, 38, 500, 500, 92, 92, 2],
+    ]) {
+      await navigate('after');
+      await evaluate(`move(${x},${y},'mousedown')`);
+      await evaluate(`move(${toX},${toY})`);
+      await evaluate(`move(${toX},${toY},'mouseup')`);
+      assert.deepEqual(await evaluate(`(() => {
+        const stone = document.querySelector('#staged-stone circle');
+        return [+stone.getAttribute('cx'), +stone.getAttribute('cy')];
+      })()`), [expectedX, expectedY]);
+      assert.equal(await evaluate("document.querySelectorAll('#ghost-links line').length"), links);
+      await evaluate(`move(${expectedX},${expectedY},'mousedown')`);
+      await evaluate(`move(${expectedX},${expectedY},'mouseup')`);
+      assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 1);
+    }
+
     await navigate('after');
     await evaluate('move(500,500)');
     assert.equal(await evaluate("document.querySelectorAll('#ghost-stone circle').length"), 1);

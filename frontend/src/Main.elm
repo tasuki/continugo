@@ -253,20 +253,16 @@ handleHover model hoverSpot =
             }
 
 
-handleDrag : Model -> Stone -> Spot -> Model
-handleDrag model draggedFrom draggedTo =
+handleDrag : Model -> Maybe Stone -> Model
+handleDrag model candidateStone =
     let
-        candidateStone : Stone
-        candidateStone =
-            DF.findDragged model.game.board model.game.stones model.game.onMove draggedFrom draggedTo
-
         ghostStone : Maybe MovePreview.Preview
         ghostStone =
-            if Maybe.map (.stone >> .spot) model.ghostStone == Just candidateStone.spot then
+            if Maybe.map (.stone >> .spot) model.ghostStone == Maybe.map .spot candidateStone then
                 model.ghostStone
 
             else
-                MovePreview.fromCandidates model.game.board model.game.stones (Just candidateStone) Nothing
+                MovePreview.fromCandidates model.game.board model.game.stones candidateStone Nothing
     in
     { model
         | ghostStone = ghostStone
@@ -380,7 +376,12 @@ handleMoved coords model =
             model
 
         ( _, DF.DragStone draggedFrom ) ->
-            handleDrag model draggedFrom coords
+            handleDrag model (Just (DF.findDragged model.game.board model.game.stones model.game.onMove draggedFrom coords))
+
+        ( _, DF.DragBorders _ borders ) ->
+            DF.findBorderDraggedSpot model.game.board (List.map .spot (stoneList model.game.stones)) borders coords
+                |> Maybe.map (createStone model.game.onMove)
+                |> handleDrag model
 
         _ ->
             -- handle hovering
@@ -464,7 +465,7 @@ handleBoardPointer action coords model =
             if model.showAnalysis then
                 handleAnalysisFinished coords { model | dragFrom = DF.DragNone }
 
-            else if model.dragFrom == DF.DragSpot coords then
+            else if DF.isTap coords model.dragFrom then
                 let
                     cleared =
                         { model

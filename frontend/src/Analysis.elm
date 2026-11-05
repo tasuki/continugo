@@ -1,5 +1,6 @@
 module Analysis exposing (..)
 
+import BoardGeometry exposing (Border, connectedBorders)
 import Coverage
 import DragFrom
 import List.Extra
@@ -14,6 +15,7 @@ import Svg.Attributes as SA
 type alias Gesture =
     { start : Spot
     , origin : Maybe Spot
+    , borders : List Border
     , dragged : Bool
     , repeated : Bool
     }
@@ -92,7 +94,21 @@ start board stones coords model =
     in
     { model
         | circles = circles
-        , gesture = Just { start = coords, origin = origin, dragged = False, repeated = repeated }
+        , gesture =
+            Just
+                { start = coords
+                , origin = origin
+                , borders =
+                    if origin == Nothing then
+                        Placement.nearestFreeSpot board coords (List.map .spot (stoneList stones) ++ circles)
+                            |> Maybe.map (connectedBorders board)
+                            |> Maybe.withDefault []
+
+                    else
+                        []
+                , dragged = False
+                , repeated = repeated
+                }
         , pendingRemoval = Nothing
         , preview = Nothing
         , invalid = Nothing
@@ -155,7 +171,11 @@ move board stones coords model =
                                 DragFrom.findDraggedSpot board (occupied stones model) from coords
 
                             Nothing ->
-                                Placement.nearestFreeSpot board coords (occupied stones model)
+                                if List.isEmpty gesture.borders then
+                                    Placement.nearestFreeSpot board coords (occupied stones model)
+
+                                else
+                                    DragFrom.findBorderDraggedSpot board (occupied stones model) gesture.borders coords
             in
             { model | gesture = Just { gesture | dragged = dragged }, preview = preview }
 

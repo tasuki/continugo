@@ -22,6 +22,7 @@ The [full rules are also available](rules.md), though I doubt you want to read '
 - Tap groups/stones to highlight their liberties.
 - Drag to stage a move, then tap the staged move to confirm it.
 - Drag from your own stone to place a stone as far as possible while remaining connected.
+- Drag from near an edge to keep the staged stone connected to it; near a corner, it stays connected to both edges.
 - If a spot clearly has enough space for a stone but the stone is not appearing, playing there would be a suicide.
 - While suicide is not allowed, you can **capture another group of your own stones** by removing their last liberty.
 - **Capture dead groups before passing**: scoring uses the stones still on the board, with no automatic dead-stone removal.
@@ -31,7 +32,7 @@ The [full rules are also available](rules.md), though I doubt you want to read '
 
 - Toggle **o** to enter/leave analysis mode. Analysis does not change the turn or game record.
 - Tap to add hollow circles. Circles must fit without overlapping stones or other circles. Dashed lines show potential connections to stones of either colour and other circles; circles do not capture or belong to either player.
-- Drag from any stone or circle to create another circle as far away as possible while still connected – just as when dragging from your own stone during play.
+- Drag from any stone or circle to create another circle as far away as possible while still connected – just as when dragging from your own stone during play. Edge and corner drags work here too.
 - Circles cannot be moved: remove one by tapping it and draw a new one instead.
 - Double-tap a circle to leave analysis and stage a stone at that spot.
 
