@@ -21,7 +21,13 @@ a { color: inherit; }
     border-radius: 30px; line-height: 30px; width: 30px; height: 30px; text-align: center; }
 
 #menu #move-number { cursor: default; font-size: 12px; }
-#score-toggle, #analysis-toggle { border: 0; padding: 0; font: inherit; line-height: 30px; }
+#score-toggle, #analysis-toggle, #policy-toggle { border: 0; padding: 0; font: inherit; line-height: 30px; }
+#menu .training-value { cursor: default; font-size: 9px; }
+.training-evaluation, .training-menu { display: contents; }
+#menu .menu-spacer { width: 30px; height: 30px; }
+#menu .policy-pass { cursor: default; display: flex; flex-direction: column; justify-content: center;
+    line-height: 12px; box-shadow: inset 0 0 0 1px #176B72; }
+#menu .pass-label { font-size: 8px; }
 #menu .icon.active { background: #DDD; color: #222; box-shadow: inset 0 0 0 2px #222; }
 #menu .icon .tooltip { display: none; white-space: nowrap; text-align: left; }
 #menu .icon:hover .tooltip { display: inline; }
@@ -62,9 +68,14 @@ a { color: inherit; }
     30% { transform: scale(1.1); }
     100% { transform: scale(0); }
 }
-#highlights circle { stroke: #900; fill: transparent; stroke-width: var(--stone-stroke-width); }
+#highlights circle, #last-move { stroke: #900; fill: transparent; stroke-width: var(--stone-stroke-width); }
+#last-move { fill: #D66; stroke: none; }
 #stones .pending-capture { opacity: 0.25; }
 #capture-preview { stroke: #900; stroke-width: var(--stone-stroke-width); }
+#policy-alternatives circle { stroke: #176B72; stroke-width: var(--stone-stroke-width); }
+#policy-alternatives text { text-anchor: middle; dominant-baseline: central; }
+#policy-alternatives .policy-black text { fill: #FFF; }
+#policy-alternatives .policy-white text { fill: #222; }
 
 #analysis-layer { stroke: #176B72; stroke-width: var(--stone-stroke-width); }
 #analysis-circles circle { fill: none; }

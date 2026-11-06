@@ -36,6 +36,7 @@ import Svg.Keyed
 import Svg.Lazy exposing (..)
 import Task
 import TerritoryView
+import Training
 import Url exposing (Url)
 
 
@@ -80,6 +81,8 @@ type alias Model =
     { game : Game.Game
     , record : List Play
     , sgfRoot : List Sgf.Property
+    , sgfMoves : List (List Sgf.Property)
+    , showPolicy : Bool
     , ghostStone : Maybe MovePreview.Preview
     , highlightedGroup : List Spot
     , justPlayed : Maybe Spot
@@ -103,6 +106,8 @@ emptyModel navKey =
     { game = Game.empty
     , record = []
     , sgfRoot = Sgf.empty.root
+    , sgfMoves = []
+    , showPolicy = False
     , ghostStone = Nothing
     , highlightedGroup = []
     , justPlayed = Nothing
@@ -131,7 +136,7 @@ init flags url navKey =
             readSession flags
                 |> Maybe.map
                     (\( record, game ) ->
-                        { fallback | game = game, record = record.plays, sgfRoot = record.root }
+                        { fallback | game = game, record = record.plays, sgfRoot = record.root, sgfMoves = record.moveProperties }
                     )
                 |> Maybe.withDefault fallback
     in
@@ -159,9 +164,14 @@ readSession value =
 persist : Model -> Cmd msg
 persist model =
     saveSession
-        { sgf = Sgf.encodeRecord { root = model.sgfRoot, plays = model.record }
+        { sgf = Sgf.encodeRecord (sgfRecord model)
         , move = List.length model.game.record
         }
+
+
+sgfRecord : Model -> Sgf.Record
+sgfRecord model =
+    { root = model.sgfRoot, plays = model.record, moveProperties = model.sgfMoves }
 
 
 
@@ -179,6 +189,7 @@ type Msg
     | ToggleHelp
     | ToggleScoring
     | ToggleAnalysis
+    | TogglePolicy
     | AnalysisRemovalExpired Int
     | OpenMenu
     | NewBoard Board
@@ -312,6 +323,7 @@ handlePlay model playSpot =
                     { model
                         | game = game
                         , record = List.reverse game.record
+                        , sgfMoves = List.take (List.length model.game.record) model.sgfMoves ++ [ [] ]
                         , justPlayed = Just spot
                         , justRemoved = removedStones model.game.stones game.stones
                         , highlightedGroup = []
@@ -500,7 +512,7 @@ updateAndSave msg model =
             update msg model
     in
     ( updated
-    , if updated.record /= model.record || updated.sgfRoot /= model.sgfRoot || updated.game.record /= model.game.record then
+    , if updated.record /= model.record || updated.sgfRoot /= model.sgfRoot || updated.sgfMoves /= model.sgfMoves || updated.game.record /= model.game.record then
         Cmd.batch [ command, persist updated ]
 
       else
@@ -543,7 +555,12 @@ update msg model =
             else
                 case Game.pass model.game of
                     Just game ->
-                        updatePosition { model | game = game, record = List.reverse game.record }
+                        updatePosition
+                            { model
+                                | game = game
+                                , record = List.reverse game.record
+                                , sgfMoves = List.take (List.length model.game.record) model.sgfMoves ++ [ [] ]
+                            }
 
                     Nothing ->
                         ( model, Cmd.none )
@@ -580,7 +597,7 @@ update msg model =
                         fresh =
                             newBoard board model
                     in
-                    ( { fresh | record = record.plays, sgfRoot = record.root }, Cmd.none )
+                    ( { fresh | record = record.plays, sgfRoot = record.root, sgfMoves = record.moveProperties }, Cmd.none )
 
                 Err error ->
                     ( { model | sgfError = Just error }, Cmd.none )
@@ -633,6 +650,9 @@ update msg model =
               }
             , Cmd.none
             )
+
+        TogglePolicy ->
+            ( { model | showPolicy = not model.showPolicy }, Cmd.none )
 
         AnalysisRemovalExpired serial ->
             ( { model | analysis = Analysis.expire serial model.analysis }, Cmd.none )
@@ -698,6 +718,7 @@ restoreFromUrl url model =
                 | game = game
                 , record = record.plays
                 , sgfRoot = record.root
+                , sgfMoves = record.moveProperties
                 , pointer = PointerInput.cancel model.pointer
                 , analysis = Analysis.reconcile game.board game.stones model.analysis
                 , highlightedGroup = []
@@ -814,11 +835,17 @@ viewSvg model =
              else
                 Analysis.empty
             )
+        , if model.showPolicy then
+            lazy3 Training.viewPolicy model.game.board model.game.onMove (nextTraining model).policy
+
+          else
+            Svg.g [] []
         , if model.showAnalysis then
             lazy3 Analysis.view model.game.board model.game.stones model.analysis
 
           else
             Svg.g [] []
+        , lazy2 viewLastMove model.game.board model.game.record
         ]
 
 
@@ -904,6 +931,23 @@ viewPosition board stones candidate group justPlayed justRemoved mode analysis =
         ]
 
 
+viewLastMove : Board -> List Play -> Svg msg
+viewLastMove board record =
+    case List.head record |> Maybe.map .move of
+        Just (Place stone) ->
+            Svg.circle
+                [ SA.id "last-move"
+                , SA.cx (String.fromInt stone.spot.x)
+                , SA.cy (String.fromInt stone.spot.y)
+                , SA.r (String.fromFloat (toFloat (Board.radius board) / 4))
+                , SA.pointerEvents "none"
+                ]
+                []
+
+        _ ->
+            Svg.g [] []
+
+
 viewCapturePreview : Board -> Stone -> Svg msg
 viewCapturePreview board { spot } =
     let
@@ -976,17 +1020,35 @@ viewMoveNumber record =
         ]
 
 
-viewDownload : List Sgf.Property -> List Play -> H.Html msg
-viewDownload root record =
+viewDownload : List Sgf.Property -> List Play -> List (List Sgf.Property) -> H.Html msg
+viewDownload root plays moveProperties =
     H.div [ HA.class "item" ]
         [ H.a
             [ HA.class "icon"
-            , HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord { root = root, plays = record }))
+            , HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord { root = root, plays = plays, moveProperties = moveProperties }))
             , HA.download "continugo.sgf"
             , HA.attribute "aria-label" "Download SGF"
             ]
             [ H.text "↓", H.span [ HA.class "tooltip" ] [ H.text " download SGF" ] ]
         ]
+
+
+trainingAt : Int -> Model -> Training.Annotation
+trainingAt index model =
+    if index < 0 then
+        Training.empty
+
+    else
+        model.sgfMoves
+            |> List.drop index
+            |> List.head
+            |> Maybe.map Training.annotation
+            |> Maybe.withDefault Training.empty
+
+
+nextTraining : Model -> Training.Annotation
+nextTraining model =
+    trainingAt (List.length model.game.record) model
 
 
 view : Model -> Browser.Document Msg
@@ -1079,7 +1141,12 @@ view model =
             , lazy viewMoveNumber model.game.record
             , menuLink Prev "‹" "prev"
             , menuLink Next "›" "next"
-            , lazy2 viewDownload model.sgfRoot model.record
+            , lazy3 viewDownload model.sgfRoot model.record model.sgfMoves
+            , Training.viewMenu TogglePolicy
+                model.showPolicy
+                model.game.onMove
+                (trainingAt (List.length model.game.record - 1) model)
+                (nextTraining model).policy
             ]
         , content
         ]

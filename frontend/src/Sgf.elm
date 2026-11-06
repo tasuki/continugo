@@ -2,7 +2,7 @@ module Sgf exposing (Property, Record, boardFromRoot, decode, decodePlay, decode
 
 {-| Single-sequence ContinuGo SGF, with a move-free FF[9071]GM[9071] root.
 Coordinates use two base-52 digits per axis. Variations are not supported.
-The record API preserves root properties; the play-only API uses a default
+The record API preserves root and move properties; the play-only API uses a default
 13x13 root. Empty PB, PW and RE properties are omitted when writing.
 Legacy compact records remain readable.
 Decoding checks syntax, not move legality, and does not apply board metadata.
@@ -21,6 +21,7 @@ type alias Property =
 type alias Record =
     { root : List Property
     , plays : List Play
+    , moveProperties : List (List Property)
     }
 
 
@@ -37,6 +38,7 @@ onBoard board =
         , ( "SZ", [ String.fromInt (Board.size board) ] )
         ]
     , plays = []
+    , moveProperties = []
     }
 
 
@@ -190,7 +192,20 @@ encodeRecord record =
     in
     "(;FF[9071]GM[9071]"
         ++ metadata
-        ++ String.concat (List.map (\play -> "\n;" ++ encodePlay play) record.plays)
+        ++ String.concat
+            (List.indexedMap
+                (\index play ->
+                    "\n;"
+                        ++ encodePlay play
+                        ++ (List.drop index record.moveProperties
+                                |> List.head
+                                |> Maybe.withDefault []
+                                |> List.map property
+                                |> String.concat
+                           )
+                )
+                record.plays
+            )
         ++ "\n)"
 
 
@@ -209,12 +224,12 @@ decodeRecord sgf =
             |> Result.andThen
                 (\( root, rest ) ->
                     validateRoot root
-                        |> Result.andThen (\_ -> parseNodes [] rest)
-                        |> Result.map (\plays -> { root = root, plays = plays })
+                        |> Result.andThen (\_ -> parseNodes [] [] rest)
+                        |> Result.map (\( plays, properties ) -> { root = root, plays = plays, moveProperties = properties })
                 )
 
     else
-        decodeCompact sgf |> Result.map (\plays -> { empty | plays = plays })
+        decodeCompact sgf |> Result.map (\plays -> { empty | plays = plays, moveProperties = List.map (always []) plays })
 
 
 decodeCompact : String -> Result String (List Play)
@@ -348,20 +363,25 @@ parseValue value chars =
             Err "Unterminated SGF property value"
 
 
-parseNodes : List Play -> List Char -> Result String (List Play)
-parseNodes plays chars =
+parseNodes : List Play -> List (List Property) -> List Char -> Result String ( List Play, List (List Property) )
+parseNodes plays moveProperties chars =
     case skipWhitespace chars of
         ';' :: rest ->
             parseProperties rest
                 |> Result.andThen
                     (\( properties, remaining ) ->
                         nodePlay properties
-                            |> Result.andThen (\play -> parseNodes (play :: plays) remaining)
+                            |> Result.andThen
+                                (\play ->
+                                    parseNodes (play :: plays)
+                                        (List.filter (\( name, _ ) -> name /= "B" && name /= "W") properties :: moveProperties)
+                                        remaining
+                                )
                     )
 
         ')' :: rest ->
             if List.isEmpty (skipWhitespace rest) then
-                Ok (List.reverse plays)
+                Ok ( List.reverse plays, List.reverse moveProperties )
 
             else
                 Err "Unexpected content after SGF tree"

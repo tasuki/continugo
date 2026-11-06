@@ -145,6 +145,7 @@ metadataTests =
                 , ( "XX", [ "one", "two" ] )
                 ]
             , plays = [ createPlay Black (Spot 53 53), createPass White ]
+            , moveProperties = [ [], [] ]
             }
     in
     describe "Root metadata"

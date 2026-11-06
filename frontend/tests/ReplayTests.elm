@@ -11,6 +11,8 @@ import Rules.Board as Board
 import Rules.Game as Game
 import Rules.Position exposing (..)
 import Sgf
+import Svg
+import Svg.Attributes as SA
 import Test exposing (..)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
@@ -57,6 +59,49 @@ tests =
                             , after.onMove
                             , Game.isFinished after
                             )
+        , test "The last-move ring follows the displayed replay position" <|
+            \_ ->
+                let
+                    record =
+                        [ createPlay Black (Spot 200 200), createPlay White (Spot 500 500) ]
+                in
+                Expect.all
+                    (List.map
+                        (\( move, coordinate ) _ ->
+                            let
+                                game =
+                                    Main.gameAt Board.default move record
+                            in
+                            Main.viewLastMove game.board game.record
+                                |> List.singleton
+                                |> Svg.svg []
+                                |> Query.fromHtml
+                                |> Query.find [ Selector.id "last-move" ]
+                                |> Query.has
+                                    [ Selector.attribute (SA.cx (String.fromInt coordinate))
+                                    , Selector.attribute (SA.cy (String.fromInt coordinate))
+                                    , Selector.attribute (SA.r (String.fromFloat (toFloat (Board.radius game.board) / 4)))
+                                    , Selector.attribute (SA.pointerEvents "none")
+                                    ]
+                        )
+                        [ ( 1, 200 ), ( 2, 500 ) ]
+                    )
+                    ()
+        , test "No last-move ring before the first move or after a pass" <|
+            \_ ->
+                Expect.all
+                    (List.map
+                        (\record _ ->
+                            Main.viewLastMove Board.default record
+                                |> List.singleton
+                                |> Svg.svg []
+                                |> Query.fromHtml
+                                |> Query.findAll [ Selector.id "last-move" ]
+                                |> Query.count (Expect.equal 0)
+                        )
+                        [ [], [ createPass White, createPlay Black (Spot 200 200) ] ]
+                    )
+                    ()
         , describe "Current move badge"
             ([ ( 0, "No moves yet" ), ( 1, "bWdS" ), ( 2, "pass" ) ]
                 |> List.map
@@ -112,9 +157,10 @@ tests =
                     record =
                         { root = Sgf.empty.root ++ [ ( "RE", [ "B+2.5" ] ) ]
                         , plays = [ createPlay Black (Spot 200 200), createPass White ]
+                        , moveProperties = [ [ ( "C", [ "{\"win_pct\":49.9,\"score\":0.5}" ] ) ], [] ]
                         }
                 in
-                Main.viewDownload record.root record.plays
+                Main.viewDownload record.root record.plays record.moveProperties
                     |> Query.fromHtml
                     |> Query.find [ Selector.tag "a" ]
                     |> Query.has
