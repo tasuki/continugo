@@ -13,7 +13,8 @@
 
 html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 a { color: inherit; }
-#sgf-dropzone { border: 1px dashed; margin-top: 1rem; padding: 2rem; }
+#sgf-dropzone { border: 1px dashed; margin-top: 1rem; padding: 2rem;
+    font: inherit; color: inherit; background: transparent; cursor: pointer; }
 #menu { position: absolute; left: 0px; top: 0px; z-index: 9; }
 #menu .item { float: left; padding: 1px 0 0 1px; }
 @media screen and (min-aspect-ratio: 1/1) { #menu .item { float: none; } }

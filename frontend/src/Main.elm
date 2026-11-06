@@ -982,7 +982,10 @@ viewNewGames error =
                             [ H.text (String.fromInt (Board.size board) ++ "×" ++ String.fromInt (Board.size board)) ]
                     )
             )
-        , H.div [ HA.id "sgf-dropzone" ] [ H.text "Drop an SGF file here" ]
+        , H.div []
+            [ H.button [ HA.id "sgf-dropzone", HA.type_ "button" ] [ H.text "Open or drop an SGF file here" ]
+            , H.input [ HA.id "sgf-file", HA.type_ "file", HA.accept ".sgf", HA.hidden True ] []
+            ]
         , case error of
             Just message ->
                 H.p [ HA.attribute "role" "alert" ] [ H.text message ]

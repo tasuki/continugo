@@ -36,18 +36,9 @@
             } catch (_) {}
         });
 
-        document.addEventListener('dragover', function (event) {
-            if (document.getElementById('sgf-dropzone')?.contains(event.target)) {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = 'copy';
-            }
-        });
-        document.addEventListener('drop', async function (event) {
-            if (!document.getElementById('sgf-dropzone')?.contains(event.target)) return;
-            event.preventDefault();
-            const files = event.dataTransfer.files;
+        async function loadSgf(files) {
             if (files.length !== 1) {
-                app.ports.sgfLoadFailed.send('Drop one SGF file at a time.');
+                app.ports.sgfLoadFailed.send('Open or drop one SGF file at a time.');
                 return;
             }
             try {
@@ -55,6 +46,28 @@
             } catch (_) {
                 app.ports.sgfLoadFailed.send('Could not read the SGF file.');
             }
+        }
+
+        document.addEventListener('click', function (event) {
+            if (document.getElementById('sgf-dropzone')?.contains(event.target)) {
+                document.getElementById('sgf-file').click();
+            }
+        });
+        document.addEventListener('change', function (event) {
+            if (event.target.id !== 'sgf-file') return;
+            if (event.target.files.length) loadSgf(event.target.files);
+            event.target.value = '';
+        });
+        document.addEventListener('dragover', function (event) {
+            if (document.getElementById('sgf-dropzone')?.contains(event.target)) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+            }
+        });
+        document.addEventListener('drop', function (event) {
+            if (!document.getElementById('sgf-dropzone')?.contains(event.target)) return;
+            event.preventDefault();
+            loadSgf(event.dataTransfer.files);
         });
     </script>
 </body>

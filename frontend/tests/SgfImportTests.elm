@@ -29,13 +29,15 @@ tests =
                 [ "invalid", "(;FF[9071]GM[9071]SZ[0])", "(;FF[9071]GM[9071]SZ[501])" ]
                     |> List.map (Main.decodeImport >> Result.toMaybe)
                     |> Expect.equal [ Nothing, Nothing, Nothing ]
-        , test "The menu has a drop target and displays import errors" <|
+        , test "The menu has an SGF picker/drop target and displays import errors" <|
             \_ ->
                 Main.viewNewGames (Just "Bad SGF")
                     |> Query.fromHtml
                     |> Expect.all
                         [ Query.find [ Selector.id "sgf-dropzone" ]
-                            >> Query.has [ Selector.text "Drop an SGF file here" ]
+                            >> Query.has [ Selector.tag "button", Selector.text "Open or drop an SGF file here" ]
+                        , Query.find [ Selector.id "sgf-file" ]
+                            >> Query.has [ Selector.tag "input", Selector.attribute (HA.type_ "file"), Selector.attribute (HA.accept ".sgf") ]
                         , Query.find [ Selector.attribute (HA.attribute "role" "alert") ]
                             >> Query.has [ Selector.text "Bad SGF" ]
                         ]
