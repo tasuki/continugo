@@ -131,9 +131,48 @@ impl RowBlockers {
     fn row(&self, y: i32) -> &[(i32, i32)] {
         &self.rows[y as usize]
     }
+
+    pub(super) fn blocks(&self, spot: Spot) -> bool {
+        let row = self.row(spot.y);
+        let end = row.partition_point(|&(start, _)| start <= spot.x);
+        end != 0 && row[end - 1].1 >= spot.x
+    }
 }
 
 impl Position {
+    pub(super) fn visit_local_liberty_spans_with_blockers(
+        &self,
+        spot: Spot,
+        blockers: &RowBlockers,
+        mut visit: impl FnMut(LibertySpan),
+    ) {
+        let geometry = rows_on(self.board);
+        let reach = geometry.adjacency.len() as i32 - 1;
+        let low = self.board.stone_radius();
+        let high = COORD_RANGE - low;
+        for y in (spot.y - reach).max(low)..=(spot.y + reach).min(high) {
+            let dy = y - spot.y;
+            let outer = half_width(&geometry.adjacency, dy);
+            let left = (spot.x - outer).max(low);
+            let right = (spot.x + outer).min(high);
+            let mut emit = |a, b| {
+                let row = blockers.row(y);
+                let first = row.partition_point(|&(_, end)| end < a);
+                open_intervals(a, b, &row[first..], |left, right| {
+                    visit(LibertySpan { y, left, right });
+                    true
+                });
+            };
+            let inner = half_width(&geometry.overlap, dy);
+            if inner < 0 {
+                emit(left, right);
+            } else {
+                emit(left, right.min(spot.x - inner - 1));
+                emit(left.max(spot.x + inner + 1), right);
+            }
+        }
+    }
+
     /// All geometric liberties of a group, as exact integer row intervals.
     /// Members are indices from this position's `groups` output. This matches
     /// frontend Rules.Liberties.openRowsOn: no suicide, ko, or eye filtering.

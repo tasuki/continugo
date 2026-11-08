@@ -68,6 +68,53 @@ impl PreparedPosition<'_> {
             .map(|group| group.members.as_slice())
     }
 
+    /// Exact geometric liberty spans, reusing this position's lazy blocker rows.
+    /// Members must be a complete group from this position's or this view's `groups` output.
+    /// Unlike `analyze_group`, this does not search for a capture witness.
+    pub fn liberty_spans(&self, members: &[usize]) -> Vec<LibertySpan> {
+        let blockers = (!members.is_empty()).then(|| {
+            self.blockers
+                .get_or_init(|| RowBlockers::new(self.position))
+        });
+        self.position.liberty_spans_with_blockers(members, blockers)
+    }
+
+    /// Local geometric liberty centers of a hypothetical stone, using fixed
+    /// existing stones as blockers. Does not join groups, simulate captures, or
+    /// validate suicide/turns. The hypothetical stone excludes overlapping
+    /// centers itself. Reuses the same immutable blocker rows as group geometry.
+    pub fn visit_local_liberty_spans(&self, spot: Spot, visit: impl FnMut(LibertySpan)) {
+        if !self.position.board().contains(spot) {
+            return;
+        }
+        let blockers = self
+            .blockers
+            .get_or_init(|| RowBlockers::new(self.position));
+        self.position
+            .visit_local_liberty_spans_with_blockers(spot, blockers, visit);
+    }
+
+    /// Single-point version of the same fixed-obstacle local geometry. Useful
+    /// for cheap sufficient tests; false does not imply no other centers exist.
+    pub fn is_local_liberty_center(&self, spot: Spot, center: Spot) -> bool {
+        let board = self.position.board();
+        board.contains(spot)
+            && board.contains(center)
+            && board.adjacent(spot, center)
+            && !board.overlaps(spot, center)
+            && !self
+                .blockers
+                .get_or_init(|| RowBlockers::new(self.position))
+                .blocks(center)
+    }
+
+    /// Collected version of `visit_local_liberty_spans`, useful for diagnostics.
+    pub fn local_liberty_spans(&self, spot: Spot) -> Vec<LibertySpan> {
+        let mut spans = Vec::new();
+        self.visit_local_liberty_spans(spot, |span| spans.push(span));
+        spans
+    }
+
     /// Members must be a complete group from this position's or this view's `groups` output.
     /// This is unchanged-board capturability, not a forced capture after replies.
     pub fn analyze_group(&self, members: &[usize]) -> GroupAnalysis {

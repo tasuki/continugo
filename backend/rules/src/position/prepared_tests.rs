@@ -9,6 +9,7 @@ fn group_blockers_are_lazy_reused_and_do_not_change_move_or_profile_results() {
         })
         .unwrap();
     let prepared = position.prepare();
+    assert!(prepared.liberty_spans(&[]).is_empty());
     let empty = prepared.analyze_group(&[]);
     assert!(empty.liberty_spans.is_empty());
     assert!(empty.capture_in_one.is_none());
@@ -20,8 +21,13 @@ fn group_blockers_are_lazy_reused_and_do_not_change_move_or_profile_results() {
     let before = prepared.analyze_move(stone, 4).unwrap();
     assert!(prepared.blockers.get().is_none());
     let members = position.groups(Color::Black).remove(0);
-    let ordinary = prepared.analyze_group(&members);
+    let spans = prepared.liberty_spans(&members);
     let blockers = prepared.blockers.get().unwrap() as *const _;
+    assert_eq!(spans, position.liberty_spans(&members));
+    assert_eq!(spans, prepared.liberty_spans(&members));
+    assert_eq!(blockers, prepared.blockers.get().unwrap() as *const _);
+    let ordinary = prepared.analyze_group(&members);
+    assert_eq!(ordinary.liberty_spans, spans);
     let (profiled, timings) = prepared.analyze_group_profiled(&members);
     assert_eq!(blockers, prepared.blockers.get().unwrap() as *const _);
     assert_eq!(ordinary.liberty_spans, position.liberty_spans(&members));
@@ -124,6 +130,10 @@ fn one_move_capturability_matches_exhaustive_legal_placements_on_dense_positions
                             })
                             .is_some_and(|next| removes_group(&next))
                     });
+                    assert_eq!(
+                        prepared.liberty_spans(&members),
+                        position.liberty_spans(&members)
+                    );
                     let analysis = prepared.analyze_group(&members);
                     assert_eq!(
                         analysis.capture_in_one.is_some(),
