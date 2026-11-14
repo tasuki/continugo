@@ -1,5 +1,6 @@
 module ReplayTests exposing (tests)
 
+import BoardScene
 import Dict
 import Expect
 import Fixtures.Play as PlayFixtures
@@ -72,7 +73,7 @@ tests =
                                 game =
                                     Main.gameAt Board.default move record
                             in
-                            Main.viewLastMove game.board game.record
+                            BoardScene.viewLastMove game.board game.record
                                 |> List.singleton
                                 |> Svg.svg []
                                 |> Query.fromHtml
@@ -92,7 +93,7 @@ tests =
                 Expect.all
                     (List.map
                         (\record _ ->
-                            Main.viewLastMove Board.default record
+                            BoardScene.viewLastMove Board.default record
                                 |> List.singleton
                                 |> Svg.svg []
                                 |> Query.fromHtml

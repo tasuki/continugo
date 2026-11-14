@@ -1,11 +1,12 @@
 // Prefer fresh assets on reload; retain a cache only for offline use.
-const CACHE_NAME = 'v18';
+const CACHE_NAME = 'v19';
 const ASSETS_TO_CACHE = [
     '/',
     '/manifest.json',
     '/continugo.js',
     '/media/favicon.svg',
     '/media/style.css',
+    '/media/board.css',
     '/media/rec-mono-csl-bold.woff2',
     '/media/rec-mono-csl-italic.woff2',
     '/media/rec-mono-csl-regular.woff2',

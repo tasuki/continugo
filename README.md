@@ -30,3 +30,5 @@ mise trust && mise install
 From the repository root, run `mise run dev` and see http://localhost:9071/.
 
 Run tests with `mise run test`.
+
+Standalone viewer: [build and embedding API](frontend/viewer/README.md).

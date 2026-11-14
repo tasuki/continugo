@@ -1,9 +1,9 @@
 module BorderLinkTests exposing (tests)
 
 import Analysis
+import BoardScene
 import Dict
 import Expect
-import Main
 import MovePreview
 import Rules.Board as Board
 import Rules.Position exposing (..)
@@ -55,7 +55,7 @@ tests =
                         ]
         , test "Placed stones use the ordinary link layer" <|
             \_ ->
-                Main.viewPosition Board.default placed Nothing [] Nothing [] Main.Normal Analysis.empty
+                BoardScene.viewPosition Board.default placed Nothing [] Nothing [] BoardScene.Normal Analysis.empty
                     |> Query.fromHtml
                     |> Query.find [ Selector.id "links" ]
                     |> Query.findAll [ Selector.tag "line" ]
@@ -67,7 +67,7 @@ tests =
                         MovePreview.fromCandidates Board.default placed (Just (createStone White (Spot 500 60))) Nothing
 
                     check mode =
-                        Main.viewPosition Board.default placed preview [] Nothing [] mode Analysis.empty
+                        BoardScene.viewPosition Board.default placed preview [] Nothing [] mode Analysis.empty
                             |> Query.fromHtml
                             |> Expect.all
                                 (List.map
@@ -80,7 +80,7 @@ tests =
                                     [ "ghost-links", "links" ]
                                 )
                 in
-                Expect.all [ \_ -> check Main.Normal, \_ -> check Main.Staged ] ()
+                Expect.all [ \_ -> check BoardScene.Normal, \_ -> check BoardScene.Staged ] ()
         ]
 
 

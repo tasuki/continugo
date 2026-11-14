@@ -1,3 +1,5 @@
+@import url('board.css');
+
 @font-face {
     font-family: "Recursive Mono"; font-style: normal; font-weight: 400; font-display: swap;
     src: url('rec-mono-csl-regular.woff2') format('woff2');
@@ -36,54 +38,7 @@ a { color: inherit; }
 @media screen and (max-aspect-ratio: 1/1) { #menu .icon:hover .tooltip { display: block; position: absolute; top: 25px; color: #222; } }
 
 #board-container { display: flex; align-items: center; justify-content: center; height: 100%; overflow: hidden; touch-action: pinch-zoom; }
-#board { width: 100vmin; height: 100vmin; background-color: #CB5; position: relative; }
-/* Composite whole SVG viewports, not masked groups with changing bounds. */
-#board > svg { position: absolute; inset: 0; width: 100%; height: 100%; will-change: transform; }
-#board-background { pointer-events: none; }
-#board.scoring { background-color: #B8B8B8; }
-#board.scoring #hide-lines circle { fill: #B8B8B8; }
-#lines { stroke: #0009; stroke-width: 1.5; }
-#stars { fill: #0009; }
-#dead-zone-fill { fill: #3333; }
-#territory .territory-black { fill: #222; fill-opacity: 0.3; }
-#territory .territory-white { fill: #FFF; fill-opacity: 0.55; }
-
-#hide-lines circle { fill: #CB5; }
-
-#liberty-area-fill { fill: #9003; }
-#ghost-links, #ghost-stone { opacity: 0.4; }
-#staged-stone circle { stroke: #900; fill:transparent; stroke-width: var(--stone-stroke-width); }
-#stones, #links, #ghost-stone, #ghost-links, #removed-stones { stroke: #222; stroke-width: var(--stone-stroke-width); }
-.black { fill: #222; transform-origin: center left; }
-.white { fill: #FFF; transform-origin: center right; }
-
-#stones .just-played { animation: 0.2s placeStone; }
-@keyframes placeStone {
-    0% { transform: scale(1.5); }
-    70% { transform: scale(0.9); }
-    100% { transform: scale(1); }
-}
-#removed-stones circle { animation: 0.5s removeStone; transform-origin: center; }
-@keyframes removeStone {
-    0% { transform: scale(1); }
-    30% { transform: scale(1.1); }
-    100% { transform: scale(0); }
-}
-#highlights circle, #last-move { stroke: #900; fill: transparent; stroke-width: var(--stone-stroke-width); }
-#last-move { fill: #D66; stroke: none; }
-#stones .pending-capture { opacity: 0.25; }
-#capture-preview { stroke: #900; stroke-width: var(--stone-stroke-width); }
-#policy-alternatives circle { stroke: #176B72; stroke-width: var(--stone-stroke-width); }
-#policy-alternatives text { text-anchor: middle; dominant-baseline: central; }
-#policy-alternatives .policy-black text { fill: #FFF; }
-#policy-alternatives .policy-white text { fill: #222; }
-
-#analysis-layer { stroke: #176B72; stroke-width: var(--stone-stroke-width); }
-#analysis-circles circle { fill: none; }
-#analysis-circles .preview { opacity: 0.5; }
-#analysis-links { stroke-width: calc(var(--stone-stroke-width) * 0.75); stroke-dasharray: 7 5; }
-#analysis-circles .invalid { animation: invalidCircle 0.7s; }
-@keyframes invalidCircle { 0%, 60% { stroke: #C00; stroke-width: calc(var(--stone-stroke-width) * 1.75); } }
+#board { width: 100vmin; height: 100vmin; }
 
 #score { position: absolute; inset: 0; z-index: 1;
     display: flex; flex-direction: column; align-items: center; justify-content: center;

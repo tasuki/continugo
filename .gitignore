@@ -1,5 +1,6 @@
 /backend/target/
 /frontend/elm-stuff/
+/frontend/viewer/dist/
 /frontend/public/continugo.js
 /frontend/src/HelpContent.elm
 /frontend/tests/Fixtures/Generated.elm

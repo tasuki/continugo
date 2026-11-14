@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ContinuGo viewer example</title>
+<style>
+  body { margin: 2rem; font: 16px system-ui; }
+  .positions { display: flex; gap: 2rem; flex-wrap: wrap; }
+  .position { width: min(100%, 420px); }
+  /* Deliberately hostile page styles: neither should reach inside a viewer. */
+  svg { display: none; }
+  circle { fill: magenta !important; }
+</style>
+<h1>ContinuGo viewer</h1>
+<p>Hover to inspect groups or preview a move. Clicking never plays.</p>
+<div class="positions">
+  <div class="position" id="first"></div>
+  <div class="position" id="second"></div>
+</div>
+<p>
+  <label>Move <input id="move" type="range" min="0" max="4" value="2"> <output id="number">2</output></label>
+  <label><input id="policy" type="checkbox" checked> Policy alternatives</label>
+</p>
+<script src="dist/continugo-viewer.js"></script>
+<script>
+  // SGF escapes closing brackets inside JSON comments.
+  const sgf = '(;FF[9071]GM[9071]SZ[13];B[fOfO];W[nyny];B[fOny]C[{"policy":[["fOny",20\\],["nyfO",8\\]\\]}];W[nyfO])';
+  const first = ContinugoViewer.mount(document.querySelector('#first'), { sgf, move: 2, showPolicy: true });
+  const second = ContinugoViewer.mount(document.querySelector('#second'), { sgf });
+  document.querySelector('#move').addEventListener('input', event => {
+    const move = Number(event.target.value);
+    first.update({ move });
+    document.querySelector('#number').value = move;
+  });
+  document.querySelector('#policy').addEventListener('change', event => {
+    first.update({ showPolicy: event.target.checked });
+  });
+</script>
+</html>

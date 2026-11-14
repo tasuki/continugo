@@ -3,6 +3,15 @@ description = "Build the frontend without the Elm debugger"
 depends = [":_help"]
 run = "elm make src/Main.elm --output=public/continugo.js"
 
+[tasks.build-viewer]
+description = "Build the standalone viewer JS bundle (including styles)"
+run = "node viewer/build.mjs"
+
+[tasks.test-viewer]
+description = "Build and smoke-test the viewer in headless Chrome (override with CHROME)"
+depends = [":build-viewer"]
+run = "node viewer/test.mjs"
+
 [tasks.build-debug]
 description = "Build the frontend with the Elm debugger (opt-in)"
 depends = [":_help"]

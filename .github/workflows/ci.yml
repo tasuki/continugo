@@ -16,4 +16,5 @@ jobs:
               with:
                 version: 2026.7.14
             - run: mise run build
+            - run: mise run //frontend:build-viewer
             - run: mise run test
