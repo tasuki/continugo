@@ -46,6 +46,23 @@ tests =
                             ( List.length model.game.record, Dict.size model.game.stones, List.length model.record.plays )
                         )
                     |> Expect.equal [ ( 0, 0, 2 ), ( 1, 1, 2 ), ( 2, 2, 2 ) ]
+        , test "Navigation reuses cached positions and changing SGF resets the cache" <|
+            \_ ->
+                let
+                    back =
+                        send (Viewer.Configure { config | move = Just 0 }) initial
+
+                    forward =
+                        send (Viewer.Configure { config | move = Just 1 }) back
+
+                    replacement =
+                        send (Viewer.Configure { config | sgf = "(;FF[9071]GM[9071]SZ[13];B[])", move = Just 0 }) forward
+                in
+                Expect.equal ( ( True, True ), [ 0 ], 13 )
+                    ( ( initial.positions == back.positions, initial.positions == forward.positions )
+                    , Dict.keys replacement.positions
+                    , Board.size replacement.game.board
+                    )
         , test "Hover previews a move without playing it, and leaving clears it" <|
             \_ ->
                 let

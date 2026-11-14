@@ -4,6 +4,7 @@ import Analysis
 import BoardHover
 import BoardScene
 import Browser
+import Dict exposing (Dict)
 import Html as H
 import Html.Attributes as HA
 import MovePreview
@@ -35,6 +36,7 @@ type alias Model =
     { config : Config
     , record : Sgf.Record
     , game : Game.Game
+    , positions : Dict Int Game.Game
     , ghostStone : Maybe MovePreview.Preview
     , highlightedGroup : List Spot
     , justPlayed : Maybe Spot
@@ -63,6 +65,7 @@ init config =
         { config = config
         , record = Sgf.empty
         , game = Game.empty
+        , positions = Dict.empty
         , ghostStone = Nothing
         , highlightedGroup = []
         , justPlayed = Nothing
@@ -96,26 +99,67 @@ load config model =
             { model | config = config, error = Just error, ghostStone = Nothing, highlightedGroup = [] }
 
         Ok ( record, board ) ->
-            let
-                move =
-                    config.move |> Maybe.withDefault (List.length record.plays) |> clamp 0 (List.length record.plays)
-            in
-            { model
-                | config = config
-                , record = record
-                , game = Game.fromRecordOn board (List.reverse (List.take move record.plays))
-                , ghostStone = Nothing
-                , highlightedGroup = []
-                , justPlayed = Nothing
-                , error = Nothing
-            }
+            seek config
+                { model
+                    | record = record
+                    , positions = Dict.singleton 0 (Game.onBoard board)
+                    , error = Nothing
+                }
+
+
+{-| Cache immutable positions, and only apply moves not replayed before.
+Changing display options or revisiting a ply never reruns the rules engine.
+-}
+seek : Config -> Model -> Model
+seek config model =
+    let
+        move =
+            config.move |> Maybe.withDefault (List.length model.record.plays) |> clamp 0 (List.length model.record.plays)
+
+        ( start, game ) =
+            model.positions
+                |> Dict.toList
+                |> List.filter (Tuple.first >> (>=) move)
+                |> List.reverse
+                |> List.head
+                |> Maybe.withDefault ( 0, Game.empty )
+
+        ( position, positions ) =
+            model.record.plays
+                |> List.drop start
+                |> List.take (move - start)
+                |> List.indexedMap (\index play -> ( start + index + 1, play ))
+                |> List.foldl
+                    (\( ply, play ) ( previous, cache ) ->
+                        let
+                            next =
+                                Game.replay play previous
+                        in
+                        ( next, Dict.insert ply next cache )
+                    )
+                    ( game, model.positions )
+    in
+    { model
+        | config = config
+        , game = position
+        , positions = positions
+        , ghostStone = Nothing
+        , highlightedGroup = []
+        , justPlayed = Nothing
+    }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Configure config ->
-            ( load config model, Cmd.none )
+            ( if config.sgf == model.config.sgf && model.error == Nothing then
+                seek config model
+
+              else
+                load config model
+            , Cmd.none
+            )
 
         Pointer point ->
             case point of
