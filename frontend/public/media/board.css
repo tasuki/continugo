@@ -35,6 +35,8 @@
 #last-move { fill: #D66; stroke: none; }
 #stones .pending-capture { opacity: 0.25; }
 #capture-preview { stroke: #900; stroke-width: var(--stone-stroke-width); }
+#variations circle { fill: none; stroke: #176B72; stroke-width: var(--stone-stroke-width); opacity: 0.55; cursor: pointer; }
+#variations circle:is(:hover, :focus-visible) { stroke-width: calc(var(--stone-stroke-width) * 2); }
 #policy-alternatives circle { stroke: #176B72; stroke-width: var(--stone-stroke-width); }
 #policy-alternatives text { text-anchor: middle; dominant-baseline: central; }
 #policy-alternatives .policy-black text { fill: #FFF; }

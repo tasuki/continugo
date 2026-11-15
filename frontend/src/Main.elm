@@ -23,6 +23,7 @@ import Placement
 import PointerInput
 import Process
 import RecordUrl
+import Review
 import Rules.Board as Board exposing (Board)
 import Rules.Game as Game
 import Rules.Position exposing (..)
@@ -37,7 +38,7 @@ import Training
 import Url exposing (Url)
 
 
-port saveSession : { sgf : String, move : Int } -> Cmd msg
+port saveSession : { sgf : String, move : Int, path : List Int } -> Cmd msg
 
 
 port sgfLoaded : (String -> msg) -> Sub msg
@@ -68,10 +69,11 @@ main =
 -- MODEL
 
 
-{-| record is the complete chronological game; game is its displayed prefix.
+{-| record is the selected continuation; game is its displayed prefix.
 -}
 type alias Model =
     { game : Game.Game
+    , review : Review.Model
     , record : List Play
     , sgfRoot : List Sgf.Property
     , sgfMoves : List (List Sgf.Property)
@@ -97,6 +99,7 @@ type alias Model =
 emptyModel : Nav.Key -> Model
 emptyModel navKey =
     { game = Game.empty
+    , review = Review.empty
     , record = []
     , sgfRoot = Sgf.empty.root
     , sgfMoves = []
@@ -126,10 +129,10 @@ init flags url navKey =
             restoreFromUrl url (emptyModel navKey) |> Tuple.first
 
         model =
-            readSession flags
+            readReviewSession flags
                 |> Maybe.map
-                    (\( record, game ) ->
-                        { fallback | game = game, record = record.plays, sgfRoot = record.root, sgfMoves = record.moveProperties }
+                    (\( review, record, game ) ->
+                        withReview review { fallback | sgfRoot = record.root, game = game }
                     )
                 |> Maybe.withDefault fallback
     in
@@ -138,18 +141,33 @@ init flags url navKey =
 
 readSession : Decode.Value -> Maybe ( Sgf.Record, Game.Game )
 readSession value =
+    readReviewSession value |> Maybe.map (\( _, record, game ) -> ( record, game ))
+
+
+readReviewSession : Decode.Value -> Maybe ( Review.Model, Sgf.Record, Game.Game )
+readReviewSession value =
     Decode.decodeValue
         (Decode.map2 Tuple.pair (Decode.field "sgf" Decode.string) (Decode.field "move" Decode.int))
         value
         |> Result.toMaybe
         |> Maybe.andThen
             (\( text, move ) ->
-                Sgf.decodeRecord text
+                Sgf.decodeTree text
                     |> Result.toMaybe
                     |> Maybe.andThen
-                        (\record ->
-                            Sgf.boardFromRoot record.root
-                                |> Maybe.map (\board -> ( record, gameAt board move record.plays ))
+                        (\( root, trees ) ->
+                            let
+                                path =
+                                    Decode.decodeValue (Decode.field "path" (Decode.list Decode.int)) value |> Result.withDefault []
+
+                                review =
+                                    Review.select path (Review.fromTrees trees)
+
+                                record =
+                                    Review.line root review
+                            in
+                            Sgf.boardFromRoot root
+                                |> Maybe.map (\board -> ( review, record, gameAt board move record.plays ))
                         )
             )
 
@@ -157,7 +175,8 @@ readSession value =
 persist : Model -> Cmd msg
 persist model =
     saveSession
-        { sgf = Sgf.encodeRecord (sgfRecord model)
+        { sgf = Sgf.encodeTree model.sgfRoot model.review.trees
+        , path = model.review.selected
         , move = List.length model.game.record
         }
 
@@ -179,6 +198,9 @@ type Msg
     | ClearCaptureAnimation
     | Prev
     | Next
+    | SwitchVariation Int
+    | SelectSibling Int
+    | CancelBoardInput
     | ToggleHelp
     | ToggleScoring
     | ToggleAnalysis
@@ -204,7 +226,7 @@ menuKey model =
             , modified
                 || editable
                 || List.member tag [ "INPUT", "TEXTAREA", "SELECT" ]
-                || (repeating && not (List.member key [ "ArrowLeft", "ArrowRight" ]))
+                || (repeating && not (List.member key [ "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown" ]))
                 || ((model.showMenu || model.showHelp)
                         && not (key == "Escape" || key == "!" || (key == "?" && model.showHelp))
                    )
@@ -248,14 +270,20 @@ menuKey model =
                         "ArrowLeft" ->
                             Decode.succeed Prev
 
-                        "‹" ->
+                        "←" ->
                             Decode.succeed Prev
 
                         "ArrowRight" ->
                             Decode.succeed Next
 
-                        "›" ->
+                        "→" ->
                             Decode.succeed Next
+
+                        "ArrowUp" ->
+                            Decode.succeed (SwitchVariation -1)
+
+                        "ArrowDown" ->
+                            Decode.succeed (SwitchVariation 1)
 
                         "Escape" ->
                             Decode.succeed ClosePanels
@@ -323,8 +351,6 @@ handlePlay model playSpot =
                 newModel =
                     { model
                         | game = game
-                        , record = List.reverse game.record
-                        , sgfMoves = List.take (List.length model.game.record) model.sgfMoves ++ [ [] ]
                         , justPlayed = Just spot
                         , justRemoved = removedStones model.game.stones game.stones
                         , highlightedGroup = []
@@ -332,7 +358,7 @@ handlePlay model playSpot =
                         , stagedMove = Nothing
                     }
             in
-            ( newModel
+            ( commitMove newModel
             , Process.sleep 500 |> Task.perform (\_ -> ClearCaptureAnimation)
             )
 
@@ -492,7 +518,7 @@ updateAndSave msg model =
             update msg model
     in
     ( updated
-    , if updated.record /= model.record || updated.sgfRoot /= model.sgfRoot || updated.sgfMoves /= model.sgfMoves || updated.game.record /= model.game.record then
+    , if updated.review /= model.review || updated.sgfRoot /= model.sgfRoot || updated.game.record /= model.game.record then
         Cmd.batch [ command, persist updated ]
 
       else
@@ -535,12 +561,7 @@ update msg model =
             else
                 case Game.pass model.game of
                     Just game ->
-                        updatePosition
-                            { model
-                                | game = game
-                                , record = List.reverse game.record
-                                , sgfMoves = List.take (List.length model.game.record) model.sgfMoves ++ [ [] ]
-                            }
+                        updatePosition (commitMove { model | game = game })
 
                     Nothing ->
                         ( model, Cmd.none )
@@ -561,6 +582,29 @@ update msg model =
                 [] ->
                     ( model, Cmd.none )
 
+        SwitchVariation direction ->
+            let
+                depth =
+                    List.length model.game.record
+
+                selected =
+                    withReview (Review.switch direction depth model.review) model
+            in
+            showGame (gameAt model.game.board depth selected.record) selected
+
+        SelectSibling index ->
+            let
+                depth =
+                    List.length model.game.record
+
+                selected =
+                    withReview (Review.selectSibling depth index model.review) model
+            in
+            showGame (gameAt model.game.board depth selected.record) selected
+
+        CancelBoardInput ->
+            ( cancelBoardGesture { model | pointer = PointerInput.cancel model.pointer }, Cmd.none )
+
         OpenMenu ->
             ( { model | showMenu = True, sgfError = Nothing, pointer = PointerInput.cancel model.pointer }
                 |> cancelBoardGesture
@@ -574,13 +618,13 @@ update msg model =
             ( newBoard board model, Cmd.none )
 
         SgfLoaded text ->
-            case decodeImport text of
-                Ok ( board, record ) ->
+            case decodeTreeImport text of
+                Ok ( board, root, trees ) ->
                     let
                         fresh =
                             newBoard board model
                     in
-                    ( { fresh | record = record.plays, sgfRoot = record.root, sgfMoves = record.moveProperties }, Cmd.none )
+                    ( withReview (Review.fromTrees trees) { fresh | sgfRoot = root }, Cmd.none )
 
                 Err error ->
                     ( { model | sgfError = Just error }, Cmd.none )
@@ -670,12 +714,17 @@ newBoard board model =
 
 decodeImport : String -> Result String ( Board, Sgf.Record )
 decodeImport text =
-    Sgf.decodeRecord text
+    decodeTreeImport text |> Result.map (\( board, root, trees ) -> ( board, Sgf.mainRecord root trees ))
+
+
+decodeTreeImport : String -> Result String ( Board, List Sgf.Property, List Sgf.Tree )
+decodeTreeImport text =
+    Sgf.decodeTree text
         |> Result.andThen
-            (\record ->
-                Sgf.boardFromRoot record.root
+            (\( root, trees ) ->
+                Sgf.boardFromRoot root
                     |> Result.fromMaybe "Invalid SGF board size"
-                    |> Result.map (\board -> ( board, record ))
+                    |> Result.map (\board -> ( board, root, trees ))
             )
 
 
@@ -702,6 +751,7 @@ restoreFromUrl url model =
                 , record = record.plays
                 , sgfRoot = record.root
                 , sgfMoves = record.moveProperties
+                , review = Review.fromTrees (Sgf.fromRecord record)
                 , pointer = PointerInput.cancel model.pointer
                 , analysis = Analysis.reconcile game.board game.stones model.analysis
                 , highlightedGroup = []
@@ -752,8 +802,110 @@ showGame game model =
         |> Tuple.mapFirst cancelBoardGesture
 
 
+withReview : Review.Model -> Model -> Model
+withReview review model =
+    let
+        record =
+            Review.line model.sgfRoot review
+    in
+    { model | review = review, record = record.plays, sgfMoves = record.moveProperties }
+
+
+commitMove : Model -> Model
+commitMove model =
+    case List.head model.game.record of
+        Just play ->
+            withReview (Review.add (List.length model.game.record - 1) play model.review) model
+
+        Nothing ->
+            model
+
+
 
 -- VIEW
+
+
+viewTreeDownload : List Sgf.Property -> List Sgf.Tree -> H.Html msg
+viewTreeDownload root trees =
+    viewSgfDownload (Sgf.encodeTree root trees)
+
+
+viewSgfDownload : String -> H.Html msg
+viewSgfDownload sgf =
+    H.div [ HA.class "item" ]
+        [ Pill.view "a"
+            [ HA.id "sgf-download"
+            , HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode sgf)
+            , HA.download "continugo.sgf"
+            , HA.attribute "aria-label" "Download SGF"
+            ]
+            "SGF"
+            "download"
+        ]
+
+
+viewVariations : Model -> Svg Msg
+viewVariations model =
+    let
+        markers =
+            Review.siblings (List.length model.game.record) model.review
+
+        marker ( index, Sgf.Node play _ _ ) =
+            case play.move of
+                Pass ->
+                    Svg.g [] []
+
+                Place stone ->
+                    Svg.circle
+                        [ SA.cx (String.fromInt stone.spot.x)
+                        , SA.cy (String.fromInt stone.spot.y)
+                        , SA.r (String.fromInt (Board.radius model.game.board))
+                        , SA.pointerEvents "all"
+                        , HA.tabindex 0
+                        , HA.attribute "role" "button"
+                        , HA.attribute "aria-label" ("Review alternative " ++ Sgf.encodePlay play)
+                        , HE.stopPropagationOn "pointerdown" (Decode.succeed ( CancelBoardInput, True ))
+                        , HE.stopPropagationOn "pointermove" (Decode.succeed ( CancelBoardInput, True ))
+                        , HE.stopPropagationOn "pointerup" (Decode.succeed ( CancelBoardInput, True ))
+                        , HE.onClick (SelectSibling index)
+                        , HE.preventDefaultOn "keydown"
+                            (Decode.field "key" Decode.string
+                                |> Decode.andThen
+                                    (\key ->
+                                        if key == "Enter" || key == " " then
+                                            Decode.succeed ( SelectSibling index, True )
+
+                                        else
+                                            Decode.fail "Not an activation key"
+                                    )
+                            )
+                        ]
+                        []
+    in
+    Svg.g [ SA.id "variations", SA.pointerEvents "none" ] (List.map marker markers)
+
+
+viewVariationPasses : Model -> H.Html Msg
+viewVariationPasses model =
+    let
+        pass ( index, Sgf.Node play _ _ ) =
+            case play.move of
+                Pass ->
+                    Just (menuLink (SelectSibling index) "pass" "review alternative pass")
+
+                Place _ ->
+                    Nothing
+
+        buttons =
+            Review.siblings (List.length model.game.record) model.review
+                |> List.filterMap pass
+    in
+    if List.isEmpty buttons || (model.showPolicy && not (List.isEmpty (nextTraining model).policy)) then
+        H.text ""
+
+    else
+        H.div [ HA.id "variation-passes" ]
+            (H.div [ HA.class "menu-gap", HA.attribute "aria-hidden" "true" ] [] :: buttons)
 
 
 isScoring : Model -> Bool
@@ -790,11 +942,11 @@ viewSvg model =
              else
                 Analysis.empty
             )
-        , if model.showPolicy then
+        , if model.showPolicy && not (List.isEmpty (nextTraining model).policy) then
             lazy3 Training.viewPolicy model.game.board model.game.onMove (nextTraining model).policy
 
           else
-            Svg.g [] []
+            viewVariations model
         , if model.showAnalysis then
             lazy3 Analysis.view model.game.board model.game.stones model.analysis
 
@@ -867,16 +1019,7 @@ viewMoveNumber record =
 
 viewDownload : List Sgf.Property -> List Play -> List (List Sgf.Property) -> H.Html msg
 viewDownload root plays moveProperties =
-    H.div [ HA.class "item" ]
-        [ Pill.view "a"
-            [ HA.id "sgf-download"
-            , HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord { root = root, plays = plays, moveProperties = moveProperties }))
-            , HA.download "continugo.sgf"
-            , HA.attribute "aria-label" "Download SGF"
-            ]
-            "↓"
-            "download"
-        ]
+    viewSgfDownload (Sgf.encodeRecord { root = root, plays = plays, moveProperties = moveProperties })
 
 
 viewPlayers : List Sgf.Property -> H.Html msg
@@ -974,6 +1117,14 @@ view model =
         [ H.div [ HA.id "menu", HA.class "pills", HA.hidden model.showMenu ]
             [ menuLink OpenMenu "!" "menu"
             , menuLink ToggleHelp "?" "help"
+            , lazy2 viewTreeDownload model.sgfRoot model.review.trees
+            , H.div [ HA.class "menu-gap", HA.attribute "aria-hidden" "true" ] []
+            , menuLink Prev "←" "prev"
+            , menuLink Next "→" "next"
+            , menuLink (SwitchVariation -1) "↑" "previous line"
+            , menuLink (SwitchVariation 1) "↓" "next line"
+            , lazy viewMoveNumber model.game.record
+            , H.div [ HA.class "menu-gap", HA.attribute "aria-hidden" "true" ] []
             , menuLink PassTurn "*" "pass"
             , H.div [ HA.class "item" ]
                 [ Pill.view "button"
@@ -1010,15 +1161,12 @@ view model =
                     "o"
                     "analysis"
                 ]
-            , lazy viewMoveNumber model.game.record
-            , menuLink Prev "‹" "prev"
-            , menuLink Next "›" "next"
-            , lazy3 viewDownload model.sgfRoot model.record model.sgfMoves
             , Training.viewMenu TogglePolicy
                 model.showPolicy
                 model.game.onMove
                 (trainingAt (List.length model.game.record - 1) model)
                 (nextTraining model).policy
+            , viewVariationPasses model
             ]
         , if model.showMenu then
             H.text ""

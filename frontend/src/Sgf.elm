@@ -1,7 +1,7 @@
-module Sgf exposing (Property, Record, boardFromRoot, decode, decodePlay, decodeRecord, empty, encode, encodePlay, encodeRecord, onBoard)
+module Sgf exposing (Property, Record, Tree(..), boardFromRoot, decode, decodePlay, decodeRecord, decodeTree, empty, encode, encodePlay, encodeRecord, encodeTree, fromRecord, mainRecord, onBoard)
 
-{-| Single-sequence ContinuGo SGF, with a move-free FF[9071]GM[9071] root.
-Coordinates use two base-52 digits per axis. Variations are not supported.
+{-| ContinuGo SGF, with a move-free FF[9071]GM[9071] root.
+Coordinates use two base-52 digits per axis. The record API reads the first line.
 The record API preserves root and move properties; the play-only API uses a default
 13x13 root. Empty PB, PW and RE properties are omitted when writing.
 Legacy compact records remain readable.
@@ -23,6 +23,63 @@ type alias Record =
     , plays : List Play
     , moveProperties : List (List Property)
     }
+
+
+type Tree
+    = Node Play (List Property) (List Tree)
+
+
+fromRecord : Record -> List Tree
+fromRecord record =
+    List.indexedMap (\i play -> ( play, List.drop i record.moveProperties |> List.head |> Maybe.withDefault [] )) record.plays
+        |> List.foldr (\( play, properties ) children -> [ Node play properties children ]) []
+
+
+mainRecord : List Property -> List Tree -> Record
+mainRecord root trees =
+    case trees of
+        (Node play properties children) :: _ ->
+            let
+                rest =
+                    mainRecord root children
+            in
+            { rest | plays = play :: rest.plays, moveProperties = properties :: rest.moveProperties }
+
+        [] ->
+            { root = root, plays = [], moveProperties = [] }
+
+
+encodeTree : List Property -> List Tree -> String
+encodeTree root trees =
+    let
+        property ( name, values ) =
+            name ++ String.concat (List.map (\value -> "[" ++ (value |> String.replace "\\" "\\\\" |> String.replace "]" "\\]") ++ "]") values)
+
+        metadata =
+            root
+                |> List.filter
+                    (\( name, values ) ->
+                        name
+                            /= "FF"
+                            && name
+                            /= "GM"
+                            && not (List.member name [ "PB", "PW", "RE" ] && List.all String.isEmpty values)
+                    )
+                |> List.map property
+                |> String.concat
+
+        sequence forest =
+            case forest of
+                [] ->
+                    ""
+
+                [ Node play properties children ] ->
+                    "\n;" ++ encodePlay play ++ String.concat (List.map property properties) ++ sequence children
+
+                _ ->
+                    String.concat (List.map (\tree -> "(" ++ sequence [ tree ] ++ ")") forest)
+    in
+    "(;FF[9071]GM[9071]" ++ metadata ++ sequence trees ++ "\n)"
 
 
 empty : Record
@@ -166,47 +223,7 @@ encode plays =
 
 encodeRecord : Record -> String
 encodeRecord record =
-    let
-        property ( name, values ) =
-            name
-                ++ String.concat
-                    (List.map
-                        (\value ->
-                            "[" ++ (value |> String.replace "\\" "\\\\" |> String.replace "]" "\\]") ++ "]"
-                        )
-                        values
-                    )
-
-        metadata =
-            record.root
-                |> List.filter
-                    (\( name, values ) ->
-                        name
-                            /= "FF"
-                            && name
-                            /= "GM"
-                            && not (List.member name [ "PB", "PW", "RE" ] && List.all String.isEmpty values)
-                    )
-                |> List.map property
-                |> String.concat
-    in
-    "(;FF[9071]GM[9071]"
-        ++ metadata
-        ++ String.concat
-            (List.indexedMap
-                (\index play ->
-                    "\n;"
-                        ++ encodePlay play
-                        ++ (List.drop index record.moveProperties
-                                |> List.head
-                                |> Maybe.withDefault []
-                                |> List.map property
-                                |> String.concat
-                           )
-                )
-                record.plays
-            )
-        ++ "\n)"
+    encodeTree record.root (fromRecord record)
 
 
 decode : String -> Result String (List Play)
@@ -216,6 +233,11 @@ decode =
 
 decodeRecord : String -> Result String Record
 decodeRecord sgf =
+    decodeTree sgf |> Result.map (\( root, trees ) -> mainRecord root trees)
+
+
+decodeTree : String -> Result String ( List Property, List Tree )
+decodeTree sgf =
     if String.startsWith "(" (String.trimLeft sgf) then
         String.toList sgf
             |> expect '('
@@ -224,12 +246,23 @@ decodeRecord sgf =
             |> Result.andThen
                 (\( root, rest ) ->
                     validateRoot root
-                        |> Result.andThen (\_ -> parseNodes [] [] rest)
-                        |> Result.map (\( plays, properties ) -> { root = root, plays = plays, moveProperties = properties })
+                        |> Result.andThen (\_ -> parseForest rest)
+                        |> Result.andThen
+                            (\( trees, remaining ) ->
+                                expect ')' remaining
+                                    |> Result.andThen
+                                        (\trailing ->
+                                            if List.isEmpty (skipWhitespace trailing) then
+                                                Ok ( root, trees )
+
+                                            else
+                                                Err "Unexpected content after SGF tree"
+                                        )
+                            )
                 )
 
     else
-        decodeCompact sgf |> Result.map (\plays -> { empty | plays = plays, moveProperties = List.map (always []) plays })
+        decodeCompact sgf |> Result.map (\plays -> ( empty.root, fromRecord { empty | plays = plays } ))
 
 
 decodeCompact : String -> Result String (List Play)
@@ -363,8 +396,8 @@ parseValue value chars =
             Err "Unterminated SGF property value"
 
 
-parseNodes : List Play -> List (List Property) -> List Char -> Result String ( List Play, List (List Property) )
-parseNodes plays moveProperties chars =
+parseForest : List Char -> Result String ( List Tree, List Char )
+parseForest chars =
     case skipWhitespace chars of
         ';' :: rest ->
             parseProperties rest
@@ -373,21 +406,39 @@ parseNodes plays moveProperties chars =
                         nodePlay properties
                             |> Result.andThen
                                 (\play ->
-                                    parseNodes (play :: plays)
-                                        (List.filter (\( name, _ ) -> name /= "B" && name /= "W") properties :: moveProperties)
-                                        remaining
+                                    parseForest remaining
+                                        |> Result.map (\( children, trailing ) -> ( [ Node play (List.filter (\( name, _ ) -> name /= "B" && name /= "W") properties) children ], trailing ))
                                 )
                     )
 
-        ')' :: rest ->
-            if List.isEmpty (skipWhitespace rest) then
-                Ok ( List.reverse plays, List.reverse moveProperties )
+        '(' :: _ ->
+            parseBranches chars
 
-            else
-                Err "Unexpected content after SGF tree"
+        ')' :: _ ->
+            Ok ( [], chars )
 
         _ ->
-            Err "Expected ')' or a move node in SGF (variations are not supported)"
+            Err "Expected ')' or a move node in SGF"
+
+
+parseBranches : List Char -> Result String ( List Tree, List Char )
+parseBranches chars =
+    case skipWhitespace chars of
+        '(' :: rest ->
+            expect ';' rest
+                |> Result.andThen (\remaining -> parseForest (';' :: remaining))
+                |> Result.andThen
+                    (\( branch, remaining ) ->
+                        expect ')' remaining
+                            |> Result.andThen parseBranches
+                            |> Result.map (\( siblings, trailing ) -> ( branch ++ siblings, trailing ))
+                    )
+
+        ')' :: _ ->
+            Ok ( [], chars )
+
+        _ ->
+            Err "Expected a variation or ')' in SGF"
 
 
 nodePlay : List Property -> Result String Play

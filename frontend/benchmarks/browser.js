@@ -40,7 +40,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   };
   await c('Runtime.enable');
   await c('Page.enable');
-  await c('Page.addScriptToEvaluateOnNewDocument', { source: "sessionStorage.removeItem('continugo.session')" });
+  const clearSession = await c('Page.addScriptToEvaluateOnNewDocument', { source: "sessionStorage.removeItem('continugo.session')" });
   await c('Performance.enable');
   await c('Network.enable');
   await c('Network.setCacheDisabled', { cacheDisabled: true });
@@ -205,6 +205,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...options }));
       await frame();
     }`);
+    assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('#menu .pill-summary'), element => element.textContent)"),
+      ['!', '?', 'SGF', '←', '→', '↑', '↓', '0', '*', '%', 'o']);
     await evaluate("key('?', { shiftKey: true })");
     assert.equal(await evaluate("!!document.querySelector('#help')"), true);
     await evaluate("key('*')");
@@ -233,6 +235,78 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       });`);
     await evaluate("key('ArrowDown')");
     assert.equal(await evaluate('downloads'), 0);
+
+    // Playing from the past saves a branch instead of replacing the pass.
+    await evaluate("key('ArrowLeft')");
+    await evaluate("move(500,500,'mousedown')");
+    await evaluate("move(500,500,'mouseup')");
+    assert.equal(await evaluate("!!document.querySelector('#variation-status')"), false);
+    assert.equal(await evaluate("JSON.parse(sessionStorage.getItem('continugo.session')).sgf.includes(';B[]')"), true);
+    await evaluate("key('ArrowUp')");
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 0);
+    await evaluate("key('ArrowDown')");
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 1);
+
+    // Saved lines: policy/variation markers, non-sibling switching, and reload.
+    const tree = '(;FF[9071]GM[9071];B[hAjs]C[{"policy":[["hAjs",8\\]\\]}](;W[mmmm];B[dddd]C[{"policy":[["dddd",8\\]\\]}])(;W[qqqq];B[eeee];W[])(;W[]))';
+    await evaluate(`app.ports.sgfLoaded.send(${JSON.stringify(tree)});frame()`);
+    assert.equal(await evaluate("document.querySelectorAll('#policy-alternatives circle').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('#variations circle').length"), 0);
+    await evaluate("key('p')");
+    assert.equal(await evaluate("document.querySelectorAll('#policy-alternatives circle').length"), 0);
+    assert.equal(await evaluate("document.querySelectorAll('#variations circle').length"), 0); // No current move at the root.
+    await evaluate("key('ArrowRight')");
+    assert.equal(await evaluate("document.querySelectorAll('#variations circle').length"), 0); // Children aren't siblings.
+    await evaluate("key('ArrowRight')");
+    assert.equal(await evaluate("document.querySelectorAll('#variations circle').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('#variations text').length"), 0);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#variations circle')).fill"), 'none');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#variations circle')).stroke"), 'rgb(23, 107, 114)');
+    await evaluate("key('p')");
+    assert.equal(await evaluate("document.querySelectorAll('#policy-alternatives circle').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('#variations circle, #variation-passes button').length"), 0);
+    await evaluate("key('p')");
+    const savedTree = await evaluate("JSON.parse(sessionStorage.getItem('continugo.session')).sgf");
+    const clickSibling = async cx => {
+      const point = await evaluate(`(() => {
+        const r = document.querySelector('#variations circle[cx="${cx}"]').getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      })()`);
+      await c('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+      await c('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
+      await c('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+      await evaluate('frame()');
+    };
+    await clickSibling(848);
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '2');
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle[cx=\"848\"]').length"), 1);
+    assert.equal(await evaluate("JSON.parse(sessionStorage.getItem('continugo.session')).sgf"), savedTree);
+    await evaluate("document.querySelector('#variation-passes button').click();frame()");
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '2');
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('#variation-passes button').length"), 0); // Don't mark the current pass.
+    await clickSibling(636);
+    await evaluate("key('ArrowRight')");
+    assert.equal(await evaluate("document.querySelectorAll('#variations circle').length"), 0);
+    await evaluate("key('ArrowDown')");
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '3');
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle[cx=\"212\"]').length"), 1);
+    assert.deepEqual(await evaluate("JSON.parse(sessionStorage.getItem('continugo.session')).path"), [0, 1, 0, 0]);
+    await evaluate("key('ArrowLeft');key('ArrowRight')");
+    assert.equal(await evaluate("document.querySelectorAll('#stones circle[cx=\"212\"]').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('#variations circle').length"), 0); // Up/down still crosses non-siblings.
+    await evaluate("key('ArrowRight')");
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '4');
+    await evaluate("key('ArrowUp')"); // The original game has no fourth move.
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '4');
+    assert.deepEqual(await evaluate("JSON.parse(sessionStorage.getItem('continugo.session')).path"), [0, 1, 0, 0]);
+    assert.equal(await evaluate("decodeURIComponent(document.querySelector('#sgf-download').href).replaceAll('\\n', '').includes('(;W[mmmm]')"), true);
+    await c('Page.removeScriptToEvaluateOnNewDocument', { identifier: clearSession.identifier });
+    const timeOrigin = await evaluate('performance.timeOrigin');
+    await c('Page.reload');
+    await wait(`performance.timeOrigin !== ${timeOrigin} && document.querySelector('#move-number .pill-summary')?.textContent === '4'`);
+    assert.deepEqual(await evaluate("JSON.parse(sessionStorage.getItem('continugo.session')).path"), [0, 1, 0, 0]);
+    await c('Page.addScriptToEvaluateOnNewDocument', { source: "sessionStorage.removeItem('continugo.session')" });
 
     for (const build of (urls.before ? ['before', 'after'] : ['after'])) {
       await navigate(build, record);
@@ -484,7 +558,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       assert.ok(changed < 0.001, `${scale}× zoom: ${(100*changed).toFixed(2)}% of pixels changed after repaint`);
     }
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    console.log('Browser checks passed: play previews/staging/scoring, analysis geometry and both-colour dragging, delayed removal, exact proposals, suicide rejection, persistence, touch and cancellation.');
+    console.log('Browser checks passed: saved variations, same-move navigation, reload, play previews/staging/scoring, analysis geometry and both-colour dragging, delayed removal, exact proposals, suicide rejection, persistence, touch and cancellation.');
   } finally {
     await call('Target.closeTarget', { targetId });
     ws.close();

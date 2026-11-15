@@ -68,8 +68,8 @@ Invalid option types and unknown keys throw synchronously. Malformed SGF or an
 unsupported board size displays an error inside the viewer; a valid update
 recovers. SGF replay follows the application's permissive rules: illegal recorded
 placements are skipped on the board, not treated as validation errors. This is a
-ContinuGo viewer, not an ordinary intersection-Go SGF viewer; SGF variations are
-not supported.
+ContinuGo viewer, not an ordinary intersection-Go SGF viewer. When SGF contains
+variations, the viewer follows the first (original-game) continuation.
 
 Policy alternatives come from existing JSON annotations in SGF move comments.
 As in the application, the next move's annotation describes the displayed

@@ -86,7 +86,7 @@ tests =
                 Training.viewMenu () True White Training.empty [ ( "hAjs", 8 ), ( "", 2 ) ]
                     |> Query.fromHtml
                     |> Expect.all
-                        [ Query.findAll [ Selector.class "menu-spacer" ] >> Query.count (Expect.equal 1)
+                        [ Query.findAll [ Selector.class "menu-gap" ] >> Query.count (Expect.equal 1)
                         , Query.find [ Selector.id "policy-pass" ]
                             >> Expect.all
                                 [ Query.has [ Selector.class "pill-white", Selector.style "opacity" "0.2125" ]

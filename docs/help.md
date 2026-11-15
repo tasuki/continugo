@@ -16,10 +16,6 @@ The [full rules are also available](rules.md), though I doubt you want to read '
 ### How to actually play
 
 - Currently, only taking turns on a single device is implemented.
-- The menu symbols are also keyboard shortcuts: **!** menu, **?** help, **\*** pass, **%** scoring, **o** analysis, and **p** policy alternatives. **Escape** closes the menu/help.
-- Use **!** to start a new **9×9**, **13×13**, or **19×19** game, or open/drop an SGF file in the menu to replay it.
-- Use **‹ / ›** or the keyboard's left/right arrows to step through the game. Playing from an earlier position replaces the remaining moves.
-- Use **↓** to download the complete game as SGF, regardless of which move you're viewing. Moves no longer change the URL.
 - Tap groups/stones to highlight their liberties.
 - Drag to stage a move, then tap the staged move to confirm it.
 - Drag from your own stone to place a stone as far as possible while remaining connected.
@@ -28,6 +24,12 @@ The [full rules are also available](rules.md), though I doubt you want to read '
 - While suicide is not allowed, you can **capture another group of your own stones** by removing their last liberty.
 - **Capture dead groups before passing**: scoring uses the stones still on the board, with no automatic dead-stone removal.
 - Other than artificially created positions, I've not seen a ko. If you see an actual ko, do let me know!
+
+### Menu
+
+- Most menu symbols are also keyboard shortcuts.
+- Use **!** to start a new game, or open/drop an SGF file in the menu to replay it.
+- Use left/right arrows to step through the selected branch, and up/down arrows to switch branches.
 
 ### Analysis mode
 

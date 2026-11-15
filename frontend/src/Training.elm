@@ -136,9 +136,9 @@ viewMenu toggle active color evaluation policy =
 
     else
         H.div [ HA.class "training-menu" ]
-            [ H.div [ HA.class "item menu-spacer", HA.attribute "aria-hidden" "true" ] []
+            [ viewToggle toggle active policy
+            , H.div [ HA.class "menu-gap", HA.attribute "aria-hidden" "true" ] []
             , viewEvaluation (Just (otherColor color)) evaluation
-            , viewToggle toggle active policy
             , if active then
                 viewPass color policy
 

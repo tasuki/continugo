@@ -32,9 +32,11 @@ tests =
                 , ( "o", Main.ToggleAnalysis )
                 , ( "p", Main.TogglePolicy )
                 , ( "ArrowLeft", Main.Prev )
-                , ( "‹", Main.Prev )
+                , ( "←", Main.Prev )
                 , ( "ArrowRight", Main.Next )
-                , ( "›", Main.Next )
+                , ( "→", Main.Next )
+                , ( "ArrowUp", Main.SwitchVariation -1 )
+                , ( "ArrowDown", Main.SwitchVariation 1 )
                 , ( "Escape", Main.ClosePanels )
                 ]
                     |> List.map
@@ -46,7 +48,6 @@ tests =
         , test "Typing, browser shortcuts, repeated toggles and unrelated keys are ignored" <|
             \_ ->
                 [ [ ( "key", Encode.string "a" ) ]
-                , [ ( "key", Encode.string "ArrowDown" ) ]
                 , [ ( "key", Encode.string "↓" ) ]
                 , [ ( "key", Encode.string "p" ), ( "ctrlKey", Encode.bool True ) ]
                 , [ ( "key", Encode.string "p" ), ( "metaKey", Encode.bool True ) ]

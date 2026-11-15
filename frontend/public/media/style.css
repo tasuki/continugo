@@ -21,7 +21,7 @@ a { color: inherit; }
     position: absolute; top: 0; left: 0; z-index: 9; padding: 1px;
     display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
 .pills[hidden] { display: none; }
-.pills .item, .training-evaluation, .training-menu { display: contents; }
+.pills .item, .training-evaluation, .training-menu, #variation-passes { display: contents; }
 .pills .icon { display: block; min-width: 30px; min-height: 30px; border: 0; padding: 0;
     border-radius: 30px; font: inherit; line-height: 30px; text-align: center; text-decoration: none;
     background: var(--pill-background); color: var(--pill-color); box-shadow: inset 0 0 0 2px var(--pill-border); }
@@ -33,9 +33,9 @@ a { color: inherit; }
     font-size: 14px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .pills .icon:is(:hover, :focus-visible) { padding: 0 10px; }
 .pills .icon:is(:hover, :focus-visible) .tooltip { display: inline-block; }
-#move-number { font-size: 12px; }
+#move-number, #sgf-download { font-size: 12px; }
+.pills .menu-gap { flex: none; width: 8px; height: 8px; }
 .pills .training-value { font-size: 9px; }
-.pills .menu-spacer { display: block; width: 30px; height: 30px; }
 #players { left: auto; right: 0; align-items: flex-end; }
 #players .tooltip { margin-left: 0; }
 #players .icon:is(:hover, :focus-visible) .pill-summary { display: none; }
