@@ -71,6 +71,19 @@ viewEvaluation mover evaluation =
                 Nothing ->
                     "Mover"
 
+        signedScore value =
+            let
+                rounded =
+                    round value
+            in
+            (if rounded >= 0 then
+                "+"
+
+             else
+                ""
+            )
+                ++ String.fromInt rounded
+
         badge id value tooltip =
             H.div [ HA.class "item" ]
                 [ H.div
@@ -83,8 +96,8 @@ viewEvaluation mover evaluation =
     in
     H.div [ HA.class "training-evaluation" ]
         (List.filterMap identity
-            [ Maybe.map (\value -> badge "training-win-pct" (String.fromFloat value ++ "%") (player ++ " win_pct")) evaluation.winPct
-            , Maybe.map (\value -> badge "training-score" (String.fromFloat value) (player ++ " expected score margin")) evaluation.score
+            [ Maybe.map (\value -> badge "training-win-pct" (String.fromInt (round value) ++ "%") (player ++ " win_pct")) evaluation.winPct
+            , Maybe.map (\value -> badge "training-score" (signedScore value) (player ++ " expected score margin")) evaluation.score
             ]
         )
 

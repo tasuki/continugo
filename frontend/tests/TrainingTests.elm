@@ -49,8 +49,22 @@ tests =
                     |> Expect.all
                         [ Query.find [ Selector.id "training-win-pct" ] >> Query.has [ Selector.text "0%" ]
                         , Query.find [ Selector.id "training-score" ]
-                            >> Query.has [ Selector.text "-2.6", Selector.attribute (HA.attribute "aria-label" "White expected score margin") ]
+                            >> Query.has [ Selector.text "-3", Selector.attribute (HA.attribute "aria-label" "White expected score margin") ]
                         ]
+        , test "Win percentage and positive score are rounded to whole numbers" <|
+            \_ ->
+                Training.viewEvaluation Nothing { winPct = Just 49.9, score = Just 2.6, policy = [] }
+                    |> Query.fromHtml
+                    |> Expect.all
+                        [ Query.find [ Selector.id "training-win-pct" ] >> Query.has [ Selector.text "50%" ]
+                        , Query.find [ Selector.id "training-score" ] >> Query.has [ Selector.text "+3" ]
+                        ]
+        , test "Zero scores retain an explicit sign" <|
+            \_ ->
+                Training.viewEvaluation Nothing { winPct = Nothing, score = Just 0, policy = [] }
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.id "training-score" ]
+                    |> Query.has [ Selector.text "+0" ]
         , test "Policy stones use board radius and visits, fading less-visited alternatives" <|
             \_ ->
                 Training.viewPolicy Board.default Black [ ( "hAjs", 8 ), ( "jiiu", 4 ), ( "", 2 ), ( "invalid", 8 ) ]
