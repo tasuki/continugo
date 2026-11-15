@@ -25,7 +25,7 @@
 <script>
   // SGF escapes closing brackets inside JSON comments.
   const sgf = '(;FF[9071]GM[9071]SZ[13];B[fOfO];W[nyny];B[fOny]C[{"policy":[["fOny",20\\],["nyfO",8\\]\\]}];W[nyfO])';
-  const first = ContinugoViewer.mount(document.querySelector('#first'), { sgf, move: 2, showPolicy: true });
+  const first = ContinugoViewer.mount(document.querySelector('#first'), { sgf, move: 2 });
   const second = ContinugoViewer.mount(document.querySelector('#second'), { sgf });
   document.querySelector('#move').addEventListener('input', event => {
     const move = Number(event.target.value);

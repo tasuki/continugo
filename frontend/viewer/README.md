@@ -52,7 +52,7 @@ Only one viewer may be mounted per container; different containers are independe
 | --- | --- | --- |
 | `sgf` | `""` | ContinuGo SGF text; empty means an empty default board. |
 | `move` | `null` | Number of moves to display, including passes. `0` is the start; `null` is the end. Values beyond the end are clamped. |
-| `showPolicy` | `false` | Show recorded policy alternatives for the displayed position. |
+| `showPolicy` | `true` | Show recorded policy alternatives for the displayed position. |
 | `hover` | `true` | Mouse/pen group highlighting and hypothetical placement/capture previews. |
 
 `update(patch)` merges any of these options with their current values. To load a

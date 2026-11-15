@@ -28,7 +28,7 @@ function mount(element, initial = {}) {
   if (!initial || typeof initial !== 'object' || Array.isArray(initial)) {
     throw new TypeError('Viewer options must be an object.');
   }
-  let config = options({ sgf: '', move: null, showPolicy: false, hover: true, ...initial });
+  let config = options({ sgf: '', move: null, showPolicy: true, hover: true, ...initial });
   const document = element.ownerDocument;
   const host = document.createElement('div');
   const shadow = host.attachShadow({ mode: 'open' });

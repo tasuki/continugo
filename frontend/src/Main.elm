@@ -18,6 +18,7 @@ import Json.Decode as Decode
 import Markdown
 import Maybe.Extra
 import MovePreview
+import Pill
 import Placement
 import PointerInput
 import Process
@@ -751,9 +752,7 @@ viewSvg model =
 menuLink : msg -> String -> String -> H.Html msg
 menuLink action iconText tooltip =
     H.div [ HA.class "item" ]
-        [ H.div [ HA.class "icon", HE.onClick action ]
-            [ H.text iconText, H.span [ HA.class "tooltip" ] [ H.text <| " " ++ tooltip ] ]
-        ]
+        [ Pill.view "button" [ HE.onClick action ] iconText tooltip ]
 
 
 viewNewGames : Maybe String -> H.Html Msg
@@ -802,26 +801,50 @@ viewMoveNumber record =
                     "No moves yet"
     in
     H.div [ HA.class "item" ]
-        [ H.div
+        [ Pill.view "div"
             [ HA.id "move-number"
-            , HA.class "icon"
             , HA.attribute "aria-label" ("Move " ++ number ++ ": " ++ coordinates)
             ]
-            [ H.text number, H.span [ HA.class "tooltip" ] [ H.text (" " ++ coordinates) ] ]
+            number
+            coordinates
         ]
 
 
 viewDownload : List Sgf.Property -> List Play -> List (List Sgf.Property) -> H.Html msg
 viewDownload root plays moveProperties =
     H.div [ HA.class "item" ]
-        [ H.a
-            [ HA.class "icon"
-            , HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord { root = root, plays = plays, moveProperties = moveProperties }))
+        [ Pill.view "a"
+            [ HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord { root = root, plays = plays, moveProperties = moveProperties }))
             , HA.download "continugo.sgf"
             , HA.attribute "aria-label" "Download SGF"
             ]
-            [ H.text "↓", H.span [ HA.class "tooltip" ] [ H.text " download SGF" ] ]
+            "↓"
+            "download"
         ]
+
+
+viewPlayers : List Sgf.Property -> H.Html msg
+viewPlayers root =
+    let
+        player property color =
+            root
+                |> List.filter (Tuple.first >> (==) property)
+                |> List.concatMap Tuple.second
+                |> List.map String.trim
+                |> List.filter (not << String.isEmpty)
+                |> List.head
+                |> Maybe.map
+                    (\name ->
+                        Pill.view "div"
+                            [ HA.class ("player-" ++ String.toLower color ++ " pill-" ++ String.toLower color)
+                            , HA.attribute "aria-label" (color ++ ": " ++ name)
+                            ]
+                            (String.left 1 name)
+                            name
+                    )
+    in
+    H.div [ HA.id "players", HA.class "pills" ]
+        (List.filterMap identity [ player "PB" "Black", player "PW" "White" ])
 
 
 trainingAt : Int -> Model -> Training.Annotation
@@ -892,14 +915,14 @@ view model =
     in
     { title = title
     , body =
-        [ H.div [ HA.id "menu", HA.hidden model.showMenu ]
+        [ H.div [ HA.id "menu", HA.class "pills", HA.hidden model.showMenu ]
             [ menuLink OpenMenu "!" "menu"
             , menuLink ToggleHelp "?" "help"
             , menuLink PassTurn "*" "pass"
             , H.div [ HA.class "item" ]
-                [ H.button
+                [ Pill.view "button"
                     [ HA.id "score-toggle"
-                    , HA.classList [ ( "icon", True ), ( "active", isScoring model ) ]
+                    , HA.classList [ ( "active", isScoring model ) ]
                     , HA.attribute "aria-label" "Toggle score estimator"
                     , HA.attribute "aria-pressed"
                         (if isScoring model then
@@ -911,12 +934,13 @@ view model =
                     , HA.disabled (Game.isFinished model.game)
                     , HE.onClick ToggleScoring
                     ]
-                    [ H.text "%", H.span [ HA.class "tooltip" ] [ H.text " score" ] ]
+                    "%"
+                    "score"
                 ]
             , H.div [ HA.class "item" ]
-                [ H.button
+                [ Pill.view "button"
                     [ HA.id "analysis-toggle"
-                    , HA.classList [ ( "icon", True ), ( "active", model.showAnalysis ) ]
+                    , HA.classList [ ( "active", model.showAnalysis ) ]
                     , HA.attribute "aria-label" "Toggle analysis mode"
                     , HA.attribute "aria-pressed"
                         (if model.showAnalysis then
@@ -927,7 +951,8 @@ view model =
                         )
                     , HE.onClick ToggleAnalysis
                     ]
-                    [ H.text "o", H.span [ HA.class "tooltip" ] [ H.text " analysis" ] ]
+                    "o"
+                    "analysis"
                 ]
             , lazy viewMoveNumber model.game.record
             , menuLink Prev "‹" "prev"
@@ -939,6 +964,11 @@ view model =
                 (trainingAt (List.length model.game.record - 1) model)
                 (nextTraining model).policy
             ]
+        , if model.showMenu then
+            H.text ""
+
+          else
+            lazy viewPlayers model.sgfRoot
         , content
         ]
     }

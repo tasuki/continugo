@@ -47,9 +47,13 @@ tests =
                 Training.viewEvaluation (Just White) { winPct = Just 0, score = Just -2.6, policy = [] }
                     |> Query.fromHtml
                     |> Expect.all
-                        [ Query.find [ Selector.id "training-win-pct" ] >> Query.has [ Selector.text "0%" ]
+                        [ Query.find [ Selector.id "training-win-pct" ]
+                            >> Query.has [ Selector.text "0%", Selector.attribute (HA.attribute "aria-label" "0% for white") ]
                         , Query.find [ Selector.id "training-score" ]
-                            >> Query.has [ Selector.text "-3", Selector.attribute (HA.attribute "aria-label" "White expected score margin") ]
+                            >> Query.has [ Selector.text "-3", Selector.attribute (HA.attribute "aria-label" "-3 for white") ]
+                        , Query.find [ Selector.id "training-score" ]
+                            >> Query.find [ Selector.class "tooltip" ]
+                            >> Query.has [ Selector.text "for white" ]
                         ]
         , test "Win percentage and positive score are rounded to whole numbers" <|
             \_ ->
@@ -84,7 +88,11 @@ tests =
                     |> Expect.all
                         [ Query.findAll [ Selector.class "menu-spacer" ] >> Query.count (Expect.equal 1)
                         , Query.find [ Selector.id "policy-pass" ]
-                            >> Query.has [ Selector.text "pass", Selector.text "2", Selector.style "opacity" "0.2125" ]
+                            >> Expect.all
+                                [ Query.has [ Selector.class "pill-white", Selector.style "opacity" "0.2125" ]
+                                , Query.find [ Selector.class "pill-summary" ] >> Query.has [ Selector.text "2" ]
+                                , Query.find [ Selector.class "tooltip" ] >> Query.has [ Selector.text "pass" ]
+                                ]
                         , \_ ->
                             Training.viewMenu () False White Training.empty [ ( "", 2 ) ]
                                 |> Query.fromHtml

@@ -9,6 +9,7 @@ import Html as H
 import Html.Attributes as HA
 import Html.Events as HE
 import Json.Decode as Decode
+import Pill
 import Rules.Board as Board exposing (Board)
 import Rules.Position exposing (..)
 import Sgf
@@ -63,13 +64,13 @@ viewEvaluation mover evaluation =
         player =
             case mover of
                 Just Black ->
-                    "Black"
+                    "black"
 
                 Just White ->
-                    "White"
+                    "white"
 
                 Nothing ->
-                    "Mover"
+                    "mover"
 
         signedScore value =
             let
@@ -84,20 +85,21 @@ viewEvaluation mover evaluation =
             )
                 ++ String.fromInt rounded
 
-        badge id value tooltip =
+        badge id value =
             H.div [ HA.class "item" ]
-                [ H.div
+                [ Pill.view "div"
                     [ HA.id id
-                    , HA.class "icon training-value"
-                    , HA.attribute "aria-label" tooltip
+                    , HA.class "training-value"
+                    , HA.attribute "aria-label" (value ++ " for " ++ player)
                     ]
-                    [ H.text value, H.span [ HA.class "tooltip" ] [ H.text (" " ++ tooltip) ] ]
+                    value
+                    ("for " ++ player)
                 ]
     in
     H.div [ HA.class "training-evaluation" ]
         (List.filterMap identity
-            [ Maybe.map (\value -> badge "training-win-pct" (String.fromInt (round value) ++ "%") (player ++ " win_pct")) evaluation.winPct
-            , Maybe.map (\value -> badge "training-score" (signedScore value) (player ++ " expected score margin")) evaluation.score
+            [ Maybe.map (\value -> badge "training-win-pct" (String.fromInt (round value) ++ "%")) evaluation.winPct
+            , Maybe.map (\value -> badge "training-score" (signedScore value)) evaluation.score
             ]
         )
 
@@ -109,9 +111,9 @@ viewToggle toggle active policy =
 
     else
         H.div [ HA.class "item" ]
-            [ H.button
+            [ Pill.view "button"
                 [ HA.id "policy-toggle"
-                , HA.classList [ ( "icon", True ), ( "active", active ) ]
+                , HA.classList [ ( "active", active ) ]
                 , HA.attribute "aria-label" "Toggle policy alternatives"
                 , HA.attribute "aria-pressed"
                     (if active then
@@ -122,7 +124,8 @@ viewToggle toggle active policy =
                     )
                 , HE.onClick toggle
                 ]
-                [ H.text "p", H.span [ HA.class "tooltip" ] [ H.text " policy alternatives" ] ]
+                "p"
+                "policy alternatives"
             ]
 
 
@@ -161,29 +164,20 @@ viewPass color policy =
         |> Maybe.map
             (\( _, visits ) ->
                 H.div [ HA.class "item" ]
-                    [ H.div
+                    [ Pill.view "div"
                         [ HA.id "policy-pass"
-                        , HA.class "icon training-value policy-pass"
+                        , HA.class
+                            (if color == Black then
+                                "pill-black"
+
+                             else
+                                "pill-white"
+                            )
                         , HA.attribute "aria-label" ("Pass: " ++ String.fromInt visits ++ " playouts")
                         , HA.style "opacity" (policyOpacity policy visits)
-                        , HA.style "background-color"
-                            (if color == Black then
-                                "#222"
-
-                             else
-                                "#FFF"
-                            )
-                        , HA.style "color"
-                            (if color == Black then
-                                "#FFF"
-
-                             else
-                                "#222"
-                            )
                         ]
-                        [ H.span [ HA.class "pass-label" ] [ H.text "pass" ]
-                        , H.text (String.fromInt visits)
-                        ]
+                        (String.fromInt visits)
+                        "pass"
                     ]
             )
         |> Maybe.withDefault (H.text "")

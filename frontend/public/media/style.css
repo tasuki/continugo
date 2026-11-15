@@ -17,25 +17,38 @@ html, body { font-family: "Recursive Mono"; margin: 0; height: 100%; }
 a { color: inherit; }
 #sgf-dropzone { border: 1px dashed; margin-top: 1rem; padding: 2rem;
     font: inherit; color: inherit; background: transparent; cursor: pointer; }
-#menu { position: absolute; left: 0px; top: 0px; z-index: 9; }
-#menu .item { float: left; padding: 1px 0 0 1px; }
-@media screen and (min-aspect-ratio: 1/1) { #menu .item { float: none; } }
-#menu .icon { display: block; cursor: pointer; background-color: #222; color: #fff; text-decoration: none;
-    border-radius: 30px; line-height: 30px; width: 30px; height: 30px; text-align: center; }
-
-#menu #move-number { cursor: default; font-size: 12px; }
-#score-toggle, #analysis-toggle, #policy-toggle { border: 0; padding: 0; font: inherit; line-height: 30px; }
-#menu .training-value { cursor: default; font-size: 9px; }
-.training-evaluation, .training-menu { display: contents; }
-#menu .menu-spacer { width: 30px; height: 30px; }
-#menu .policy-pass { cursor: default; display: flex; flex-direction: column; justify-content: center;
-    line-height: 12px; box-shadow: inset 0 0 0 1px #176B72; }
-#menu .pass-label { font-size: 8px; }
-#menu .icon.active { background: #DDD; color: #222; box-shadow: inset 0 0 0 2px #222; }
-#menu .icon .tooltip { display: none; white-space: nowrap; text-align: left; }
-#menu .icon:hover .tooltip { display: inline; }
-@media screen and (min-aspect-ratio: 1/1) { #menu .icon:hover { width:auto; padding: 0 10px; text-align: left; } }
-@media screen and (max-aspect-ratio: 1/1) { #menu .icon:hover .tooltip { display: block; position: absolute; top: 25px; color: #222; } }
+.pills { --pill-background: #222; --pill-color: #FFF; --pill-border: #222;
+    position: absolute; top: 0; left: 0; z-index: 9; padding: 1px;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.pills[hidden] { display: none; }
+.pills .item, .training-evaluation, .training-menu { display: contents; }
+.pills .icon { display: block; min-width: 30px; min-height: 30px; border: 0; padding: 0;
+    border-radius: 30px; font: inherit; line-height: 30px; text-align: center; text-decoration: none;
+    background: var(--pill-background); color: var(--pill-color); box-shadow: inset 0 0 0 2px var(--pill-border); }
+.pills button, .pills a { cursor: pointer; }
+.pills .active { --pill-background: #DDD; --pill-color: #222; }
+.pills .pill-black { --pill-background: #222; --pill-color: #FFF; --pill-border: #222; }
+.pills .pill-white { --pill-background: #FFF; --pill-color: #222; --pill-border: #222; }
+.pills .tooltip { display: none; margin-left: 1ch; max-width: calc(100vw - 64px);
+    font-size: 14px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.pills .icon:is(:hover, :focus-visible) { padding: 0 10px; }
+.pills .icon:is(:hover, :focus-visible) .tooltip { display: inline-block; }
+#move-number { font-size: 12px; }
+.pills .training-value { font-size: 9px; }
+.pills .menu-spacer { display: block; width: 30px; height: 30px; }
+#players { left: auto; right: 0; align-items: flex-end; }
+#players .tooltip { margin-left: 0; }
+#players .icon:is(:hover, :focus-visible) .pill-summary { display: none; }
+@media screen and (max-aspect-ratio: 1/1) {
+    .pills { flex-direction: row; flex-wrap: wrap; max-width: calc(100vw - 2px); }
+    .pills .icon:is(:hover, :focus-visible) { padding: 0; }
+    .pills .tooltip { position: absolute; top: calc(100% + 4px); left: 1px; width: max-content;
+        margin-left: 0; padding: 0 10px; max-width: calc(100vw - 24px);
+        background: inherit; color: inherit; box-shadow: inherit; border-radius: inherit; }
+    #players { top: auto; right: auto; bottom: 0; left: 0; }
+    #players .icon:is(:hover, :focus-visible) .pill-summary { display: inline; }
+    #players .tooltip { top: auto; bottom: calc(100% + 4px); }
+}
 
 #board-container { display: flex; align-items: center; justify-content: center; height: 100%; overflow: hidden; touch-action: pinch-zoom; }
 #board { width: 100vmin; height: 100vmin; }
@@ -54,5 +67,6 @@ a { color: inherit; }
 
 @media (prefers-color-scheme: dark) {
     body { background: #222; color: #FFF; }
-    #menu { filter: invert(1); }
+    #menu { --pill-background: #FFF; --pill-color: #222; --pill-border: #FFF; }
+    #menu .active { --pill-background: #444; --pill-color: #FFF; }
 }

@@ -95,9 +95,15 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
         await c('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
         await evaluate('frame()');
         assert.equal(await evaluate(`(() => {
-          const tooltip = document.querySelectorAll('#menu .tooltip')[${i}];
+          const pill = document.querySelectorAll('#menu .icon')[${i}];
+          const tooltip = pill.querySelector('.tooltip');
           const style = getComputedStyle(tooltip);
+          const summaryHidden = getComputedStyle(pill.querySelector('.pill-summary')).display === 'none';
           return style.display !== 'none' && style.textAlign === 'left'
+            && !summaryHidden
+            && (${width > height}
+              ? tooltip.getBoundingClientRect().left > pill.querySelector('.pill-summary').getBoundingClientRect().right
+              : tooltip.getBoundingClientRect().top > pill.getBoundingClientRect().bottom)
             && tooltip.getBoundingClientRect().height <= parseFloat(style.lineHeight);
         })()`), true);
       }
@@ -131,6 +137,67 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
         pass.click(); await frame(); pass.click(); await frame();
       })()`);
       assert.equal(await evaluate("document.querySelectorAll('#score .score-result, #territory').length"), 2);
+
+      const namedGame = '(;FF[9071]GM[9071]PB[Black Player]PW[White Player];B[hAjs]C[{"policy":[["",2\\],["hAjs",8\\]\\]}])';
+      await evaluate(`app.ports.sgfLoaded.send(${JSON.stringify(namedGame)});frame()`);
+      const players = await evaluate(`Array.from(document.querySelectorAll('#players .icon'), element => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom,
+          background: style.backgroundColor, color: style.color };
+      })`);
+      assert.equal(players.length, 2);
+      assert.equal(players[0].background, 'rgb(34, 34, 34)');
+      assert.equal(players[0].color, 'rgb(255, 255, 255)');
+      assert.equal(players[1].background, 'rgb(255, 255, 255)');
+      assert.equal(players[1].color, 'rgb(34, 34, 34)');
+      if (width > height) {
+        assert.equal(players[0].right, width - 1);
+        assert.equal(players[0].y, 1);
+        assert.ok(players[1].y > players[0].y);
+      } else {
+        assert.equal(players[0].x, 1);
+        assert.equal(players[0].bottom, height - 1);
+        assert.ok(players[1].x > players[0].x);
+      }
+      for (let i = 0; i < players.length; i++) {
+        await c('Input.dispatchMouseEvent', { type: 'mouseMoved', x: players[i].right - 15, y: players[i].y + 15 });
+        await evaluate('frame()');
+        const expanded = await evaluate(`(() => {
+          const pill = document.querySelectorAll('#players .icon')[${i}];
+          const tooltip = pill.querySelector('.tooltip');
+          const rect = tooltip.getBoundingClientRect();
+          return { visible: getComputedStyle(tooltip).display !== 'none', text: tooltip.textContent,
+            summaryHidden: getComputedStyle(pill.querySelector('.pill-summary')).display === 'none',
+            x: rect.x, right: rect.right, bottom: rect.bottom, pillTop: pill.getBoundingClientRect().top };
+        })()`);
+        assert.equal(expanded.visible, true);
+        assert.equal(expanded.summaryHidden, width > height);
+        assert.equal(expanded.text, i === 0 ? 'Black Player' : 'White Player');
+        assert.ok(expanded.x >= 0 && expanded.right <= width);
+        if (width > height) assert.ok(expanded.x < players[i].x);
+        else assert.ok(expanded.bottom < expanded.pillTop);
+      }
+      await c('Input.dispatchMouseEvent', { type: 'mouseMoved', x: width / 2, y: height / 2 });
+      const pass = await evaluate(`(() => {
+        const pill = document.querySelector('#policy-pass');
+        const rect = pill.getBoundingClientRect();
+        return { x: rect.x + 15, y: rect.y + 15,
+          summary: pill.querySelector('.pill-summary').textContent,
+          tooltipHidden: getComputedStyle(pill.querySelector('.tooltip')).display === 'none' };
+      })()`);
+      assert.equal(pass.summary, '2');
+      assert.equal(pass.tooltipHidden, true);
+      await c('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pass.x, y: pass.y });
+      await evaluate('frame()');
+      assert.equal(await evaluate(`(() => {
+        const pill = document.querySelector('#policy-pass');
+        return pill.querySelector('.tooltip').textContent === 'pass'
+          && getComputedStyle(pill.querySelector('.tooltip')).display !== 'none';
+      })()`), true);
+      assert.equal(await evaluate(`Array.from(document.querySelectorAll('.pills .icon'), pill =>
+        getComputedStyle(pill).boxShadow).every(shadow => shadow.includes(' 0px 0px 0px 2px') && shadow.includes('inset'))`), true);
+      await c('Input.dispatchMouseEvent', { type: 'mouseMoved', x: width / 2, y: height / 2 });
     }
     await c('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 1, mobile: false });
     for (const build of (urls.before ? ['before', 'after'] : ['after'])) {

@@ -152,6 +152,39 @@ tests =
                 ]
                     |> List.map (Main.readSession >> Maybe.map (Tuple.second >> .record))
                     |> Expect.equal [ Nothing, Nothing, Nothing, Nothing ]
+        , test "Player pills show initials and full SGF names in black/white order" <|
+            \_ ->
+                Main.viewPlayers [ ( "PW", [ "White Player" ] ), ( "PB", [ "Black Player" ] ) ]
+                    |> Query.fromHtml
+                    |> Expect.all
+                        [ Query.children []
+                            >> Query.index 0
+                            >> Query.has [ Selector.class "player-black", Selector.attribute (HA.attribute "aria-label" "Black: Black Player") ]
+                        , Query.children []
+                            >> Query.index 1
+                            >> Query.has [ Selector.class "player-white", Selector.attribute (HA.attribute "aria-label" "White: White Player") ]
+                        , Query.find [ Selector.class "player-black", Selector.class "icon" ]
+                            >> Query.find [ Selector.class "pill-summary" ]
+                            >> Query.has [ Selector.text "B" ]
+                        , Query.find [ Selector.class "player-white", Selector.class "icon" ]
+                            >> Query.find [ Selector.class "tooltip" ]
+                            >> Query.has [ Selector.text "White Player" ]
+                        ]
+        , test "Missing and blank player names have no pills" <|
+            \_ ->
+                Main.viewPlayers [ ( "PB", [ "  " ] ) ]
+                    |> Query.fromHtml
+                    |> Query.children []
+                    |> Query.count (Expect.equal 0)
+        , test "A game with one named player only shows that player" <|
+            \_ ->
+                Main.viewPlayers [ ( "PW", [ "白" ] ) ]
+                    |> Query.fromHtml
+                    |> Query.children []
+                    |> Expect.all
+                        [ Query.count (Expect.equal 1)
+                        , Query.index 0 >> Query.has [ Selector.class "player-white", Selector.text "白" ]
+                        ]
         , test "Download includes all moves and root metadata" <|
             \_ ->
                 let
