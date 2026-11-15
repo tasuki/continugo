@@ -69,4 +69,5 @@ a { color: inherit; }
     body { background: #222; color: #FFF; }
     #menu { --pill-background: #FFF; --pill-color: #222; --pill-border: #FFF; }
     #menu .active { --pill-background: #444; --pill-color: #FFF; }
+    #players .icon { --pill-border: #FFF; }
 }
