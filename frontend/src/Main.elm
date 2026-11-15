@@ -56,11 +56,7 @@ main =
                 Sub.batch
                     [ sgfLoaded SgfLoaded
                     , sgfLoadFailed SgfLoadFailed
-                    , if model.showMenu || model.showHelp then
-                        Sub.none
-
-                      else
-                        Browser.Events.onKeyDown replayKey
+                    , Browser.Events.onKeyDown (menuKey model)
                     ]
         , view = view
         , onUrlRequest = LinkClicked
@@ -189,6 +185,7 @@ type Msg
     | TogglePolicy
     | AnalysisRemovalExpired Int
     | OpenMenu
+    | ClosePanels
     | NewBoard Board
     | SgfLoaded String
     | SgfLoadFailed String
@@ -196,20 +193,75 @@ type Msg
     | UrlChanged Url
 
 
-replayKey : Decode.Decoder Msg
-replayKey =
-    Decode.field "key" Decode.string
+menuKey : { a | showMenu : Bool, showHelp : Bool } -> Decode.Decoder Msg
+menuKey model =
+    let
+        flag path =
+            Decode.oneOf [ Decode.at path Decode.bool, Decode.succeed False ]
+
+        blocked key modified repeating editable tag =
+            ( key
+            , modified
+                || editable
+                || List.member tag [ "INPUT", "TEXTAREA", "SELECT" ]
+                || (repeating && not (List.member key [ "ArrowLeft", "ArrowRight" ]))
+                || ((model.showMenu || model.showHelp)
+                        && not (key == "Escape" || key == "!" || (key == "?" && model.showHelp))
+                   )
+            )
+    in
+    Decode.map5 blocked
+        (Decode.field "key" Decode.string)
+        (Decode.map3 (\ctrl meta alt -> ctrl || meta || alt)
+            (flag [ "ctrlKey" ])
+            (flag [ "metaKey" ])
+            (flag [ "altKey" ])
+        )
+        (flag [ "repeat" ])
+        (flag [ "target", "isContentEditable" ])
+        (Decode.oneOf [ Decode.at [ "target", "tagName" ] Decode.string, Decode.succeed "" ])
         |> Decode.andThen
-            (\key ->
-                case key of
-                    "ArrowLeft" ->
-                        Decode.succeed Prev
+            (\( key, ignored ) ->
+                if ignored then
+                    Decode.fail "Not a menu shortcut"
 
-                    "ArrowRight" ->
-                        Decode.succeed Next
+                else
+                    case key of
+                        "!" ->
+                            Decode.succeed OpenMenu
 
-                    _ ->
-                        Decode.fail "Not a replay key"
+                        "?" ->
+                            Decode.succeed ToggleHelp
+
+                        "*" ->
+                            Decode.succeed PassTurn
+
+                        "%" ->
+                            Decode.succeed ToggleScoring
+
+                        "o" ->
+                            Decode.succeed ToggleAnalysis
+
+                        "p" ->
+                            Decode.succeed TogglePolicy
+
+                        "ArrowLeft" ->
+                            Decode.succeed Prev
+
+                        "‹" ->
+                            Decode.succeed Prev
+
+                        "ArrowRight" ->
+                            Decode.succeed Next
+
+                        "›" ->
+                            Decode.succeed Next
+
+                        "Escape" ->
+                            Decode.succeed ClosePanels
+
+                        _ ->
+                            Decode.fail "Not a menu shortcut"
             )
 
 
@@ -515,6 +567,9 @@ update msg model =
             , Cmd.none
             )
 
+        ClosePanels ->
+            ( { model | showMenu = False, showHelp = False }, Cmd.none )
+
         NewBoard board ->
             ( newBoard board model, Cmd.none )
 
@@ -814,7 +869,8 @@ viewDownload : List Sgf.Property -> List Play -> List (List Sgf.Property) -> H.H
 viewDownload root plays moveProperties =
     H.div [ HA.class "item" ]
         [ Pill.view "a"
-            [ HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord { root = root, plays = plays, moveProperties = moveProperties }))
+            [ HA.id "sgf-download"
+            , HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord { root = root, plays = plays, moveProperties = moveProperties }))
             , HA.download "continugo.sgf"
             , HA.attribute "aria-label" "Download SGF"
             ]

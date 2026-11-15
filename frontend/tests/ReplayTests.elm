@@ -23,15 +23,49 @@ import Url
 tests : Test
 tests =
     describe "Replay"
-        [ test "Left/right arrows replay; other keys are ignored" <|
+        [ test "Menu symbols and arrow keys trigger their actions" <|
             \_ ->
-                [ "ArrowLeft", "ArrowRight", "a" ]
+                [ ( "!", Main.OpenMenu )
+                , ( "?", Main.ToggleHelp )
+                , ( "*", Main.PassTurn )
+                , ( "%", Main.ToggleScoring )
+                , ( "o", Main.ToggleAnalysis )
+                , ( "p", Main.TogglePolicy )
+                , ( "ArrowLeft", Main.Prev )
+                , ( "‹", Main.Prev )
+                , ( "ArrowRight", Main.Next )
+                , ( "›", Main.Next )
+                , ( "Escape", Main.ClosePanels )
+                ]
                     |> List.map
-                        (\key ->
-                            Decode.decodeValue Main.replayKey (Encode.object [ ( "key", Encode.string key ) ])
-                                |> Result.toMaybe
+                        (\( key, action ) ->
+                            ( shortcut False False [ ( "key", Encode.string key ) ], Just action )
                         )
-                    |> Expect.equal [ Just Main.Prev, Just Main.Next, Nothing ]
+                    |> List.unzip
+                    |> (\( actual, expected ) -> Expect.equal expected actual)
+        , test "Typing, browser shortcuts, repeated toggles and unrelated keys are ignored" <|
+            \_ ->
+                [ [ ( "key", Encode.string "a" ) ]
+                , [ ( "key", Encode.string "ArrowDown" ) ]
+                , [ ( "key", Encode.string "↓" ) ]
+                , [ ( "key", Encode.string "p" ), ( "ctrlKey", Encode.bool True ) ]
+                , [ ( "key", Encode.string "p" ), ( "metaKey", Encode.bool True ) ]
+                , [ ( "key", Encode.string "ArrowLeft" ), ( "altKey", Encode.bool True ) ]
+                , [ ( "key", Encode.string "*" ), ( "repeat", Encode.bool True ) ]
+                , [ ( "key", Encode.string "o" ), ( "target", Encode.object [ ( "tagName", Encode.string "INPUT" ) ] ) ]
+                , [ ( "key", Encode.string "p" ), ( "target", Encode.object [ ( "isContentEditable", Encode.bool True ) ] ) ]
+                ]
+                    |> List.filterMap (shortcut False False)
+                    |> Expect.equal []
+        , test "Help can close with ?, panels with Escape, and neither allows gameplay shortcuts" <|
+            \_ ->
+                [ shortcut False True [ ( "key", Encode.string "?" ) ]
+                , shortcut False True [ ( "key", Encode.string "Escape" ) ]
+                , shortcut True False [ ( "key", Encode.string "Escape" ) ]
+                , shortcut False True [ ( "key", Encode.string "*" ) ]
+                , shortcut True False [ ( "key", Encode.string "ArrowRight" ) ]
+                ]
+                    |> Expect.equal [ Just Main.ToggleHelp, Just Main.ClosePanels, Just Main.ClosePanels, Nothing, Nothing ]
         , test "Stepping is bounded by the start and end, including passes" <|
             \_ ->
                 let
@@ -202,6 +236,12 @@ tests =
                         , Selector.attribute (HA.href ("data:application/x-go-sgf;charset=utf-8," ++ Url.percentEncode (Sgf.encodeRecord record)))
                         ]
         ]
+
+
+shortcut : Bool -> Bool -> List ( String, Encode.Value ) -> Maybe Main.Msg
+shortcut showMenu showHelp fields =
+    Decode.decodeValue (Main.menuKey { showMenu = showMenu, showHelp = showHelp }) (Encode.object fields)
+        |> Result.toMaybe
 
 
 snapshot : String -> Int -> Encode.Value

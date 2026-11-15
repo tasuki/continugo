@@ -200,6 +200,40 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       await c('Input.dispatchMouseEvent', { type: 'mouseMoved', x: width / 2, y: height / 2 });
     }
     await c('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 1, mobile: false });
+    await navigate('after');
+    await evaluate(`window.key = async (key, options = {}) => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...options }));
+      await frame();
+    }`);
+    await evaluate("key('?', { shiftKey: true })");
+    assert.equal(await evaluate("!!document.querySelector('#help')"), true);
+    await evaluate("key('*')");
+    await evaluate("key('?')");
+    assert.equal(await evaluate("!!document.querySelector('#board')"), true);
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '0');
+    await evaluate("key('!')");
+    assert.equal(await evaluate("!!document.querySelector('#sgf-dropzone')"), true);
+    await evaluate("key('Escape')");
+    await evaluate("key('o')");
+    assert.equal(await evaluate("document.querySelector('#analysis-toggle').getAttribute('aria-pressed')"), 'true');
+    await evaluate("key('o');");
+    await evaluate("key('%', { shiftKey: true })");
+    assert.equal(await evaluate("!!document.querySelector('#score')"), true);
+    await evaluate("key('%')");
+    await evaluate("key('*');");
+    await evaluate("key('*', { repeat: true })");
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '1');
+    await evaluate("key('ArrowLeft')");
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '0');
+    await evaluate("key('ArrowRight')");
+    assert.equal(await evaluate("document.querySelector('#move-number .pill-summary').textContent"), '1');
+    await evaluate(`window.downloads = 0;
+      document.querySelector('#sgf-download').addEventListener('click', event => {
+        event.preventDefault(); downloads++;
+      });`);
+    await evaluate("key('ArrowDown')");
+    assert.equal(await evaluate('downloads'), 0);
+
     for (const build of (urls.before ? ['before', 'after'] : ['after'])) {
       await navigate(build, record);
       await evaluate('move(839,240)');
