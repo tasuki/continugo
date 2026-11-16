@@ -109,7 +109,7 @@ Browser benchmark and interaction checks (requires a separately installed Chrome
 no additional npm dependencies):
 
 ```sh
-mise -C frontend release
+mise -C frontend deploy
 mise -C frontend serve
 # In another terminal:
 google-chrome --headless --disable-gpu --remote-debugging-port=19272 \

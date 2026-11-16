@@ -16,6 +16,6 @@ rust = "1.99.1"
 [tasks]
 dev = { depends = ["//frontend:dev"] }
 build = { depends = ["//frontend:build", "//backend:build"] }
-release = { depends = ["//frontend:release"] }
+deploy = { depends = ["//frontend:deploy"] }
 test = { depends = ["//frontend:test", "//backend:test"] }
 format = { depends = ["//frontend:format", "//backend:format"] }

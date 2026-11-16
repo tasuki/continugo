@@ -17,7 +17,7 @@ description = "Build the frontend with the Elm debugger (opt-in)"
 depends = [":_help"]
 run = "elm make src/Main.elm --debug --output=public/continugo.js"
 
-[tasks.release]
+[tasks.deploy]
 description = "Build and minify the production frontend"
 depends = [":_help"]
 run = '''
