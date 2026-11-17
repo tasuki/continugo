@@ -5,6 +5,7 @@ import Html.Attributes as HA
 import Main
 import Rules.Board as Board
 import Test exposing (..)
+import Test.Html.Event as Event
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
 
@@ -29,6 +30,17 @@ tests =
                 [ "invalid", "(;FF[9071]GM[9071]SZ[0])", "(;FF[9071]GM[9071]SZ[501])" ]
                     |> List.map (Main.decodeImport >> Result.toMaybe)
                     |> Expect.equal [ Nothing, Nothing, Nothing ]
+        , test "Pasting SGF loads it immediately without confirmation" <|
+            \_ ->
+                let
+                    sgf =
+                        "(;FF[9071]GM[9071]SZ[9];B[bWdS])"
+                in
+                Main.viewNewGames Nothing
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.id "sgf-paste" ]
+                    |> Event.simulate (Event.input sgf)
+                    |> Event.expect (Main.SgfLoaded sgf)
         , test "The menu has an SGF picker/drop target and displays import errors" <|
             \_ ->
                 Main.viewNewGames (Just "Bad SGF")

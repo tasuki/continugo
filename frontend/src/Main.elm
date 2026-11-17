@@ -976,8 +976,16 @@ viewNewGames error =
                             [ H.text (String.fromInt (Board.size board) ++ "×" ++ String.fromInt (Board.size board)) ]
                     )
             )
-        , H.div []
+        , H.div [ HA.id "sgf-import" ]
             [ H.button [ HA.id "sgf-dropzone", HA.type_ "button" ] [ H.text "Open or drop an SGF file here" ]
+            , H.textarea
+                [ HA.id "sgf-paste"
+                , HA.placeholder "Paste SGF here"
+                , HA.attribute "aria-label" "Paste SGF"
+                , HA.spellcheck False
+                , HE.onInput SgfLoaded
+                ]
+                []
             , H.input [ HA.id "sgf-file", HA.type_ "file", HA.accept ".sgf", HA.hidden True ] []
             ]
         , case error of
