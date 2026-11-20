@@ -70,6 +70,18 @@ try {
     check(getComputedStyle(root.querySelector('svg')).display !== 'none', 'host SVG style leaked');
     check(getComputedStyle(root.querySelector('#stones .black')).fill === 'rgb(34, 34, 34)', 'host stone style leaked');
 
+    first.update({ backgroundColor: '#1e1937', blackColor: '#777', whiteColor: '#eee' }); await frame();
+    check(getComputedStyle(root.querySelector('#board')).backgroundColor === 'rgb(30, 25, 55)', 'custom board background');
+    check(getComputedStyle(root.querySelector('#stones .black')).fill === 'rgb(119, 119, 119)', 'custom black stones');
+    check(getComputedStyle(root.querySelector('#stones .white')).fill === 'rgb(238, 238, 238)', 'custom white stones');
+    check(getComputedStyle(root.querySelector('#stones .white')).stroke === 'rgb(119, 119, 119)', 'custom stone borders');
+    check(getComputedStyle(root.querySelector('#links')).stroke === 'rgb(119, 119, 119)', 'custom connecting-line strokes');
+    check(getComputedStyle(other.querySelector('#board')).backgroundColor === 'rgb(204, 187, 85)', 'colors isolated');
+    let invalidColor = false;
+    try { first.update({ blackColor: 'not-a-color' }); } catch { invalidColor = true; }
+    check(invalidColor, 'invalid color rejected');
+    first.update({ backgroundColor: '#CB5', blackColor: '#222', whiteColor: '#FFF' });
+
     first.update({ move: 0 }); await frame();
     check(count(root, '#stones circle') === 0 && count(other, '#stones circle') === 4, 'isolated replay update');
     first.update({ move: 2, showPolicy: false }); await frame();

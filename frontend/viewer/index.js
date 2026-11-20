@@ -6,7 +6,7 @@ function options(value) {
     throw new TypeError('Viewer options must be an object.');
   }
   for (const key of Object.keys(value)) {
-    if (!['sgf', 'move', 'showPolicy', 'hover'].includes(key)) {
+    if (!['sgf', 'move', 'showPolicy', 'hover', 'backgroundColor', 'blackColor', 'whiteColor'].includes(key)) {
       throw new TypeError(`Unknown viewer option: ${key}`);
     }
   }
@@ -16,6 +16,11 @@ function options(value) {
   }
   if (typeof value.showPolicy !== 'boolean' || typeof value.hover !== 'boolean') {
     throw new TypeError('showPolicy and hover must be booleans.');
+  }
+  for (const key of ['backgroundColor', 'blackColor', 'whiteColor']) {
+    if (typeof value[key] !== 'string' || !globalThis.CSS.supports('color', value[key])) {
+      throw new TypeError(`${key} must be a CSS color.`);
+    }
   }
   return { ...value };
 }
@@ -28,12 +33,27 @@ function mount(element, initial = {}) {
   if (!initial || typeof initial !== 'object' || Array.isArray(initial)) {
     throw new TypeError('Viewer options must be an object.');
   }
-  let config = options({ sgf: '', move: null, showPolicy: true, hover: true, ...initial });
+  let config = options({
+    sgf: '', move: null, showPolicy: true, hover: true,
+    backgroundColor: '#CB5', blackColor: '#222', whiteColor: '#FFF', ...initial,
+  });
   const document = element.ownerDocument;
   const host = document.createElement('div');
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
-  style.textContent = CSS;
+  style.textContent = CSS + `
+    #board { background-color: var(--viewer-background); }
+    #hide-lines circle { fill: var(--viewer-background); }
+    #stones, #links, #ghost-stone, #ghost-links, #removed-stones { stroke: var(--viewer-black); }
+    .black { fill: var(--viewer-black); }
+    .white { fill: var(--viewer-white); }
+  `;
+  function colors() {
+    host.style.setProperty('--viewer-background', config.backgroundColor);
+    host.style.setProperty('--viewer-black', config.blackColor);
+    host.style.setProperty('--viewer-white', config.whiteColor);
+  }
+  colors();
   const node = document.createElement('div');
   shadow.append(style, node);
   element.append(host);
@@ -64,6 +84,7 @@ function mount(element, initial = {}) {
         throw new TypeError('Viewer options must be an object.');
       }
       config = options({ ...config, ...patch });
+      colors();
       app.ports.configure.send(config);
     },
     destroy() {

@@ -54,6 +54,12 @@ Only one viewer may be mounted per container; different containers are independe
 | `move` | `null` | Number of moves to display, including passes. `0` is the start; `null` is the end. Values beyond the end are clamped. |
 | `showPolicy` | `true` | Show recorded policy alternatives for the displayed position. |
 | `hover` | `true` | Mouse/pen group highlighting and hypothetical placement/capture previews. |
+| `backgroundColor` | `"#CB5"` | Board background CSS color. |
+| `blackColor` | `"#222"` | Black stone fill, all stone borders, and connecting-line stroke CSS color. |
+| `whiteColor` | `"#FFF"` | White stone CSS color. |
+
+Colors are per-instance and can also be changed with `update`, for example
+`viewer.update({ backgroundColor: '#1e1937', blackColor: '#777', whiteColor: '#eee' })`.
 
 `update(patch)` merges any of these options with their current values. To load a
 new record at its end, use `update({ sgf: newSgf, move: null })`. Position updates

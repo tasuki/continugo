@@ -20,12 +20,21 @@ import TerritoryView
 
 {-| Keep the unchanged blur in a separate SVG. Promoting individual SVG groups
 can leave stale mask tiles after pinch zoom; the background needs no masks.
+Use fixed padded filter bounds so blur tails are not clipped as stones change.
 -}
 viewBackground : Board -> Stones -> Svg msg
 viewBackground board stones =
     Svg.svg [ SA.id "board-background", SA.viewBox boardViewBox ]
         [ Svg.defs []
-            [ Svg.filter [ SA.id "blur-filter" ]
+            [ Svg.filter
+                [ SA.id "blur-filter"
+                , SA.filterUnits "userSpaceOnUse"
+                , SA.x "-300"
+                , SA.y "-300"
+                , SA.width "1600"
+                , SA.height "1600"
+                , SA.colorInterpolationFilters "sRGB"
+                ]
                 [ Svg.feGaussianBlur [ SA.in_ "SourceGraphic", SA.stdDeviation "70" ] [] ]
             ]
         , lazy3 Svg.node "g" [ SA.id "lines" ] <| BoardView.viewLines board
