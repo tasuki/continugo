@@ -16,6 +16,8 @@
 use continugo_rules::{Board, COORD_RANGE, Color, Position, Spot};
 
 #[cfg(test)]
+mod graph_tests;
+#[cfg(test)]
 mod tests;
 
 /// Certified chains as indices into `position.stones()`, like `Position::groups`.
@@ -105,10 +107,13 @@ fn disc_rows(
     let low = board.stone_radius();
     let high = COORD_RANGE - low;
     let reach = (squared_radius as u32).isqrt() as i32;
+    let widths: Vec<_> = (0..=reach)
+        .map(|dy| ((squared_radius - dy * dy) as u32).isqrt() as i32)
+        .collect();
     for spot in spots {
         for y in (spot.y - reach).max(low)..=(spot.y + reach).min(high) {
             let dy = y - spot.y;
-            let width = ((squared_radius - dy * dy) as u32).isqrt() as i32;
+            let width = widths[dy.unsigned_abs() as usize];
             let left = (spot.x - width).max(low);
             let right = (spot.x + width).min(high);
             if left <= right {
@@ -171,28 +176,65 @@ fn components(board: Board, rows: &mut [Vec<Run>]) -> Vec<Region> {
     }
     let squared_radius = 2 * board.diameter().pow(2) - 1;
     let reach = (squared_radius as u32).isqrt() as usize;
+    let widths: Vec<_> = (0..=reach)
+        .map(|dy| ((squared_radius - (dy * dy) as i32) as u32).isqrt() as i32)
+        .collect();
+    // First build a cheap spanning forest with same-row and adjacent-row edges.
+    // These are a subset of the original exact graph, not pixel connectivity.
     for (y, row) in rows.iter().enumerate() {
-        if row.is_empty() {
-            continue;
-        }
-        for (dy, other) in rows[..=y].iter().rev().take(reach + 1).enumerate() {
-            if other.is_empty() {
-                continue;
+        for pair in row.windows(2) {
+            if pair[1].left - pair[0].right <= widths[0] {
+                join(&mut parents, pair[0].region, pair[1].region);
             }
-            let dy = dy as i32;
-            let width = ((squared_radius - dy * dy) as u32).isqrt() as i32;
-            let mut start = 0;
+        }
+        if y > 0 {
+            connect_rows(row, &rows[y - 1], widths[1], &mut parents);
+        }
+    }
+    let first = parents.first().copied().map(|id| root(&mut parents, id));
+    let connected = (0..parents.len()).all(|id| Some(root(&mut parents, id)) == first);
+    if !connected {
+        // Only edges between distinct forest fragments can change connectivity.
+        let mut labels = vec![usize::MAX; parents.len()];
+        let mut fragments: Vec<Fragment> = Vec::new();
+        for (y, row) in rows.iter().enumerate() {
             for run in row {
-                while start < other.len() && other[start].right < run.left - width {
-                    start += 1;
+                let parent = root(&mut parents, run.region);
+                if labels[parent] == usize::MAX {
+                    labels[parent] = fragments.len();
+                    fragments.push(Fragment {
+                        representative: parent,
+                        runs: Vec::new(),
+                        left: run.left,
+                        right: run.right,
+                        top: y as i32,
+                        bottom: y as i32,
+                    });
                 }
-                for next in &other[start..] {
-                    if next.left > run.right + width {
-                        break;
-                    }
-                    let a = root(&mut parents, run.region);
-                    let b = root(&mut parents, next.region);
-                    parents[a.max(b)] = a.min(b);
+                let fragment = &mut fragments[labels[parent]];
+                fragment.runs.push((y as i32, run.left, run.right));
+                fragment.left = fragment.left.min(run.left);
+                fragment.right = fragment.right.max(run.right);
+                fragment.bottom = y as i32;
+            }
+        }
+        for (i, a) in fragments.iter().enumerate() {
+            for b in &fragments[..i] {
+                if root(&mut parents, a.representative) == root(&mut parents, b.representative) {
+                    continue;
+                }
+                let dx = gap(a.left, a.right, b.left, b.right);
+                let dy = gap(a.top, a.bottom, b.top, b.bottom);
+                if dx * dx + dy * dy > squared_radius {
+                    continue;
+                }
+                let (small, large) = if a.runs.len() <= b.runs.len() {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
+                if fragments_touch(small, large, &widths) {
+                    join(&mut parents, a.representative, b.representative);
                 }
             }
         }
@@ -209,6 +251,61 @@ fn components(board: Board, rows: &mut [Vec<Run>]) -> Vec<Region> {
         regions[run.region].size += (run.right - run.left + 1) as usize;
     }
     regions
+}
+
+struct Fragment {
+    representative: usize,
+    runs: Vec<(i32, i32, i32)>,
+    left: i32,
+    right: i32,
+    top: i32,
+    bottom: i32,
+}
+
+fn gap(a_left: i32, a_right: i32, b_left: i32, b_right: i32) -> i32 {
+    (a_left - b_right).max(b_left - a_right).max(0)
+}
+
+fn fragments_touch(a: &Fragment, b: &Fragment, widths: &[i32]) -> bool {
+    let reach = widths.len() as i32 - 1;
+    let mut start = 0;
+    for &(y, left, right) in &a.runs {
+        while start < b.runs.len() && b.runs[start].0 < y - reach {
+            start += 1;
+        }
+        for &(other_y, other_left, other_right) in &b.runs[start..] {
+            if other_y > y + reach {
+                break;
+            }
+            if gap(left, right, other_left, other_right)
+                <= widths[(y - other_y).unsigned_abs() as usize]
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn join(parents: &mut [usize], a: usize, b: usize) {
+    let a = root(parents, a);
+    let b = root(parents, b);
+    parents[a.max(b)] = a.min(b);
+}
+
+fn connect_rows(row: &[Run], other: &[Run], width: i32, parents: &mut [usize]) {
+    let mut start = 0;
+    for run in row {
+        while start < other.len() && other[start].right < run.left - width {
+            start += 1;
+        }
+        for next in &other[start..] {
+            if next.left > run.right + width {
+                break;
+            }
+            join(parents, run.region, next.region);
+        }
+    }
 }
 
 fn root(parents: &mut [usize], mut id: usize) -> usize {
