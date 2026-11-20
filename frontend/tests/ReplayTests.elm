@@ -205,6 +205,38 @@ tests =
                             >> Query.find [ Selector.class "tooltip" ]
                             >> Query.has [ Selector.text "White Player" ]
                         ]
+        , test "Explicit SGF komi appears below the players" <|
+            \_ ->
+                Main.viewPlayers [ ( "PB", [ "Black Player" ] ), ( "PW", [ "White Player" ] ), ( "KM", [ "6.3" ] ) ]
+                    |> Query.fromHtml
+                    |> Query.children []
+                    |> Expect.all
+                        [ Query.count (Expect.equal 3)
+                        , Query.index 2
+                            >> Query.has [ Selector.id "komi", Selector.attribute (HA.attribute "aria-label" "Komi: 6.3") ]
+                        , Query.index 2
+                            >> Query.find [ Selector.class "pill-summary" ]
+                            >> Query.has [ Selector.text "K 6.3" ]
+                        ]
+        , test "Explicit zero komi is shown even without player names" <|
+            \_ ->
+                Main.viewPlayers [ ( "KM", [ "0" ] ) ]
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.id "komi" ]
+                    |> Query.has [ Selector.text "K 0" ]
+        , test "Missing, blank, malformed and nonfinite komi have no pill" <|
+            \_ ->
+                Expect.all
+                    (List.map
+                        (\root _ ->
+                            Main.viewPlayers root
+                                |> Query.fromHtml
+                                |> Query.findAll [ Selector.id "komi" ]
+                                |> Query.count (Expect.equal 0)
+                        )
+                        [ [], [ ( "KM", [ " " ] ) ], [ ( "KM", [ "bad" ] ) ], [ ( "KM", [ "NaN" ] ) ], [ ( "KM", [ "Infinity" ] ) ] ]
+                    )
+                    ()
         , test "Missing and blank player names have no pills" <|
             \_ ->
                 Main.viewPlayers [ ( "PB", [ "  " ] ) ]

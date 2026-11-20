@@ -41,6 +41,7 @@ a { color: inherit; }
 .pills .menu-gap { flex: none; width: 8px; height: 8px; }
 .pills .training-value { font-size: 9px; }
 #players { left: auto; right: 0; align-items: flex-end; }
+#komi { font-size: 12px; padding: 0 8px; }
 #players .tooltip { margin-left: 0; }
 #players .icon:is(:hover, :focus-visible) .pill-summary { display: none; }
 @media screen and (max-aspect-ratio: 1/1) {

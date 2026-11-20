@@ -2,6 +2,9 @@
 //! `FF[9071]GM[9071]` identifies our format; coordinates use two base-52 digits
 //! (`a-zA-Z`) per axis, not Go's usual one. Variations are not supported.
 //! Root and per-move properties (including comments) are preserved by the record API.
+//! Root KM is White's compensation in SZ² board points (any finite float).
+//! `Record::komi` defaults missing KM to legacy zero; `set_komi` writes it.
+//! The play-only API cannot retain komi; apply it when replaying a full record.
 //! Move properties exclude B/W, which are represented separately by `plays`.
 //! Empty PB, PW and RE properties are omitted when writing.
 //! The play-only API discards annotations and uses a 13x13 root when writing.
@@ -43,6 +46,29 @@ impl Default for Record {
             plays: Vec::new(),
             move_properties: Vec::new(),
         }
+    }
+}
+
+impl Record {
+    /// Missing KM is the legacy zero-komi contract, never the new-game default.
+    pub fn komi(&self) -> Result<f64, String> {
+        let entries: Vec<_> = self.root.iter().filter(|(name, _)| name == "KM").collect();
+        let komi = match entries.as_slice() {
+            [] => 0.0,
+            [(_, values)] if values.len() == 1 => values[0]
+                .parse::<f64>()
+                .map_err(|_| "invalid KM".to_string())?,
+            _ => return Err("KM must occur once with one value".into()),
+        };
+        crate::Game::default().with_komi(komi)?;
+        Ok(komi)
+    }
+
+    pub fn set_komi(&mut self, komi: f64) -> Result<(), String> {
+        crate::Game::default().with_komi(komi)?;
+        self.root.retain(|(name, _)| name != "KM");
+        self.root.push(("KM".into(), vec![komi.to_string()]));
+        Ok(())
     }
 }
 
@@ -121,6 +147,9 @@ pub fn decode_record(text: &str) -> Result<Record, String> {
             return Err("An SGF move must have exactly one value".into());
         };
         plays.push(decode_play(&format!("{name}[{value}]"))?);
+        if properties.iter().any(|(name, _)| name == "KM") {
+            return Err("KM is only allowed in the root".into());
+        }
         properties.retain(|(name, _)| name != "B" && name != "W");
         move_properties.push(properties);
     }
@@ -128,11 +157,13 @@ pub fn decode_record(text: &str) -> Result<Record, String> {
     if !parser.rest.trim().is_empty() {
         return Err("Unexpected content after SGF tree".into());
     }
-    Ok(Record {
+    let record = Record {
         root,
         plays,
         move_properties,
-    })
+    };
+    record.komi()?;
+    Ok(record)
 }
 
 fn validate_root(root: &[Property]) -> Result<(), String> {
@@ -273,6 +304,15 @@ pub fn encode(plays: &[Play]) -> Result<String, String> {
 
 pub fn encode_record(record: &Record) -> Result<String, String> {
     validate_root(&record.root)?;
+    record.komi()?;
+    if record
+        .move_properties
+        .iter()
+        .flatten()
+        .any(|(name, _)| name == "KM")
+    {
+        return Err("KM is only allowed in the root".into());
+    }
     if !record.move_properties.is_empty() && record.move_properties.len() != record.plays.len() {
         return Err("SGF move properties must align with plays".into());
     }

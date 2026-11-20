@@ -1049,9 +1049,29 @@ viewPlayers root =
                             (String.left 1 name)
                             name
                     )
+
+        komi =
+            root
+                |> List.filter (Tuple.first >> (==) "KM")
+                |> List.concatMap Tuple.second
+                |> List.head
+                |> Maybe.andThen (String.trim >> String.toFloat)
+                |> Maybe.andThen
+                    (\value ->
+                        if isNaN value || isInfinite value then
+                            Nothing
+
+                        else
+                            Just
+                                (Pill.view "div"
+                                    [ HA.id "komi" ]
+                                    ("K " ++ String.fromFloat value)
+                                    ("Komi: " ++ String.fromFloat value)
+                                )
+                    )
     in
     H.div [ HA.id "players", HA.class "pills" ]
-        (List.filterMap identity [ player "PB" "Black", player "PW" "White" ])
+        (List.filterMap identity [ player "PB" "Black", player "PW" "White", komi ])
 
 
 trainingAt : Int -> Model -> Training.Annotation

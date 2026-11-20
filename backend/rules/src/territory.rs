@@ -1,7 +1,8 @@
 //! Voronoi area scoring, matching Elm's `Rules.Territory`.
 //! Each surviving stone owns the board points nearest to its centre. Cells are
 //! clipped to the full 1000-unit square, including occupied space: there is no
-//! stone-count bonus, komi, or automatic removal of dead groups.
+//! stone-count bonus or automatic removal of dead groups. `areas` and `result`
+//! are raw territory; `result_with_komi` adds White's compensation for game scoring.
 //!
 //! Pass unique surviving stones, such as `game.position().stones()`. Scoring is
 //! independent of stone radius, connectivity, and move history.
@@ -120,6 +121,12 @@ pub fn areas(stones: &[Stone]) -> Areas {
         }
     }
     total
+}
+
+/// Komi is in SZ² point-equivalents, while Outcome margins remain coordinate area.
+pub fn result_with_komi(board: crate::Board, mut territory: Areas, komi: f64) -> Outcome {
+    territory.white += komi * BOARD_AREA / f64::from(board.size()).powi(2);
+    result(territory)
 }
 
 pub fn result(territory: Areas) -> Outcome {

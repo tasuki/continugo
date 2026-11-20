@@ -35,18 +35,44 @@ impl PreparedGame {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Game {
     position: Position,
     record: Vec<Play>,
+    komi: f64,
 }
+
+// Komi is private and always finite, so equality remains reflexive.
+impl Eq for Game {}
 
 impl Game {
     pub fn new(board: Board) -> Self {
         Self {
             position: Position::new(board),
             record: Vec::new(),
+            komi: 0.0,
         }
+    }
+
+    /// White's compensation in board point-equivalents. Legacy games use zero.
+    pub fn komi(&self) -> f64 {
+        self.komi
+    }
+
+    pub fn with_komi(mut self, komi: f64) -> Result<Self, String> {
+        if !komi.is_finite() {
+            return Err("komi must be finite".into());
+        }
+        self.komi = komi;
+        Ok(self)
+    }
+
+    pub fn result(&self) -> crate::territory::Outcome {
+        crate::territory::result_with_komi(
+            self.board(),
+            crate::territory::areas(self.position().stones()),
+            self.komi(),
+        )
     }
 
     pub fn board(&self) -> Board {
@@ -109,7 +135,11 @@ impl Game {
     fn advance(&self, play: Play, position: Position) -> Self {
         let mut record = self.record.clone();
         record.push(play);
-        Self { position, record }
+        Self {
+            position,
+            record,
+            komi: self.komi,
+        }
     }
 
     /// Import a chronological record, rejecting the first invalid move.
