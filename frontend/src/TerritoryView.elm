@@ -7,16 +7,16 @@ import Svg exposing (Svg)
 import Svg.Attributes as SA
 
 
-stoneArea : Board -> Float
-stoneArea board =
-    pi * toFloat (Board.radius board) ^ 2
+pointArea : Board -> Float
+pointArea board =
+    toFloat Board.coordRange ^ 2 / toFloat (Board.size board) ^ 2
 
 
-{-| Express board area in stone-disc areas, to one decimal place.
+{-| Express area in board points (the whole board is size²), to one decimal place.
 -}
 formatArea : Board -> Float -> String
 formatArea board area =
-    String.fromFloat (toFloat (round (area / stoneArea board * 10)) / 10)
+    String.fromFloat (toFloat (round (area / pointArea board * 10)) / 10)
 
 
 resultString : Board -> Areas -> String
@@ -28,7 +28,7 @@ resultString board territory =
         Win color margin ->
             let
                 displayedMargin =
-                    if margin / stoneArea board < 0.1 then
+                    if margin / pointArea board < 0.1 then
                         "<0.1"
 
                     else

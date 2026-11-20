@@ -132,9 +132,9 @@ configuredTests board =
                 Sgf.decodeRecord (Sgf.encodeRecord { sgf | plays = record })
                     |> Result.map (\decoded -> ( Sgf.boardFromRoot decoded.root, game.board, Dict.size game.stones ))
                     |> Expect.equal (Ok ( Just board, board, 2 ))
-        , test "The score uses this board's stone-disc area" <|
+        , test "The score uses this board's point area" <|
             \_ ->
-                Expect.equal "1" (TerritoryView.formatArea board (pi * toFloat r ^ 2))
+                Expect.equal "1" (TerritoryView.formatArea board (1000000 / toFloat size ^ 2))
         ]
 
 

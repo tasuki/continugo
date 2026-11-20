@@ -223,20 +223,20 @@ impl Parser<'_> {
     }
 }
 
-/// Format an authoritative scoring outcome for `RE`. Margins use stone-disc
-/// areas rounded to one decimal, as in the main viewer. A tiny win retains its
+/// Format an authoritative scoring outcome for `RE`. Margins use board points
+/// (the whole board is size²), rounded to one decimal, as in the main viewer. A tiny win retains its
 /// winner prefix even when the displayed margin rounds to 0.0.
 /// Resignations can be represented directly as `RE[B+R]` / `RE[W+R]`.
 pub fn format_result(board: Board, outcome: Outcome) -> String {
     match outcome {
         Outcome::Draw => "0".into(),
         Outcome::Win(color, margin) => {
-            let stone_area = std::f64::consts::PI * f64::from(board.stone_radius()).powi(2);
+            let point_area = 1_000_000.0 / f64::from(board.size()).powi(2);
             let winner = match color {
                 Color::Black => "B",
                 Color::White => "W",
             };
-            let points = (margin / stone_area * 10.0).round() / 10.0;
+            let points = (margin / point_area * 10.0).round() / 10.0;
             format!("{winner}+{points:.1}")
         }
     }
@@ -477,7 +477,7 @@ mod tests {
     #[test]
     fn scored_results_use_one_decimal_and_preserve_the_winner() {
         let board = Board::default();
-        let stone_area = std::f64::consts::PI * f64::from(board.stone_radius()).powi(2);
+        let point_area = 1_000_000.0 / f64::from(board.size()).powi(2);
         assert_eq!(format_result(board, Outcome::Draw), "0");
         for (color, winner) in [(Color::Black, "B"), (Color::White, "W")] {
             for (points, displayed) in [
@@ -487,9 +487,16 @@ mod tests {
                 (6.0, "6.0"),
                 (0.00000001, "0.0"),
             ] {
-                let text = format_result(board, Outcome::Win(color, points * stone_area));
+                let text = format_result(board, Outcome::Win(color, points * point_area));
                 assert_eq!(text, format!("{winner}+{displayed}"));
             }
+        }
+        for size in [9, 13, 19] {
+            let board = Board::new(size).unwrap();
+            assert_eq!(
+                format_result(board, Outcome::Win(Color::Black, 1_000_000.0)),
+                format!("B+{}.0", size * size)
+            );
         }
         let resigned = decode_record("(;FF[9071]GM[9071]PB[random]PW[mcts]RE[W+R];B[])").unwrap();
         assert_eq!(
