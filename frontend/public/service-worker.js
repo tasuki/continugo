@@ -1,5 +1,5 @@
 // Prefer fresh assets on reload; retain a cache only for offline use.
-const CACHE_NAME = 'v19';
+const CACHE_NAME = 'v20';
 const ASSETS_TO_CACHE = [
     '/',
     '/manifest.json',
