@@ -1051,23 +1051,21 @@ viewPlayers root =
                     )
 
         komi =
-            root
-                |> List.filter (Tuple.first >> (==) "KM")
-                |> List.concatMap Tuple.second
-                |> List.head
-                |> Maybe.andThen (String.trim >> String.toFloat)
-                |> Maybe.andThen
+            Sgf.komiFromRoot root
+                |> Maybe.map
                     (\value ->
-                        if isNaN value || isInfinite value then
-                            Nothing
+                        Pill.view "div"
+                            [ HA.id "komi"
+                            , HA.class
+                                (if value < 0 then
+                                    "pill-black"
 
-                        else
-                            Just
-                                (Pill.view "div"
-                                    [ HA.id "komi" ]
-                                    ("K " ++ String.fromFloat value)
-                                    ("Komi: " ++ String.fromFloat value)
+                                 else
+                                    "pill-white"
                                 )
+                            ]
+                            (String.fromFloat (abs value))
+                            ("Komi: " ++ String.fromFloat value)
                     )
     in
     H.div [ HA.id "players", HA.class "pills" ]
@@ -1109,11 +1107,14 @@ view model =
                 let
                     territory =
                         Territory.areas model.game.stones
+
+                    komi =
+                        Sgf.komiFromRoot model.sgfRoot |> Maybe.withDefault 0
                 in
                 H.div [ HA.id "score" ]
-                    [ H.div [ HA.class "score-result" ] [ H.text (TerritoryView.resultString model.game.board territory) ]
+                    [ H.div [ HA.class "score-result" ] [ H.text (TerritoryView.resultString model.game.board komi territory) ]
                     , H.div [ HA.class "score-areas" ]
-                        [ H.text ("Black " ++ TerritoryView.formatArea model.game.board territory.black ++ " · White " ++ TerritoryView.formatArea model.game.board territory.white) ]
+                        [ H.text ("Black " ++ TerritoryView.formatArea model.game.board territory.black ++ " · White " ++ TerritoryView.formatArea model.game.board (territory.white + komi * TerritoryView.pointArea model.game.board)) ]
                     ]
 
             else

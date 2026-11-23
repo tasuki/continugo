@@ -213,17 +213,29 @@ tests =
                     |> Expect.all
                         [ Query.count (Expect.equal 3)
                         , Query.index 2
-                            >> Query.has [ Selector.id "komi", Selector.attribute (HA.attribute "aria-label" "Komi: 6.3") ]
+                            >> Query.has [ Selector.id "komi", Selector.class "pill-white", Selector.attribute (HA.attribute "aria-label" "Komi: 6.3") ]
                         , Query.index 2
                             >> Query.find [ Selector.class "pill-summary" ]
-                            >> Query.has [ Selector.text "K 6.3" ]
+                            >> Query.has [ Selector.text "6.3" ]
                         ]
         , test "Explicit zero komi is shown even without player names" <|
             \_ ->
                 Main.viewPlayers [ ( "KM", [ "0" ] ) ]
                     |> Query.fromHtml
                     |> Query.find [ Selector.id "komi" ]
-                    |> Query.has [ Selector.text "K 0" ]
+                    |> Query.has [ Selector.class "pill-white", Selector.text "0" ]
+        , test "Negative komi uses Black's colour and an unsigned summary" <|
+            \_ ->
+                Main.viewPlayers [ ( "KM", [ "-6.3" ] ) ]
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.id "komi" ]
+                    |> Expect.all
+                        [ Query.has [ Selector.class "pill-black", Selector.attribute (HA.attribute "aria-label" "Komi: -6.3") ]
+                        , Query.find [ Selector.class "pill-summary" ]
+                            >> Query.has [ Selector.exactText "6.3" ]
+                        , Query.find [ Selector.class "tooltip" ]
+                            >> Query.has [ Selector.exactText "Komi: -6.3" ]
+                        ]
         , test "Missing, blank, malformed and nonfinite komi have no pill" <|
             \_ ->
                 Expect.all

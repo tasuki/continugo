@@ -1,4 +1,4 @@
-module Sgf exposing (Property, Record, Tree(..), boardFromRoot, decode, decodePlay, decodeRecord, decodeTree, empty, encode, encodePlay, encodeRecord, encodeTree, fromRecord, mainRecord, onBoard)
+module Sgf exposing (Property, Record, Tree(..), boardFromRoot, decode, decodePlay, decodeRecord, decodeTree, empty, encode, encodePlay, encodeRecord, encodeTree, fromRecord, komiFromRoot, mainRecord, onBoard)
 
 {-| ContinuGo SGF, with a move-free FF[9071]GM[9071] root.
 Coordinates use two base-52 digits per axis. The record API reads the first line.
@@ -110,6 +110,23 @@ boardFromRoot root =
 
         _ ->
             Nothing
+
+
+komiFromRoot : List Property -> Maybe Float
+komiFromRoot root =
+    root
+        |> List.filter (Tuple.first >> (==) "KM")
+        |> List.concatMap Tuple.second
+        |> List.head
+        |> Maybe.andThen (String.trim >> String.toFloat)
+        |> Maybe.andThen
+            (\value ->
+                if isNaN value || isInfinite value then
+                    Nothing
+
+                else
+                    Just value
+            )
 
 
 lowercaseAlphabet =

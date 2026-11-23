@@ -1,4 +1,4 @@
-module TerritoryView exposing (formatArea, resultString, view)
+module TerritoryView exposing (formatArea, pointArea, resultString, view)
 
 import Rules.Board as Board exposing (Board)
 import Rules.Position exposing (Color(..), Stones)
@@ -19,9 +19,9 @@ formatArea board area =
     String.fromFloat (toFloat (round (area / pointArea board * 10)) / 10)
 
 
-resultString : Board -> Areas -> String
-resultString board territory =
-    case Territory.result territory of
+resultString : Board -> Float -> Areas -> String
+resultString board komi territory =
+    case Territory.result { territory | white = territory.white + komi * pointArea board } of
         Draw ->
             "jigo"
 
