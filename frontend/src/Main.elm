@@ -302,7 +302,7 @@ handleDrag model candidateStone =
                 model.ghostStone
 
             else
-                MovePreview.fromCandidates model.game.board model.game.stones candidateStone Nothing
+                MovePreview.forGame model.game candidateStone Nothing
     in
     { model
         | ghostStone = ghostStone
@@ -328,7 +328,7 @@ handleAnalysisFinished coords model =
             ( updated, Process.sleep 300 |> Task.perform (\_ -> AnalysisRemovalExpired serial) )
 
         Analysis.Propose spot ->
-            case MovePreview.fromCandidates model.game.board model.game.stones (Just (createStone model.game.onMove spot)) Nothing of
+            case MovePreview.forGame model.game (Just (createStone model.game.onMove spot)) Nothing of
                 Just preview ->
                     if Game.isFinished model.game then
                         ( { updated | analysis = { analysis | invalid = Just spot } }, Cmd.none )

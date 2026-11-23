@@ -40,13 +40,17 @@ tests =
         , [ ( "malformed record", { example | record = "B[bbbb];bad" } )
           , ( "malformed move", { example | move = "bad" } )
           , ( "pass instead of placement", { example | move = "B[]" } )
+          , ( "non-alternating history", { example | record = "B[bbbb];B[mmmm]" } )
+          , ( "illegal placement in history", { example | record = "B[aaaa]" } )
+          , ( "move after completion", { example | record = "B[];W[];B[mmmm]" } )
+          , ( "wrong attempted colour", { example | move = "W[bbbb]" } )
           ]
             |> List.map
                 (\( name, fixture ) ->
                     test ("Rejects " ++ name) <|
                         \_ -> Fixtures.decode fixture |> Expect.err
                 )
-            |> describe "Invalid SGF"
+            |> describe "Invalid fixtures"
         , test "A size that would produce a zero-radius stone is rejected" <|
             \_ ->
                 Fixtures.decode { example | boardSize = 501 } |> Expect.err

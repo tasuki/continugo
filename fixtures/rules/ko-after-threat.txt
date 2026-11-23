@@ -1,0 +1,4 @@
+name: Recapture is allowed after both players move elsewhere
+record: B[igjG];W[lgig];B[jGig];W[mGjG];B[jGlg];W[lglg];B[];W[jGjG];B[lgjG];W[pupu];B[pudS]
+move: W[jHjG]
+result: 0

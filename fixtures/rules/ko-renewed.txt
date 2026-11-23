@@ -1,0 +1,4 @@
+name: A delayed recapture creates a new ko restriction
+record: B[igjG];W[lgig];B[jGig];W[mGjG];B[jGlg];W[lglg];B[];W[jGjG];B[lgjG];W[pupu];B[pudS];W[jHjG]
+move: B[lgjG]
+result: illegal

@@ -1,0 +1,4 @@
+name: Ko also forbids a recapture shifted by one unit
+record: B[igjG];W[lgig];B[jGig];W[mGjG];B[jGlg];W[lglg];B[];W[jGjG];B[lgjG]
+move: W[jHjG]
+result: illegal

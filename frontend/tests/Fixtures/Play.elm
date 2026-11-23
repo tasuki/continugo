@@ -1,13 +1,14 @@
 module Fixtures.Play exposing (Case, decode, decodeRecord, tests, testsOn, withCase)
 
 {-| The generator parses fixture fields; Elm interprets the SGF strings.
-Records are chronological and may include setup-like same-colour sequences.
+Records are chronological, legal alternating game histories, including passes.
 Fixtures default to the 13x13 equivalent unless they specify a board size.
 -}
 
 import Expect exposing (Expectation)
 import Fixtures.Generated as Generated
 import Rules.Board as Board exposing (Board)
+import Rules.Game as Game
 import Rules.Position exposing (..)
 import Sgf
 import Test exposing (Test)
@@ -26,7 +27,15 @@ decode : Generated.Case -> Result String Case
 decode fixture =
     case ( Board.fromSize fixture.boardSize, Sgf.decode fixture.record, Sgf.decodePlay fixture.move |> Maybe.map .move ) of
         ( Just board, Ok record, Just (Place stone) ) ->
-            Ok (Case fixture.name board record stone fixture.stoneCountChange)
+            validateHistory board record
+                |> Result.andThen
+                    (\game ->
+                        if stone.color == game.onMove then
+                            Ok (Case fixture.name board record stone fixture.stoneCountChange)
+
+                        else
+                            Err "Wrong attempted colour"
+                    )
 
         ( Nothing, _, _ ) ->
             Err ("Invalid board size: " ++ String.fromInt fixture.boardSize)
@@ -36,6 +45,30 @@ decode fixture =
 
         _ ->
             Err ("Expected a placement, got: " ++ fixture.move)
+
+
+validateHistory : Board -> List Play -> Result String Game.Game
+validateHistory board record =
+    let
+        step recorded result =
+            result
+                |> Result.andThen
+                    (\game ->
+                        if recorded.color /= game.onMove then
+                            Err "Wrong colour in fixture record"
+
+                        else
+                            (case recorded.move of
+                                Place stone ->
+                                    Game.play stone.spot game
+
+                                Pass ->
+                                    Game.pass game
+                            )
+                                |> Result.fromMaybe "Illegal move in fixture record"
+                    )
+    in
+    List.foldl step (Ok (Game.onBoard board)) record
 
 
 checkCase : (Case -> Expectation) -> Generated.Case -> Expectation

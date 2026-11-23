@@ -1,4 +1,5 @@
 // Rule fixtures have four ordered fields: name, record, move, result.
+// Records are legal alternating game histories; results include ko checking.
 // Territory fixtures have name, stones (a position, not a replay), black, white.
 // An optional leading board: <positive integer> selects a size; omitted means 13.
 // Result is "illegal" or the net stone-count change, including the new stone.

@@ -2,7 +2,8 @@
 //! Moves return a new game, leaving the original unchanged on success or error.
 //! Records are chronological, matching `sgf`. Import rejects wrong colours,
 //! illegal placements, and moves after two consecutive passes. Setup/handicap
-//! sequences belong at the `Position` level instead. Ko is not enforced yet.
+//! sequences belong at the `Position` level instead. Ko forbids immediately
+//! capturing only a stone whose placement captured exactly one stone.
 //! Use `Game::new(board)` and `from_record_on(board, record)` for non-default
 //! boards: a play list does not include the SGF root's board configuration.
 //!
@@ -39,6 +40,7 @@ impl PreparedGame {
 pub struct Game {
     position: Position,
     record: Vec<Play>,
+    ko: Option<Stone>,
     komi: f64,
 }
 
@@ -50,6 +52,7 @@ impl Game {
         Self {
             position: Position::new(board),
             record: Vec::new(),
+            ko: None,
             komi: 0.0,
         }
     }
@@ -122,6 +125,14 @@ impl Game {
         };
         let position = validate(stone)
             .ok_or_else(|| format!("Illegal placement at ({}, {})", spot.x, spot.y))?;
+        // A surviving placement adds one stone: equal counts mean one capture.
+        if self.position.stones().len() == position.stones().len()
+            && self
+                .ko
+                .is_some_and(|last| !position.stones().contains(&last))
+        {
+            return Err("Ko forbids immediate recapture".into());
+        }
         Ok(self.advance(Play::Place(stone), position))
     }
 
@@ -135,9 +146,16 @@ impl Game {
     fn advance(&self, play: Play, position: Position) -> Self {
         let mut record = self.record.clone();
         record.push(play);
+        let ko = match play {
+            Play::Place(stone) if self.position.stones().len() == position.stones().len() => {
+                Some(stone)
+            }
+            _ => None,
+        };
         Self {
             position,
             record,
+            ko,
             komi: self.komi,
         }
     }

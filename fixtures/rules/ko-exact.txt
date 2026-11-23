@@ -1,0 +1,4 @@
+name: Ko forbids immediate recapture at the original coordinates
+record: B[igjG];W[lgig];B[jGig];W[mGjG];B[jGlg];W[lglg];B[];W[jGjG];B[lgjG]
+move: W[jGjG]
+result: illegal

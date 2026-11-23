@@ -4,7 +4,6 @@ import Dict
 import Expect
 import Fixtures.Play as PlayFixtures
 import Rules.Game as Game
-import Rules.Play as Play
 import Rules.Position exposing (..)
 import Test exposing (..)
 
@@ -77,6 +76,35 @@ tests =
                                     )
                                 )
                             |> Expect.equal (Just ( -3, White, True ))
+        , describe "Shared rule fixtures"
+            (PlayFixtures.tests <|
+                \tc ->
+                    let
+                        before =
+                            Game.fromRecordOn tc.board (List.reverse tc.record)
+
+                        actual =
+                            Game.play tc.playStone.spot before
+
+                        replayed =
+                            Game.replay { color = tc.playStone.color, move = Place tc.playStone } before
+
+                        rewound =
+                            Game.replay (createPass before.onMove) before |> Game.previous
+                    in
+                    Expect.all
+                        [ \_ ->
+                            Expect.equal tc.stoneCountChange
+                                (Maybe.map (\after -> Dict.size after.stones - Dict.size before.stones) actual)
+                        , \_ -> Expect.equal actual (Game.play tc.playStone.spot rewound)
+                        , \_ -> Expect.equal before (Game.previous replayed)
+                        , \_ ->
+                            Expect.equal (Maybe.map .stones actual |> Maybe.withDefault before.stones)
+                                replayed.stones
+                        , \_ -> Expect.equal replayed (Game.fromRecordOn tc.board replayed.record)
+                        ]
+                        ()
+            )
         , test "Stepping back over passes restores the turn and finished state" <|
             \_ ->
                 let
@@ -116,25 +144,6 @@ tests =
                 Game.play (Spot 600 600) rewound
                     |> Maybe.map (\game -> ( game.record, Game.previous game == before ))
                     |> Expect.equal (Just ( [ createPlay White (Spot 600 600), createPlay Black (Spot 200 200) ], True ))
-        , describe "Cached positions restore captures and illegal recorded moves"
-            (PlayFixtures.tests <|
-                \tc ->
-                    let
-                        before =
-                            Game.fromRecordOn tc.board (List.reverse tc.record)
-
-                        recorded =
-                            { color = tc.playStone.color, move = Place tc.playStone }
-
-                        after =
-                            Game.replay recorded before
-                    in
-                    Expect.all
-                        [ \_ -> Expect.equal before (Game.previous after)
-                        , \_ -> Expect.equal (Play.replayPlacementsOn tc.board [ recorded ] before.stones) after.stones
-                        ]
-                        ()
-            )
         , test "Record restoration preserves setup-like moves and skips illegal stones" <|
             \_ ->
                 let

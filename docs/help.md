@@ -20,10 +20,10 @@ The [full rules are also available](rules.md), though I doubt you want to read '
 - Drag to stage a move, then tap the staged move to confirm it.
 - Drag from your own stone to place a stone as far as possible while remaining connected.
 - Drag from near an edge to keep the staged stone connected to it; near a corner, it stays connected to both edges.
-- If a spot clearly has enough space for a stone but the stone is not appearing, playing there would be a suicide.
+- If a spot clearly has enough space for a stone but the stone is not appearing, playing there would be suicide or violate ko.
 - While suicide is not allowed, you can **capture another group of your own stones** by removing their last liberty.
 - **Capture dead groups before passing**: scoring uses the stones still on the board, with no automatic dead-stone removal.
-- Other than artificially created positions, I've not seen a ko. If you see an actual ko, do let me know!
+- **Ko:** if a move captures exactly one stone, the opponent may not immediately capture only the stone just played.
 
 ### Menu
 

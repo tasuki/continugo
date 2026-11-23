@@ -1,5 +1,5 @@
 board: 9
 name: Capture a corner stone with radius 55
-record: B[bdbd];W[djbd]
+record: B[bdbd];W[djbd];B[]
 move: W[bddj]
 result: 0

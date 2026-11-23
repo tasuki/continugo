@@ -1,5 +1,5 @@
-// Read the same files as Elm, but decode and check them independently.
-use continugo_rules::{Board, Color, Game, Play, Position, sgf};
+// Read the same files as Elm, validating complete game histories independently.
+use continugo_rules::{Board, Game, Play, sgf};
 use std::{fs, path::Path};
 
 fn field<'a>(line: &'a str, key: &str) -> Result<&'a str, String> {
@@ -35,29 +35,37 @@ fn check_fixture(contents: &str) -> Result<(), String> {
         )
     };
 
-    let plays = sgf::decode(record)?;
+    let mut plays = sgf::decode(record)?;
     if sgf::decode(&sgf::encode(&plays)?)? != plays {
         return Err("Record did not round-trip through SGF".into());
     }
-    let mut position = Position::new(board);
-    for play in plays {
-        // Match Elm's replayPlacements: allow setup-like sequences and skip
-        // passes and illegal placements, but never malformed record entries.
-        let next = match play {
-            Play::Place(stone) => position.play(stone),
-            Play::Pass(_) => None,
-        };
-        if let Some(next) = next {
-            position = next;
-        }
-    }
+    let game = Game::from_record_on(board, &plays)?;
     let stone = match sgf::decode_play(attempted_move)? {
         Play::Place(stone) => stone,
         Play::Pass(_) => return Err("Expected a placement, not a pass".into()),
     };
-    let actual = position
-        .play(stone)
-        .map(|next| next.stones().len() as isize - position.stones().len() as isize);
+    if stone.color != game.on_move() {
+        return Err(format!("{name}: wrong attempted colour"));
+    }
+    let next = game.play(stone.spot);
+    assert_eq!(
+        game.prepare().play(stone.spot),
+        next,
+        "{name}: prepared play"
+    );
+    plays.push(Play::Place(stone));
+    let restored = Game::from_record_on(board, &plays);
+    match &next {
+        Ok(after) => assert_eq!(restored, Ok(after.clone()), "{name}: restoration"),
+        Err(error) => assert_eq!(
+            restored,
+            Err(format!("Move {}: {error}", plays.len())),
+            "{name}: illegal import"
+        ),
+    }
+    let actual = next.ok().map(|after| {
+        after.position().stones().len() as isize - game.position().stones().len() as isize
+    });
     if actual != expected {
         return Err(format!("{name}: expected {expected:?}, got {actual:?}"));
     }
@@ -65,7 +73,7 @@ fn check_fixture(contents: &str) -> Result<(), String> {
 }
 
 #[test]
-fn shared_placement_fixtures() {
+fn shared_rule_fixtures() {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/rules");
     let mut files: Vec<_> = fs::read_dir(directory)
         .expect("Cannot read shared rule fixtures")
@@ -84,27 +92,22 @@ fn shared_placement_fixtures() {
 }
 
 #[test]
-fn a_shared_capture_survives_strict_game_restoration() {
-    let contents = include_str!("../../../fixtures/rules/capture-four.txt");
-    let lines: Vec<_> = contents.lines().collect();
-    let record = sgf::decode(field(lines[1], "record").unwrap()).unwrap();
-    let Play::Place(stone) = sgf::decode_play(field(lines[2], "move").unwrap()).unwrap() else {
-        panic!("Expected a placement in capture-four.txt");
-    };
-    let before = Game::from_record(&record).unwrap();
-    let after = before.play(stone.spot).unwrap();
-    assert_eq!(
-        after.position().stones().len() as isize - before.position().stones().len() as isize,
-        -3
-    );
-    assert_eq!(after.on_move(), Color::White);
-    assert_eq!(Game::from_record(after.record()), Ok(after));
-}
-
-#[test]
-fn malformed_fixture_records_and_pass_attempts_are_rejected() {
-    assert!(check_fixture("name: Bad\nrecord: B[bbbb];bad\nmove: W[mmmm]\nresult: 1").is_err());
-    assert!(check_fixture("name: Bad\nrecord: B[bbbb];\nmove: W[mmmm]\nresult: 1").is_err());
+fn malformed_or_invalid_fixture_histories_and_pass_attempts_are_rejected() {
+    for record in [
+        "B[bbbb];bad",
+        "B[bbbb];",
+        "W[bbbb]",
+        "B[bbbb];B[mmmm]",
+        "B[aaaa]",
+    ] {
+        assert!(
+            check_fixture(&format!(
+                "name: Bad\nrecord: {record}\nmove: W[mmmm]\nresult: 1"
+            ))
+            .is_err()
+        );
+    }
+    assert!(check_fixture("name: Bad\nrecord: B[bbbb]\nmove: B[mmmm]\nresult: 1").is_err());
     assert!(check_fixture("name: Bad\nrecord:\nmove: W[]\nresult: illegal").is_err());
     assert_eq!(
         check_fixture("board: 0\nname: Bad\nrecord:\nmove: B[bbbb]\nresult: 1"),

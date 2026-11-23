@@ -2,8 +2,8 @@
 //! `Board::new(size)` configures other sizes, deriving stone radius from size.
 //!
 //! `Position` handles placements of either colour. `Game` adds alternating
-//! turns, records, and two-pass completion. `territory` provides Voronoi area
-//! scoring. Ko is not implemented yet.
+//! turns, ko, records, and two-pass completion. `territory` provides Voronoi area
+//! scoring.
 
 pub mod action;
 pub mod board;

@@ -1,8 +1,9 @@
-module MovePreview exposing (Preview, fromCandidates, fromResult)
+module MovePreview exposing (Preview, forGame, fromCandidates, fromResult)
 
 import Dict
 import Maybe.Extra
 import Rules.Board exposing (Board)
+import Rules.Game as Game exposing (Game)
 import Rules.Play as Play
 import Rules.Position exposing (Spot, Stone, Stones, removedStones, stoneKey)
 
@@ -13,6 +14,22 @@ type alias Preview =
     , group : List Spot
     , captured : List Stone
     }
+
+
+{-| Preview the current player's move, including ko and game completion checks.
+-}
+forGame : Game -> Maybe Stone -> Maybe Stone -> Maybe Preview
+forGame game hovered staged =
+    Maybe.Extra.or staged hovered
+        |> Maybe.andThen
+            (\candidate ->
+                Game.play candidate.spot game
+                    |> Maybe.andThen
+                        (\next ->
+                            Dict.get (stoneKey candidate) next.stones
+                                |> Maybe.map (\stone -> fromResult game.stones ( next.stones, stone ))
+                        )
+            )
 
 
 {-| A staged move takes precedence over hovering. Replay the exact candidate,

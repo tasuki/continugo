@@ -6,6 +6,7 @@ import Expect
 import Fixtures.Play as PlayFixtures
 import MovePreview
 import Rules.Board as Board
+import Rules.Game as Game
 import Rules.Play as Play
 import Rules.Position exposing (..)
 import Test exposing (..)
@@ -83,7 +84,23 @@ tests =
                 in
                 Expect.equal Nothing
                     (MovePreview.fromCandidates Board.default stones (Just (createStone White (Spot 510 500))) Nothing)
-        , describe "Previewing captures and suicide uses the actual move rules"
+        , test "A ko-illegal recapture cannot be hovered or staged" <|
+            \_ ->
+                PlayFixtures.withCase "ko-shifted.txt" <|
+                    \tc ->
+                        let
+                            game =
+                                Game.fromRecordOn tc.board (List.reverse tc.record)
+
+                            candidate =
+                                Just tc.playStone
+                        in
+                        Expect.equal ( True, Nothing, Nothing )
+                            ( MovePreview.fromCandidates game.board game.stones candidate Nothing /= Nothing
+                            , MovePreview.forGame game candidate Nothing
+                            , MovePreview.forGame game Nothing candidate
+                            )
+        , describe "Previewing captures, suicide and ko uses the actual move rules"
             (PlayFixtures.tests previewCase)
         ]
 
@@ -91,11 +108,14 @@ tests =
 previewCase : PlayFixtures.Case -> Expect.Expectation
 previewCase tc =
     let
+        game =
+            Game.fromRecordOn tc.board (List.reverse tc.record)
+
         stones =
-            Play.replayPlacementsOn tc.board tc.record Dict.empty
+            game.stones
 
         expected =
-            Play.playIfLegalOn tc.board stones tc.playStone
+            Game.play tc.playStone.spot game |> Maybe.map .stones
 
         check preview =
             let
@@ -120,7 +140,7 @@ previewCase tc =
                 ]
                 ()
     in
-    case MovePreview.fromCandidates tc.board stones (Just tc.playStone) Nothing of
+    case MovePreview.forGame game (Just tc.playStone) Nothing of
         Nothing ->
             Expect.equal Nothing expected
 

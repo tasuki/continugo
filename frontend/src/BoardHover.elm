@@ -49,19 +49,24 @@ at model hoverSpot =
 
 previewNearbyMove : Spot -> State a -> Maybe MovePreview.Preview
 previewNearbyMove coords model =
-    case Placement.playNearby model.game.board model.game.onMove model.game.stones coords of
+    let
+        candidate =
+            Placement.nearbySpot model.game.board model.game.stones coords
+                |> Maybe.map (createStone model.game.onMove)
+    in
+    case MovePreview.forGame model.game candidate Nothing of
         Nothing ->
             Nothing
 
-        Just result ->
+        Just preview ->
             case model.ghostStone of
                 Just previous ->
-                    if previous.stone.spot == (Tuple.second result).spot then
+                    if previous.stone.spot == preview.stone.spot then
                         -- Preserve the wrapper for Svg.Lazy's reference comparison.
                         model.ghostStone
 
                     else
-                        Just (MovePreview.fromResult model.game.stones result)
+                        Just preview
 
                 Nothing ->
-                    Just (MovePreview.fromResult model.game.stones result)
+                    Just preview

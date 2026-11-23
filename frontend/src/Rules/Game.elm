@@ -3,10 +3,10 @@ module Rules.Game exposing (Game, empty, fromRecord, fromRecordOn, isFinished, o
 {-| Rules depend only on elm/core and other Rules modules. The frontend owns
 rendering, gestures, placement adjustment, and record serialization.
 
-Game handles normal turn progression; Play handles exact placements on arbitrary
-positions. Neither implements ko yet. Records are stored newest first, matching
-the frontend's existing history convention. Previous positions share immutable
-stone maps, so stepping back does not recalculate captures.
+Game handles normal turn progression and ko; Play handles history-free placements
+on arbitrary positions. Records are stored newest first, matching the frontend's
+existing history convention. Previous positions share immutable stone maps, so
+stepping back does not recalculate captures.
 
 -}
 
@@ -62,7 +62,7 @@ replay recorded game =
         stones =
             case recorded.move of
                 Place stone ->
-                    Play.playIfLegalOn game.board game.stones stone
+                    playStone stone game
                         |> Maybe.withDefault game.stones
 
                 Pass ->
@@ -115,12 +115,44 @@ play spot game =
         Nothing
 
     else
-        Play.playIfLegalOn game.board game.stones (createStone game.onMove spot)
+        playStone (createStone game.onMove spot) game
             |> Maybe.andThen
                 (\stones ->
                     Dict.get ( spot.x, spot.y ) stones
                         |> Maybe.map (\stone -> advance { color = game.onMove, move = Place stone } stones game)
                 )
+
+
+playStone : Stone -> Game -> Maybe Stones
+playStone stone game =
+    Play.playIfLegalOn game.board game.stones stone
+        |> Maybe.andThen
+            (\stones ->
+                if violatesKo stone stones game then
+                    Nothing
+
+                else
+                    Just stones
+            )
+
+
+violatesKo : Stone -> Stones -> Game -> Bool
+violatesKo stone stones game =
+    -- A surviving placement adds one stone: equal counts mean one capture.
+    if Dict.size stones /= Dict.size game.stones then
+        False
+
+    else
+        case ( List.head game.record |> Maybe.map .move, List.head game.history ) of
+            ( Just (Place last), Just previousStones ) ->
+                last.color
+                    /= stone.color
+                    && List.length (removedStones previousStones game.stones)
+                    == 1
+                    && not (Dict.member (stoneKey last) stones)
+
+            _ ->
+                False
 
 
 pass : Game -> Maybe Game

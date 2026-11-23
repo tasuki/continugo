@@ -1,0 +1,4 @@
+name: Snapback may immediately capture the last stone together with another
+record: B[igjG];W[lgig];B[jGig];W[mGig];B[jGlg];W[ogjG];B[mGjG];W[lglg];B[pupu];W[mGlg];B[];W[jGjG];B[lgjG]
+move: W[jHjG]
+result: -1
