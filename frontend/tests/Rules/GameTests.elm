@@ -4,6 +4,7 @@ import Dict
 import Expect
 import Fixtures.Play as PlayFixtures
 import Rules.Game as Game
+import Rules.Play as RulesPlay
 import Rules.Position exposing (..)
 import Test exposing (..)
 
@@ -99,12 +100,48 @@ tests =
                         , \_ -> Expect.equal actual (Game.play tc.playStone.spot rewound)
                         , \_ -> Expect.equal before (Game.previous replayed)
                         , \_ ->
-                            Expect.equal (Maybe.map .stones actual |> Maybe.withDefault before.stones)
+                            Expect.equal
+                                (RulesPlay.playIfLegalOn tc.board before.stones tc.playStone
+                                    |> Maybe.withDefault before.stones
+                                )
                                 replayed.stones
                         , \_ -> Expect.equal replayed (Game.fromRecordOn tc.board replayed.record)
                         ]
                         ()
             )
+        , test "Recorded ko recaptures replay, but live continuations still forbid ko" <|
+            \_ ->
+                PlayFixtures.withCase "ko-exact.txt" <|
+                    \tc ->
+                        let
+                            before =
+                                Game.fromRecordOn tc.board (List.reverse tc.record)
+
+                            recorded =
+                                { color = tc.playStone.color, move = Place tc.playStone }
+
+                            replayed =
+                                Game.replay recorded before
+
+                            captured =
+                                List.head before.record
+                        in
+                        Expect.all
+                            [ \_ -> Expect.equal Nothing (Game.play tc.playStone.spot before)
+                            , \_ ->
+                                Expect.equal (Just tc.playStone.color)
+                                    (Dict.get (stoneKey tc.playStone) replayed.stones |> Maybe.map .color)
+                            , \_ -> Expect.equal before (Game.previous replayed)
+                            , \_ -> Expect.equal replayed (Game.fromRecordOn tc.board replayed.record)
+                            , \_ ->
+                                case captured |> Maybe.map .move of
+                                    Just (Place stone) ->
+                                        Expect.equal Nothing (Game.play stone.spot replayed)
+
+                                    _ ->
+                                        Expect.fail "Expected the previous capture"
+                            ]
+                            ()
         , test "Stepping back over passes restores the turn and finished state" <|
             \_ ->
                 let

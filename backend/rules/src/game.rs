@@ -1,7 +1,8 @@
 //! Normal games start with Black and alternate turns, including passes.
 //! Moves return a new game, leaving the original unchanged on success or error.
 //! Records are chronological, matching `sgf`. Import rejects wrong colours,
-//! illegal placements, and moves after two consecutive passes. Setup/handicap
+//! illegal placements, and moves after two consecutive passes, but permits recorded
+//! ko recaptures. Live `play` always enforces ko. Setup/handicap
 //! sequences belong at the `Position` level instead. Ko forbids immediately
 //! capturing only a stone whose placement captured exactly one stone.
 //! Use `Game::new(board)` and `from_record_on(board, record)` for non-default
@@ -31,8 +32,9 @@ pub struct PreparedGame {
 
 impl PreparedGame {
     pub fn play(&self, spot: Spot) -> Result<Game, String> {
-        self.game
-            .play_inner(spot, |stone| self.groups.play(&self.game.position, stone))
+        self.game.play_inner(spot, true, |stone| {
+            self.groups.play(&self.game.position, stone)
+        })
     }
 }
 
@@ -108,12 +110,13 @@ impl Game {
     }
 
     pub fn play(&self, spot: Spot) -> Result<Self, String> {
-        self.play_inner(spot, |stone| self.position.play(stone))
+        self.play_inner(spot, true, |stone| self.position.play(stone))
     }
 
     fn play_inner(
         &self,
         spot: Spot,
+        enforce_ko: bool,
         validate: impl FnOnce(Stone) -> Option<Position>,
     ) -> Result<Self, String> {
         if self.is_finished() {
@@ -126,7 +129,8 @@ impl Game {
         let position = validate(stone)
             .ok_or_else(|| format!("Illegal placement at ({}, {})", spot.x, spot.y))?;
         // A surviving placement adds one stone: equal counts mean one capture.
-        if self.position.stones().len() == position.stones().len()
+        if enforce_ko
+            && self.position.stones().len() == position.stones().len()
             && self
                 .ko
                 .is_some_and(|last| !position.stones().contains(&last))
@@ -160,7 +164,25 @@ impl Game {
         }
     }
 
-    /// Import a chronological record, rejecting the first invalid move.
+    /// Apply a recorded move, allowing ko recaptures but retaining other checks.
+    /// Use `play` or `pass` for new moves, including continuations of a replay.
+    pub fn replay(&self, play: Play) -> Result<Self, String> {
+        if play.color() != self.on_move() {
+            return Err(format!(
+                "expected {:?}, got {:?}",
+                self.on_move(),
+                play.color()
+            ));
+        }
+        match play {
+            Play::Place(stone) => {
+                self.play_inner(stone.spot, false, |stone| self.position.play(stone))
+            }
+            Play::Pass(_) => self.pass(),
+        }
+    }
+
+    /// Import a chronological record with playback semantics (ko is not checked).
     pub fn from_record(record: &[Play]) -> Result<Self, String> {
         Self::from_record_on(Board::default(), record)
     }
@@ -168,19 +190,9 @@ impl Game {
     pub fn from_record_on(board: Board, record: &[Play]) -> Result<Self, String> {
         let mut game = Self::new(board);
         for (index, &play) in record.iter().enumerate() {
-            if play.color() != game.on_move() {
-                return Err(format!(
-                    "Move {}: expected {:?}, got {:?}",
-                    index + 1,
-                    game.on_move(),
-                    play.color()
-                ));
-            }
-            let next = match play {
-                Play::Place(stone) => game.play(stone.spot),
-                Play::Pass(_) => game.pass(),
-            };
-            game = next.map_err(|error| format!("Move {}: {error}", index + 1))?;
+            game = game
+                .replay(play)
+                .map_err(|error| format!("Move {}: {error}", index + 1))?;
         }
         Ok(game)
     }

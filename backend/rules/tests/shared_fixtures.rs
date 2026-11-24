@@ -39,7 +39,17 @@ fn check_fixture(contents: &str) -> Result<(), String> {
     if sgf::decode(&sgf::encode(&plays)?)? != plays {
         return Err("Record did not round-trip through SGF".into());
     }
-    let game = Game::from_record_on(board, &plays)?;
+    let mut game = Game::new(board);
+    for &play in &plays {
+        if play.color() != game.on_move() {
+            return Err("Wrong colour in fixture record".into());
+        }
+        game = match play {
+            Play::Place(stone) => game.play(stone.spot)?,
+            Play::Pass(_) => game.pass()?,
+        };
+    }
+    assert_eq!(Game::from_record_on(board, &plays), Ok(game.clone()));
     let stone = match sgf::decode_play(attempted_move)? {
         Play::Place(stone) => stone,
         Play::Pass(_) => return Err("Expected a placement, not a pass".into()),
@@ -55,13 +65,14 @@ fn check_fixture(contents: &str) -> Result<(), String> {
     );
     plays.push(Play::Place(stone));
     let restored = Game::from_record_on(board, &plays);
-    match &next {
-        Ok(after) => assert_eq!(restored, Ok(after.clone()), "{name}: restoration"),
-        Err(error) => assert_eq!(
-            restored,
-            Err(format!("Move {}: {error}", plays.len())),
-            "{name}: illegal import"
-        ),
+    assert_eq!(
+        restored,
+        game.replay(Play::Place(stone))
+            .map_err(|error| format!("Move {}: {error}", plays.len())),
+        "{name}: restoration"
+    );
+    if let Ok(after) = &next {
+        assert_eq!(restored, Ok(after.clone()), "{name}: legal restoration");
     }
     let actual = next.ok().map(|after| {
         after.position().stones().len() as isize - game.position().stones().len() as isize

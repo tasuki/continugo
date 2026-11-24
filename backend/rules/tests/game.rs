@@ -120,6 +120,35 @@ fn a_placement_interrupts_consecutive_passes() {
 }
 
 #[test]
+fn recorded_ko_recaptures_replay_but_live_continuations_still_enforce_ko() {
+    let mut record =
+        sgf::decode("B[igjG];W[lgig];B[jGig];W[mGjG];B[jGlg];W[lglg];B[];W[jGjG];B[lgjG]").unwrap();
+    let before = Game::from_record(&record).unwrap().with_komi(6.3).unwrap();
+    let recapture = sgf::decode_play("W[jGjG]").unwrap();
+    let Play::Place(stone) = recapture else {
+        panic!("expected placement")
+    };
+    assert!(before.play(stone.spot).is_err());
+    assert!(before.prepare().play(stone.spot).is_err());
+
+    let replayed = before.replay(recapture).unwrap();
+    assert!(replayed.position().stones().contains(&stone));
+    assert_eq!(replayed.komi(), 6.3);
+    record.push(recapture);
+    assert_eq!(
+        Game::from_record(&record).unwrap().with_komi(6.3).unwrap(),
+        replayed
+    );
+    let Play::Place(previous) = before.record().last().unwrap() else {
+        panic!("expected previous capture")
+    };
+    assert!(!replayed.position().stones().contains(previous));
+    assert!(replayed.play(previous.spot).is_err());
+    assert!(replayed.prepare().play(previous.spot).is_err());
+    assert!(replayed.replay(*before.record().last().unwrap()).is_ok());
+}
+
+#[test]
 fn imports_reject_non_alternating_placements_and_passes() {
     for record in [
         "W[bbbb]",

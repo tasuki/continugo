@@ -41,7 +41,8 @@ onBoard board =
 
 
 {-| Replay a record, accepting setup-like sequences of same-colour moves.
-Illegal placements are skipped on the board but retained in the record.
+Ko recaptures are replayed; other illegal placements are skipped on the board
+but retained in the record.
 This is not a validator for externally submitted game histories.
 -}
 fromRecord : List Play -> Game
@@ -62,7 +63,7 @@ replay recorded game =
         stones =
             case recorded.move of
                 Place stone ->
-                    playStone stone game
+                    Play.playIfLegalOn game.board game.stones stone
                         |> Maybe.withDefault game.stones
 
                 Pass ->
