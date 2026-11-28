@@ -10,7 +10,7 @@
     <link rel="icon" href="media/favicon.svg">
     <link rel="manifest" href="manifest.json">
     <script>
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && location.hostname !== '127.0.0.1') {
         navigator.serviceWorker.register('service-worker.js');
     }
     </script>
@@ -35,6 +35,28 @@
                 sessionStorage.setItem('continugo.session', JSON.stringify({ ...state, url: location.href }));
             } catch (_) {}
         });
+
+        app.ports.botRequest.subscribe(async function ({ id, sgf, ply, simulations }) {
+            try {
+                const response = await fetch('/api/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sgf, ply, simulations })
+                });
+                const result = await response.json();
+                app.ports.botResponse.send({ ...result, id });
+            } catch (error) {
+                app.ports.botResponse.send({ id, error: String(error) });
+            }
+        });
+
+        fetch('/api/bot', { cache: 'no-store' })
+            .then(response => response.ok ? response.json() : { available: false })
+            .then(result => app.ports.botAvailability.send({
+                available: result.available === true,
+                simulations: Number.isInteger(result.simulations) ? result.simulations : 128
+            }))
+            .catch(() => app.ports.botAvailability.send({ available: false, simulations: 128 }));
 
         async function loadSgf(files) {
             if (files.length !== 1) {

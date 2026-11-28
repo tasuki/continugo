@@ -50,13 +50,13 @@ configuredTests board =
             [ createPlay Black (Spot r 500), createPlay White (Spot (r + d) 500) ]
     in
     describe (String.fromInt size ++ "×" ++ String.fromInt size)
-        [ test "The menu button selects this board" <|
+        [ test "The menu stages this board size until Start" <|
             \_ ->
-                Main.viewNewGames Nothing
+                Main.viewNewGames { setup = Main.defaultPlaySetup, botAvailable = True, sgfError = Nothing }
                     |> Query.fromHtml
-                    |> Query.find [ Selector.tag "button", Selector.containing [ Selector.text (String.fromInt size ++ "×" ++ String.fromInt size) ] ]
+                    |> Query.find [ Selector.id ("play-size-" ++ String.fromInt size) ]
                     |> Event.simulate Event.click
-                    |> Event.expect (Main.NewBoard board)
+                    |> Event.expect (Main.SetBoard board)
         , test "Grid lines and stones use the selected size" <|
             \_ ->
                 Expect.all

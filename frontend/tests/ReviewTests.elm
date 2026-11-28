@@ -9,6 +9,7 @@ import Rules.Game as Game
 import Rules.Position exposing (..)
 import Sgf exposing (Tree(..))
 import Test exposing (..)
+import Training
 
 
 black =
@@ -40,7 +41,39 @@ plays model =
 tests : Test
 tests =
     describe "Saved variations"
-        [ test "An alternative preserves the game and replaying it selects the existing branch" <|
+        [ test "Bot annotations survive SGF round trips on the selected variation" <|
+            \_ ->
+                let
+                    comment =
+                        "{\"win_pct\":63.4,\"score\":5.2,\"policy\":[[\"\",5],[\"aMaM\",3]]}"
+
+                    annotated =
+                        Review.fromTrees forest
+                            |> Review.selectSibling 2 1
+                            |> Review.annotate 2 [ ( "C", [ comment ] ) ]
+
+                    restored =
+                        Sgf.encodeTree Sgf.empty.root annotated.trees
+                            |> Sgf.decodeTree
+                            |> Result.map (\( root, trees ) -> Review.fromTrees trees |> Review.selectSibling 2 1 |> Review.line root)
+                            |> Result.map (.moveProperties >> List.drop 1 >> List.head >> Maybe.map Training.annotation)
+                in
+                Expect.equal (Ok (Just { winPct = Just 63.4, score = Just 5.2, policy = [ ( "", 5 ), ( "aMaM", 3 ) ] })) restored
+        , test "Annotating a bot branch preserves the human move and the other branch" <|
+            \_ ->
+                let
+                    original =
+                        Review.fromTrees forest
+
+                    annotated =
+                        original |> Review.selectSibling 2 1 |> Review.annotate 2 [ ( "C", [ "bot" ] ) ]
+                in
+                Expect.equal
+                    ( (Review.line Sgf.empty.root original).moveProperties, Just [] )
+                    ( (Review.line Sgf.empty.root (Review.selectSibling 2 0 annotated)).moveProperties
+                    , (Review.line Sgf.empty.root annotated).moveProperties |> List.head
+                    )
+        , test "An alternative preserves the game and replaying it selects the existing branch" <|
             \_ ->
                 let
                     original =

@@ -36,14 +36,14 @@ tests =
                     sgf =
                         "(;FF[9071]GM[9071]SZ[9];B[bWdS])"
                 in
-                Main.viewNewGames Nothing
+                Main.viewNewGames { setup = Main.defaultPlaySetup, botAvailable = True, sgfError = Nothing }
                     |> Query.fromHtml
                     |> Query.find [ Selector.id "sgf-paste" ]
                     |> Event.simulate (Event.input sgf)
                     |> Event.expect (Main.SgfLoaded sgf)
         , test "The menu has an SGF picker/drop target and displays import errors" <|
             \_ ->
-                Main.viewNewGames (Just "Bad SGF")
+                Main.viewNewGames { setup = Main.defaultPlaySetup, botAvailable = True, sgfError = Just "Bad SGF" }
                     |> Query.fromHtml
                     |> Expect.all
                         [ Query.find [ Selector.id "sgf-dropzone" ]

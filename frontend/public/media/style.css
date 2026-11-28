@@ -37,6 +37,13 @@ a { color: inherit; }
     font-size: 14px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .pills .icon:is(:hover, :focus-visible) { padding: 0 10px; }
 .pills .icon:is(:hover, :focus-visible) .tooltip { display: inline-block; }
+#bot-thinking .pill-summary { display: inline-block; vertical-align: middle; box-sizing: border-box;
+    width: 18px; height: 18px; border: 2px solid currentColor; border-right-color: transparent;
+    border-radius: 50%; animation: bot-spin 0.8s linear infinite; }
+@keyframes bot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    #bot-thinking .pill-summary { animation: none; }
+}
 #move-number, #sgf-download { font-size: 12px; }
 .pills .menu-gap { flex: none; width: 8px; height: 8px; }
 .pills .training-value { font-size: 9px; }

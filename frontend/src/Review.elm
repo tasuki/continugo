@@ -1,4 +1,4 @@
-module Review exposing (Model, add, atDepth, children, empty, fromTrees, line, select, selectSibling, siblings, switch)
+module Review exposing (Model, add, annotate, atDepth, children, empty, fromTrees, line, select, selectSibling, siblings, switch)
 
 {-| The first continuation is the game. Selection never reorders the tree.
 Remembered paths let stepping back and forward retrace an explored line.
@@ -170,6 +170,33 @@ switch direction depth model =
             clamp 0 (List.length paths - 1) (find 0 paths + direction)
     in
     List.drop target paths |> List.head |> Maybe.map (\path -> select path model) |> Maybe.withDefault model
+
+
+{-| Replace supplied properties on the selected move, preserving other metadata.
+-}
+annotate : Int -> List Sgf.Property -> Model -> Model
+annotate depth properties model =
+    let
+        update path trees =
+            case path of
+                index :: rest ->
+                    List.indexedMap
+                        (\i (Node play existing next) ->
+                            if i /= index then
+                                Node play existing next
+
+                            else if List.isEmpty rest then
+                                Node play (properties ++ List.filter (\( name, _ ) -> not (List.any (Tuple.first >> (==) name) properties)) existing) next
+
+                            else
+                                Node play existing (update rest next)
+                        )
+                        trees
+
+                [] ->
+                    trees
+    in
+    { model | trees = update (List.take depth model.selected) model.trees }
 
 
 sameMove : Play -> Play -> Bool

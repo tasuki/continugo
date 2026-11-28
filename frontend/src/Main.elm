@@ -41,6 +41,15 @@ import Url exposing (Url)
 port saveSession : { sgf : String, move : Int, path : List Int } -> Cmd msg
 
 
+port botRequest : { id : Int, sgf : String, ply : Int, simulations : Int } -> Cmd msg
+
+
+port botResponse : (Decode.Value -> msg) -> Sub msg
+
+
+port botAvailability : ({ available : Bool, simulations : Int } -> msg) -> Sub msg
+
+
 port sgfLoaded : (String -> msg) -> Sub msg
 
 
@@ -55,7 +64,9 @@ main =
         , subscriptions =
             \model ->
                 Sub.batch
-                    [ sgfLoaded SgfLoaded
+                    [ botAvailability BotAvailability
+                    , botResponse BotResponse
+                    , sgfLoaded SgfLoaded
                     , sgfLoadFailed SgfLoadFailed
                     , Browser.Events.onKeyDown (menuKey model)
                     ]
@@ -71,6 +82,37 @@ main =
 
 {-| record is the selected continuation; game is its displayed prefix.
 -}
+type alias PlaySetup =
+    { board : Board, bot : Maybe Color, customSize : Maybe String, komi : String, simulations : Int }
+
+
+defaultPlaySetup : PlaySetup
+defaultPlaySetup =
+    { board = Board.fromSize 9 |> Maybe.withDefault Board.default, bot = Nothing, customSize = Nothing, komi = "7", simulations = 128 }
+
+
+setupBoard : PlaySetup -> Maybe Board
+setupBoard setup =
+    case setup.customSize of
+        Just value ->
+            String.toInt value
+                |> Maybe.Extra.filter (\size -> size >= 7 && size <= 25)
+                |> Maybe.andThen Board.fromSize
+
+        Nothing ->
+            Just setup.board
+
+
+setupKomi : PlaySetup -> Maybe Float
+setupKomi setup =
+    String.toFloat setup.komi
+        |> Maybe.Extra.filter (\value -> not (isNaN value || isInfinite value))
+
+
+type alias LivePosition =
+    { game : Game.Game, path : List Int }
+
+
 type alias Model =
     { game : Game.Game
     , review : Review.Model
@@ -92,6 +134,14 @@ type alias Model =
     , showScoring : Bool
     , showAnalysis : Bool
     , analysis : Analysis.Model
+    , botAvailable : Bool
+    , setup : PlaySetup
+    , bot : Maybe Color
+    , botReview : Maybe LivePosition
+    , botSimulations : Int
+    , botSerial : Int
+    , botPending : Maybe Int
+    , botError : Maybe String
     , navKey : Nav.Key
     }
 
@@ -118,6 +168,14 @@ emptyModel navKey =
     , showScoring = False
     , showAnalysis = False
     , analysis = Analysis.empty
+    , botAvailable = False
+    , setup = defaultPlaySetup
+    , bot = Nothing
+    , botReview = Nothing
+    , botSimulations = 128
+    , botSerial = 0
+    , botPending = Nothing
+    , botError = Nothing
     , navKey = navKey
     }
 
@@ -136,7 +194,7 @@ init flags url navKey =
                     )
                 |> Maybe.withDefault fallback
     in
-    ( model, persist model )
+    ( { model | showMenu = model.showMenu || (List.isEmpty model.game.record && RecordUrl.decode url == Nothing) }, persist model )
 
 
 readSession : Decode.Value -> Maybe ( Sgf.Record, Game.Game )
@@ -195,8 +253,17 @@ type Msg
     | PointerAtBoard Int PointerInput.Action (Result BD.Error Spot)
     | ClearAnalysisHover
     | PassTurn
+    | SetBot (Maybe Color)
+    | SetBoard Board
+    | SetCustomSize String
+    | SetKomi String
+    | SetSimulations Int
+    | StartGame
+    | BotAvailability { available : Bool, simulations : Int }
+    | BotResponse Decode.Value
     | ClearCaptureAnimation
     | Prev
+    | BackToGame
     | Next
     | SwitchVariation Int
     | SelectSibling Int
@@ -208,7 +275,6 @@ type Msg
     | AnalysisRemovalExpired Int
     | OpenMenu
     | ClosePanels
-    | NewBoard Board
     | SgfLoaded String
     | SgfLoadFailed String
     | LinkClicked Browser.UrlRequest
@@ -514,16 +580,55 @@ handleBoardPointer action coords model =
 updateAndSave : Msg -> Model -> ( Model, Cmd Msg )
 updateAndSave msg model =
     let
-        ( updated, command ) =
+        ( changed, command ) =
             update msg model
+
+        ( updated, botCommand ) =
+            requestBot model changed
     in
     ( updated
     , if updated.review /= model.review || updated.sgfRoot /= model.sgfRoot || updated.game.record /= model.game.record then
-        Cmd.batch [ command, persist updated ]
+        Cmd.batch [ command, botCommand, persist updated ]
 
       else
-        command
+        Cmd.batch [ command, botCommand ]
     )
+
+
+botTurn : Model -> Bool
+botTurn model =
+    model.botReview == Nothing && model.bot == Just model.game.onMove && not (Game.isFinished model.game)
+
+
+botSgf : Model -> String
+botSgf model =
+    Sgf.encodeRecord { root = model.sgfRoot, plays = List.reverse model.game.record, moveProperties = [] }
+
+
+requestBot : Model -> Model -> ( Model, Cmd Msg )
+requestBot before model =
+    let
+        changed =
+            before.game.record /= model.game.record || before.sgfRoot /= model.sgfRoot || before.bot /= model.bot || before.botReview /= model.botReview
+
+        current =
+            if changed then
+                { model | botPending = Nothing, botError = Nothing }
+
+            else
+                model
+    in
+    if botTurn current && current.botPending == Nothing && current.botError == Nothing then
+        let
+            id =
+                current.botSerial + 1
+        in
+        ( { current | botSerial = id, botPending = Just id }
+        , botRequest { id = id, sgf = botSgf current, ply = List.length current.game.record, simulations = current.botSimulations }
+        )
+
+    else
+        ( current, Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -545,7 +650,7 @@ update msg model =
                     ( updated, Cmd.none )
 
         PointerAtBoard revision action (Ok coords) ->
-            if revision == model.pointer.revision then
+            if revision == model.pointer.revision && model.botReview == Nothing && not (botTurn model) then
                 handleBoardPointer action coords model
 
             else
@@ -554,8 +659,115 @@ update msg model =
         ClearAnalysisHover ->
             ( { model | analysis = Analysis.clearHover model.analysis }, Cmd.none )
 
+        BotAvailability config ->
+            let
+                setup =
+                    model.setup
+            in
+            ( { model | botAvailable = config.available, setup = { setup | simulations = clamp 1 1024 config.simulations } }, Cmd.none )
+
+        SetBot color ->
+            let
+                setup =
+                    model.setup
+            in
+            ( { model | setup = { setup | bot = color } }, Cmd.none )
+
+        SetBoard board ->
+            let
+                setup =
+                    model.setup
+            in
+            ( { model | setup = { setup | board = board, customSize = Nothing } }, Cmd.none )
+
+        SetCustomSize value ->
+            let
+                setup =
+                    model.setup
+            in
+            ( { model | setup = { setup | customSize = Just value } }, Cmd.none )
+
+        SetSimulations value ->
+            let
+                setup =
+                    model.setup
+            in
+            ( { model | setup = { setup | simulations = clamp 1 1024 value } }, Cmd.none )
+
+        SetKomi value ->
+            let
+                setup =
+                    model.setup
+            in
+            ( { model | setup = { setup | komi = value } }, Cmd.none )
+
+        StartGame ->
+            case ( setupBoard model.setup, setupKomi model.setup ) of
+                ( Just board, Just komi ) ->
+                    let
+                        fresh =
+                            newBoard board model
+                    in
+                    ( { fresh
+                        | bot =
+                            if model.botAvailable then
+                                model.setup.bot
+
+                            else
+                                Nothing
+                        , botSimulations = model.setup.simulations
+                        , sgfRoot = ( "KM", [ String.fromFloat komi ] ) :: fresh.sgfRoot
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        BotResponse value ->
+            let
+                decoder =
+                    Decode.map4 (\id move error comment -> ( id, move, ( error, comment ) ))
+                        (Decode.field "id" Decode.int)
+                        (Decode.oneOf [ Decode.field "move" (Decode.nullable (Decode.map2 Spot (Decode.field "x" Decode.int) (Decode.field "y" Decode.int))), Decode.field "error" Decode.string |> Decode.map (always Nothing) ])
+                        (Decode.maybe (Decode.field "error" Decode.string))
+                        (Decode.maybe (Decode.field "comment" Decode.string))
+            in
+            case Decode.decodeValue decoder value of
+                Ok ( id, move, ( error, comment ) ) ->
+                    if model.botPending /= Just id then
+                        ( model, Cmd.none )
+
+                    else
+                        case error of
+                            Just text ->
+                                ( { model | botPending = Nothing, botError = Just text }, Cmd.none )
+
+                            Nothing ->
+                                case Maybe.map (\spot -> Game.play spot model.game) move |> Maybe.withDefault (Game.pass model.game) of
+                                    Just game ->
+                                        let
+                                            committed =
+                                                commitMove { model | game = game, botPending = Nothing }
+
+                                            annotated =
+                                                case comment of
+                                                    Just text ->
+                                                        withReview (Review.annotate (List.length game.record) [ ( "C", [ text ] ) ] committed.review) committed
+
+                                                    Nothing ->
+                                                        committed
+                                        in
+                                        updatePosition annotated
+
+                                    Nothing ->
+                                        ( { model | botPending = Nothing, botError = Just "Bot returned an illegal move" }, Cmd.none )
+
+                Err _ ->
+                    ( { model | botPending = Nothing, botError = Just "Invalid bot response" }, Cmd.none )
+
         PassTurn ->
-            if model.showAnalysis then
+            if model.showAnalysis || model.botReview /= Nothing || botTurn model then
                 ( model, Cmd.none )
 
             else
@@ -572,12 +784,21 @@ update msg model =
             )
 
         Prev ->
-            showGame (Game.previous model.game) model
+            showGame (Game.previous model.game) (pauseBotReview model)
+
+        BackToGame ->
+            case model.botReview of
+                Just live ->
+                    showGame live.game
+                        (withReview (Review.select live.path model.review) { model | botReview = Nothing })
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         Next ->
             case List.drop (List.length model.game.record) model.record of
                 recorded :: _ ->
-                    showGame (Game.replay recorded model.game) model
+                    showGame (Game.replay recorded model.game) (pauseBotReview model)
 
                 [] ->
                     ( model, Cmd.none )
@@ -588,7 +809,7 @@ update msg model =
                     List.length model.game.record
 
                 selected =
-                    withReview (Review.switch direction depth model.review) model
+                    withReview (Review.switch direction depth model.review) (pauseBotReview model)
             in
             showGame (gameAt model.game.board depth selected.record) selected
 
@@ -598,7 +819,7 @@ update msg model =
                     List.length model.game.record
 
                 selected =
-                    withReview (Review.selectSibling depth index model.review) model
+                    withReview (Review.selectSibling depth index model.review) (pauseBotReview model)
             in
             showGame (gameAt model.game.board depth selected.record) selected
 
@@ -613,9 +834,6 @@ update msg model =
 
         ClosePanels ->
             ( { model | showMenu = False, showHelp = False }, Cmd.none )
-
-        NewBoard board ->
-            ( newBoard board model, Cmd.none )
 
         SgfLoaded text ->
             case decodeTreeImport text of
@@ -706,6 +924,9 @@ newBoard board model =
     in
     { fresh
         | game = Game.onBoard board
+        , botAvailable = model.botAvailable
+        , setup = model.setup
+        , botSerial = model.botSerial
         , sgfRoot = (Sgf.onBoard board).root
         , pointer = PointerInput.cancel model.pointer
         , analysis = { analysis | serial = model.analysis.serial }
@@ -774,7 +995,7 @@ restoreFromUrl url model =
                         , analysis = Analysis.reconcile Board.default Dict.empty model.analysis
                     }
     in
-    ( { newModel | showMenu = url.path == "/menu" }, Cmd.none )
+    ( { newModel | showMenu = url.path == "/menu", botAvailable = model.botAvailable, setup = model.setup, botSerial = model.botSerial, bot = Nothing, botReview = Nothing, botPending = Nothing }, Cmd.none )
 
 
 updatePosition : Model -> ( Model, Cmd Msg )
@@ -787,6 +1008,15 @@ updatePosition model =
 gameAt : Board -> Int -> List Play -> Game.Game
 gameAt board move record =
     Game.fromRecordOn board (List.reverse (List.take move record))
+
+
+pauseBotReview : { a | bot : Maybe Color, botReview : Maybe LivePosition, botPending : Maybe Int, game : Game.Game, review : Review.Model } -> { a | bot : Maybe Color, botReview : Maybe LivePosition, botPending : Maybe Int, game : Game.Game, review : Review.Model }
+pauseBotReview model =
+    if model.bot /= Nothing && model.botReview == Nothing then
+        { model | botReview = Just { game = model.game, path = model.review.selected }, botPending = Nothing }
+
+    else
+        model
 
 
 showGame : Game.Game -> Model -> ( Model, Cmd Msg )
@@ -962,38 +1192,138 @@ menuLink action iconText tooltip =
         [ Pill.view "button" [ HE.onClick action ] iconText tooltip ]
 
 
-viewNewGames : Maybe String -> H.Html Msg
-viewNewGames error =
+viewBotStatus : Maybe Int -> Maybe String -> H.Html msg
+viewBotStatus pending error =
+    case error of
+        Just message ->
+            Pill.view "div" [ HA.id "bot-error", HA.attribute "role" "alert" ] "!" message
+
+        Nothing ->
+            if pending /= Nothing then
+                Pill.view "div" [ HA.id "bot-thinking", HA.attribute "role" "status" ] "" "Bot thinking"
+
+            else
+                H.text ""
+
+
+viewNewGames : { a | setup : PlaySetup, botAvailable : Bool, sgfError : Maybe String } -> H.Html Msg
+viewNewGames model =
+    let
+        radio group value checked disabled message label =
+            H.label []
+                [ H.input
+                    [ HA.type_ "radio"
+                    , HA.name group
+                    , HA.id (group ++ "-" ++ value)
+                    , HA.value value
+                    , HA.checked checked
+                    , HA.disabled disabled
+                    , HE.onClick message
+                    ]
+                    []
+                , H.text (label ++ " ")
+                ]
+    in
     H.main_ []
         [ H.h1 [] [ H.text "ContinuGo" ]
-        , H.p [] [ H.text "New game" ]
-        , H.div []
-            ([ 9, 13, 19 ]
-                |> List.filterMap Board.fromSize
-                |> List.map
-                    (\board ->
-                        H.button [ HE.onClick (NewBoard board) ]
-                            [ H.text (String.fromInt (Board.size board) ++ "×" ++ String.fromInt (Board.size board)) ]
-                    )
-            )
-        , H.div [ HA.id "sgf-import" ]
-            [ H.button [ HA.id "sgf-dropzone", HA.type_ "button" ] [ H.text "Open or drop an SGF file here" ]
-            , H.textarea
-                [ HA.id "sgf-paste"
-                , HA.placeholder "Paste SGF here"
-                , HA.attribute "aria-label" "Paste SGF"
-                , HA.spellcheck False
-                , HE.onInput SgfLoaded
+        , H.section [ HA.id "play-setup" ]
+            [ H.h2 [] [ H.text "Play" ]
+            , H.fieldset [ HA.id "play-opponent" ]
+                [ H.legend [] [ H.text "Opponent" ]
+                , radio "play-opponent" "human" (model.setup.bot == Nothing) False (SetBot Nothing) "Human (you provide both moves)"
+                , radio "play-opponent" "bot" (model.setup.bot /= Nothing) (not model.botAvailable) (SetBot (Just White)) "Bot"
                 ]
-                []
-            , H.input [ HA.id "sgf-file", HA.type_ "file", HA.accept ".sgf", HA.hidden True ] []
-            ]
-        , case error of
-            Just message ->
-                H.p [ HA.attribute "role" "alert" ] [ H.text message ]
+            , if model.setup.bot /= Nothing then
+                H.fieldset [ HA.id "play-colour" ]
+                    [ H.legend [] [ H.text "Your colour" ]
+                    , radio "play-colour" "black" (model.setup.bot == Just White) False (SetBot (Just White)) "Black (first move)"
+                    , radio "play-colour" "white" (model.setup.bot == Just Black) False (SetBot (Just Black)) "White"
+                    ]
 
-            Nothing ->
+              else
                 H.text ""
+            , H.fieldset [ HA.id "play-size" ]
+                (H.legend [] [ H.text "Board size" ]
+                    :: (List.filterMap
+                            (\size ->
+                                Board.fromSize size
+                                    |> Maybe.map (\board -> radio "play-size" (String.fromInt size) (model.setup.customSize == Nothing && Board.size model.setup.board == size) False (SetBoard board) (String.fromInt size ++ "×" ++ String.fromInt size))
+                            )
+                            [ 9, 13, 19 ]
+                            ++ [ radio "play-size" "custom" (model.setup.customSize /= Nothing) False (SetCustomSize (Maybe.withDefault "" model.setup.customSize)) "Custom"
+                               , H.input
+                                    [ HA.id "play-custom-size"
+                                    , HA.type_ "number"
+                                    , HA.min "7"
+                                    , HA.max "25"
+                                    , HA.step "1"
+                                    , HA.attribute "aria-label" "Custom board size"
+                                    , HA.value (Maybe.withDefault "" model.setup.customSize)
+                                    , HA.disabled (model.setup.customSize == Nothing)
+                                    , HE.onInput SetCustomSize
+                                    ]
+                                    []
+                               ]
+                       )
+                )
+            , if model.setup.bot /= Nothing then
+                H.p []
+                    [ H.label []
+                        [ H.text ("Simulations per move: " ++ String.fromInt model.setup.simulations ++ " ")
+                        , H.input
+                            [ HA.id "play-simulations"
+                            , HA.type_ "range"
+                            , HA.min "1"
+                            , HA.max "1024"
+                            , HA.step "1"
+                            , HA.value (String.fromInt model.setup.simulations)
+                            , HE.onInput (String.toInt >> Maybe.withDefault model.setup.simulations >> SetSimulations)
+                            ]
+                            []
+                        ]
+                    ]
+
+              else
+                H.text ""
+            , if setupBoard model.setup == Nothing then
+                H.p [ HA.attribute "role" "alert" ] [ H.text "Board size must be a whole number from 7 to 25." ]
+
+              else
+                H.text ""
+            , H.p []
+                [ H.label []
+                    [ H.text "Komi: "
+                    , H.input [ HA.id "play-komi", HA.type_ "number", HA.step "any", HA.value model.setup.komi, HE.onInput SetKomi ] []
+                    ]
+                ]
+            , if setupKomi model.setup == Nothing then
+                H.p [ HA.attribute "role" "alert" ] [ H.text "Enter a valid komi." ]
+
+              else
+                H.text ""
+            , H.button [ HA.id "play-start", HA.disabled (setupBoard model.setup == Nothing || setupKomi model.setup == Nothing), HE.onClick StartGame ] [ H.text "Start" ]
+            ]
+        , H.section [ HA.id "replay-setup" ]
+            [ H.h2 [] [ H.text "Replay" ]
+            , H.div [ HA.id "sgf-import" ]
+                [ H.button [ HA.id "sgf-dropzone", HA.type_ "button" ] [ H.text "Open or drop an SGF file here" ]
+                , H.textarea
+                    [ HA.id "sgf-paste"
+                    , HA.placeholder "Paste SGF here"
+                    , HA.attribute "aria-label" "Paste SGF"
+                    , HA.spellcheck False
+                    , HE.onInput SgfLoaded
+                    ]
+                    []
+                , H.input [ HA.id "sgf-file", HA.type_ "file", HA.accept ".sgf", HA.hidden True ] []
+                ]
+            , case model.sgfError of
+                Just message ->
+                    H.p [ HA.attribute "role" "alert" ] [ H.text message ]
+
+                Nothing ->
+                    H.text ""
+            ]
         ]
 
 
@@ -1032,6 +1362,11 @@ viewDownload root plays moveProperties =
 
 viewPlayers : List Sgf.Property -> H.Html msg
 viewPlayers root =
+    viewPlayerMenu root Nothing Nothing
+
+
+viewPlayerMenu : List Sgf.Property -> Maybe Int -> Maybe String -> H.Html msg
+viewPlayerMenu root pending error =
     let
         player property color =
             root
@@ -1069,7 +1404,14 @@ viewPlayers root =
                     )
     in
     H.div [ HA.id "players", HA.class "pills" ]
-        (List.filterMap identity [ player "PB" "Black", player "PW" "White", komi ])
+        (List.filterMap identity [ player "PB" "Black", player "PW" "White", komi ]
+            ++ (if pending /= Nothing || error /= Nothing then
+                    [ viewBotStatus pending error ]
+
+                else
+                    []
+               )
+        )
 
 
 trainingAt : Int -> Model -> Training.Annotation
@@ -1122,7 +1464,7 @@ view model =
 
         content =
             if model.showMenu then
-                viewNewGames model.sgfError
+                viewNewGames model
 
             else if model.showHelp then
                 H.div [ HA.id "help" ] [ Markdown.toHtml [] HelpContent.markdown ]
@@ -1154,6 +1496,12 @@ view model =
             , menuLink (SwitchVariation 1) "↓" "next line"
             , lazy viewMoveNumber model.game.record
             , H.div [ HA.class "menu-gap", HA.attribute "aria-hidden" "true" ] []
+            , if model.botReview /= Nothing then
+                H.div [ HA.class "item" ]
+                    [ Pill.view "button" [ HA.id "back-to-game", HE.onClick BackToGame ] "↩" "Back to game" ]
+
+              else
+                H.text ""
             , menuLink PassTurn "*" "pass"
             , H.div [ HA.class "item" ]
                 [ Pill.view "button"
@@ -1201,7 +1549,7 @@ view model =
             H.text ""
 
           else
-            lazy viewPlayers model.sgfRoot
+            lazy3 viewPlayerMenu model.sgfRoot model.botPending model.botError
         , content
         ]
     }
